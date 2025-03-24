@@ -210,7 +210,12 @@ export class ZkapBuilder extends BaseAccountBuilder {
         this.userOp.callGasLimit = ethers.toBeHex(callGasLimit);
       }
     } else {
-      throw new Error("Call data is not set. Please set a valid call data.");
+      if (this.userOp.initCode !== "0x") {
+        // initCode 가 있고, callData 가 없는 경우 기본으로 1000 으로 설정
+        this.userOp.callGasLimit = ethers.toBeHex("1000");
+      } else {
+        throw new Error("Call data is not set. Please set a valid call data.");
+      }
     }
 
     return this;

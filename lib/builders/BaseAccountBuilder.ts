@@ -14,22 +14,21 @@ export abstract class BaseAccountBuilder {
     this.entryPoint = entryPoint;
   }
 
-  // 기본값으로 "0"을 설정하는 메서드
   protected applyDefaults(): void {
     const defaultValues: UserOperation = {
       sender: ethers.ZeroAddress,
       nonce: "",
       initCode: "0x",
       callData: "0x",
-      callGasLimit: "0",
-      verificationGasLimit: "1500000",
-      preVerificationGas: "210000",
-      maxFeePerGas: "0",
-      maxPriorityFeePerGas: "1000000000",
+      callGasLimit: "0x00",
+      verificationGasLimit: ethers.toBeHex("1500000"),
+      preVerificationGas: ethers.toBeHex("210000"),
+      maxFeePerGas: "0x00",
+      maxPriorityFeePerGas: ethers.toBeHex("1000000000"),
       paymaster: ethers.ZeroAddress,
       paymasterData: "0x",
-      paymasterVerificationGasLimit: "0",
-      paymasterPostOpGasLimit: "0",
+      paymasterVerificationGasLimit: "0x00",
+      paymasterPostOpGasLimit: "0x00",
       signature: "0x",
     };
 
