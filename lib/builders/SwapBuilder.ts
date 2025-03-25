@@ -1,3 +1,4 @@
+import { SwapParams } from "../types/Swap";
 import { OneInchAggregator } from "./aggregators/OneInchAggregator";
 
 export class SwapBuilder {
@@ -30,20 +31,20 @@ export class SwapBuilder {
     }
   }
 
-  public async getSwapTxData(
-    srcToken: string,
-    dstToken: string,
-    sender: string,
-    amount: string,
-    slippage: number = 0.01,
-    disableEstimate: boolean = false,
-    allowPartialFill: boolean = true
-  ): Promise<string> {
+  public async getSwapTxData({
+    src,
+    dst,
+    amount,
+    from,
+    slippage = 0.01,
+    disableEstimate = false,
+    allowPartialFill = true,
+  }: SwapParams): Promise<string> {
     const swapData = await this.aggregator.getSwapTxData({
-      src: srcToken,
-      dst: dstToken,
+      src: src,
+      dst: dst,
       amount: amount,
-      from: sender,
+      from: from,
       origin: this.bundlerAddress,
       slippage: slippage,
       disableEstimate: disableEstimate,
