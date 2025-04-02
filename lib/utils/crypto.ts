@@ -1,0 +1,189 @@
+function sha256Update(data: Uint8Array): number[] {
+  if (data.length % 64 !== 0) {
+    throw new Error("data length must be a multiple of 64 bytes");
+  }
+
+  // 초기 해시 값으로 시작
+  let state = INITIAL_HASH_VALUE;
+
+  // 64바이트 단위로 데이터를 순회하면서 상태 업데이트
+  for (let i = 0; i < data.length; i += 64) {
+    const chunk = data.slice(i, i + 64);
+    state = sha256UpdateWithState(state, chunk);
+  }
+
+  return state;
+}
+
+function getOutOfCircuitHashSegment(jwt: string, keys: string[]): string {
+  const hashBlockSize = 64; // 512 bits
+
+  // JWT를 '.' 구분자로 분리 (header, payload, signature)
+  const parts = jwt.split(".");
+  if (parts.length < 3) {
+    throw new Error("Invalid JWT: must contain header, payload, and signature");
+  }
+  const [headerB64, payloadB64, _] = parts;
+
+  // header의 길이에 1을 더한 값이 payOffsetB64
+  const payOffsetB64 = headerB64.length + 1;
+  const payLenB64 = payloadB64.length; // 사용되지 않지만 필요시 활용 가능
+
+  // URL-safe Base64 디코딩을 수행하여 payload 문자열 생성
+  const payload = base64urlToUtf8(payloadB64);
+
+  const minOffset = Math.min(
+    ...keys.map((key) => getValueOffsetFromKey(payload, key))
+  );
+
+  const minOffsetB64 = Math.floor(minOffset / 3) * 4;
+
+  // 최종 outOfCircuitHashLen 계산: (payOffsetB64 + minOffsetB64)를 hashBlockSize로 나눈 몫에 hashBlockSize를 곱함
+  const outOfCircuitHashLen =
+    Math.floor((payOffsetB64 + minOffsetB64) / hashBlockSize) * hashBlockSize;
+  console.log("outOfCircuitHashLen: ", outOfCircuitHashLen);
+  return jwt.slice(0, outOfCircuitHashLen);
+}
+
+function base64urlToUtf8(base64: string): string {
+  return Buffer.from(base64, "base64url").toString("utf-8");
+}
+
+function Utf8ToUint8Array(utf8: string): Uint8Array {
+  let buffer = Buffer.from(utf8, "utf-8");
+  const uint8Array = new Uint8Array(
+    buffer.buffer,
+    buffer.byteOffset,
+    buffer.byteLength
+  );
+  return uint8Array;
+}
+
+// 32비트 우측 회전 함수
+// x를 n비트 오른쪽으로 회전
+const rotateRight = (x: number, n: number): number =>
+  ((x >>> n) | (x << (32 - n))) >>> 0;
+
+function sha256UpdateWithState(state: number[], data: Uint8Array) {
+  if (data.length !== 64) {
+    throw new Error("data length must be 64 bytes");
+  }
+
+  const w = new Uint32Array(64);
+
+  // 메시지 스케줄 준비: 4바이트씩 읽어 빅엔디안 형식으로 변환
+  for (let i = 0; i < 16; i++) {
+    const j = i * 4;
+    w[i] =
+      ((data[j] << 24) |
+        (data[j + 1] << 16) |
+        (data[j + 2] << 8) |
+        data[j + 3]) >>>
+      0;
+  }
+
+  // 메시지 스케줄 확장
+  for (let i = 16; i < 64; i++) {
+    const s0 =
+      (rotateRight(w[i - 15], 7) ^
+        rotateRight(w[i - 15], 18) ^
+        (w[i - 15] >>> 3)) >>>
+      0;
+    const s1 =
+      (rotateRight(w[i - 2], 17) ^
+        rotateRight(w[i - 2], 19) ^
+        (w[i - 2] >>> 10)) >>>
+      0;
+    w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+  }
+
+  // 작업 변수 초기화
+  let [a, b, c, d, e, f, g, h] = state;
+
+  // 압축 함수 메인 루프
+  for (let i = 0; i < 64; i++) {
+    const s1 =
+      (rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)) >>> 0;
+    const ch = ((e & f) ^ (~e & g)) >>> 0;
+    const temp1 = (h + s1 + ch + K[i] + w[i]) >>> 0;
+    const s0 =
+      (rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22)) >>> 0;
+    const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+    const temp2 = (s0 + maj) >>> 0;
+
+    h = g;
+    g = f;
+    f = e;
+    e = (d + temp1) >>> 0;
+    d = c;
+    c = b;
+    b = a;
+    a = (temp1 + temp2) >>> 0;
+  }
+
+  // 압축 결과를 원래 상태와 더하여 새로운 상태를 계산
+  return [
+    (state[0] + a) >>> 0,
+    (state[1] + b) >>> 0,
+    (state[2] + c) >>> 0,
+    (state[3] + d) >>> 0,
+    (state[4] + e) >>> 0,
+    (state[5] + f) >>> 0,
+    (state[6] + g) >>> 0,
+    (state[7] + h) >>> 0,
+  ];
+}
+
+function getValueOffsetFromKey(payload: string, key: string): number {
+  // key에 해당하는 claim을 찾기 위한 정규식 패턴.
+  // 패턴은 "key" 다음에 optional 공백, 콜론, optional 공백, 그리고
+  // value를 (큰 따옴표가 있으면 그 따옴표까지 포함하여, 없으면 공백, 콤마, 또는 '}' 전까지) 캡처합니다.
+  const regexPattern = new RegExp(
+    `"${key}"\\s*:\\s*(?<value>"[^"]*"|[^\\s,\\}]+)`
+  );
+
+  const match = regexPattern.exec(payload);
+  if (!match) {
+    throw new Error(`Claim with key "${key}" not found in payload`);
+  }
+
+  // match[0]는 전체 매칭 문자열, match[1]는 첫 번째 캡처 그룹(값)입니다.
+  const fullMatch = match[0];
+  const valuePart = match[1];
+
+  // 전체 매칭 문자열 내에서 valuePart가 시작하는 인덱스를 계산합니다.
+  const indexInMatch = fullMatch.indexOf(valuePart);
+  if (indexInMatch === -1) {
+    throw new Error(
+      `Value part not found in the matched string for key "${key}"`
+    );
+  }
+
+  // 전체 payload에서의 offset은 매칭 시작 인덱스(match.index)와 valuePart의 내부 인덱스(indexInMatch)의 합입니다.
+  return (match.index ?? 0) + indexInMatch;
+}
+
+const INITIAL_HASH_VALUE = [
+  0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
+  0x1f83d9ab, 0x5be0cd19,
+];
+
+const K = [
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+  0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+  0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+  0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+  0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+  0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+];
+
+export default {
+  sha256Update,
+  getOutOfCircuitHashSegment,
+  Utf8ToUint8Array,
+};

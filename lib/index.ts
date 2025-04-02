@@ -6,6 +6,9 @@ export * from "./types/AccountKey";
 export { BaseAccountBuilder } from "./builders/BaseAccountBuilder";
 export { AccountKeyBuilder } from "./builders/AccountKeyBuilder";
 export { ZkapBuilder } from "./builders/ZkapBuilder";
+export { SwapBuilder } from "./builders/SwapBuilder";
+
+export * from "./utils/crypto";
 
 // 유틸리티 함수
 // export { signUserOperation } from "./utils/signature";
