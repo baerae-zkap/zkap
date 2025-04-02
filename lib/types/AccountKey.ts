@@ -4,6 +4,7 @@ export const PrimitiveAccountKeyTypes = {
   keySecp256r1: 3,
   keyWebAuthn: 4,
   keyOAuthRS256: 5,
+  keyZkGroth16: 6,
 };
 
 export const CompositeAccountKeyTypes = {

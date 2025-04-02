@@ -216,4 +216,25 @@ export class AccountKeyBuilder {
     let encoded = abiCoder.encode(["uint256", "uint256"], [x, y]);
     return encoded;
   }
+  getEncodedZkGroth16Key(userSpecificVk: string[]): string {
+    if (userSpecificVk.length !== 16) {
+      throw new Error("userSpecificVk must be 16 elements");
+    }
+    // userSpecificVk 16개 들어있는 배열을 4개씩 묶어서 배열로 만들기
+    const userSpecificVkArray = [
+      userSpecificVk.slice(0, 4),
+      userSpecificVk.slice(4, 8),
+      userSpecificVk.slice(8, 12),
+      userSpecificVk.slice(12, 16),
+    ];
+
+    let abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    let encoded = abiCoder.encode(
+      [
+        "tuple((uint256,uint256,uint256,uint256) g2mu, (uint256,uint256,uint256,uint256) g2muX, (uint256,uint256,uint256,uint256) g2muZ, (uint256,uint256,uint256,uint256) vacc)",
+      ],
+      [userSpecificVkArray]
+    );
+    return encoded;
+  }
 }
