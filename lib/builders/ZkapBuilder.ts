@@ -131,6 +131,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
           const OAUTH_KEY_VALIDATION_GAS = 400000;
           const SECP256K1_KEY_VALIDATION_GAS = 400000;
           const SECP256R1_KEY_VALIDATION_GAS = 400000;
+          const ZK_GROTH16_KEY_VALIDATION_GAS = 500000;
           const keyType = Number(key.keyType);
           if (keyType === PrimitiveAccountKeyTypes.keyAddress) {
             this.userOp.verificationGasLimit = ethers.toBeHex(
@@ -165,6 +166,13 @@ export class ZkapBuilder extends BaseAccountBuilder {
               (
                 BigInt(this.userOp.verificationGasLimit) +
                 BigInt(SECP256R1_KEY_VALIDATION_GAS)
+              ).toString()
+            );
+          } else if (keyType === PrimitiveAccountKeyTypes.keyZkGroth16) {
+            this.userOp.verificationGasLimit = ethers.toBeHex(
+              (
+                BigInt(this.userOp.verificationGasLimit) +
+                BigInt(ZK_GROTH16_KEY_VALIDATION_GAS)
               ).toString()
             );
           }
