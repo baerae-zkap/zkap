@@ -4,15 +4,93 @@ export const PrimitiveAccountKeyTypes = {
   keySecp256r1: 3,
   keyWebAuthn: 4,
   keyOAuthRS256: 5,
-  keyZkGroth16: 6,
+  keyZkOAuthRS256: 6,
 };
 
 export const CompositeAccountKeyTypes = {
   keyMultisig: 1,
 };
 
+export type AddressKeyData = {
+  signerAddress: string;
+};
+
+export type Secp256k1KeyData = {
+  pubkey: string;
+};
+
+export type Secp256r1KeyData = {
+  pubkey: string;
+};
+
+export type WebAuthnKeyData = {
+  credentialPubkey: string;
+  credentialId: string;
+  rpIdHash: string;
+  origin: string;
+};
+
+export type OAuthRS256KeyData = {
+  iss: string;
+  kid: string;
+  sub: string;
+  email: string;
+  verifyEmail: boolean;
+  verifySub: boolean;
+};
+
+export type ZkOAuthRS256KeyData = {
+  userSpecificVk: string[];
+};
+
+export type KeyData =
+  | AddressKeyData
+  | Secp256k1KeyData
+  | Secp256r1KeyData
+  | WebAuthnKeyData
+  | OAuthRS256KeyData
+  | ZkOAuthRS256KeyData;
+
 export type KeyInfo = {
   keyType: number;
   weight: number;
-  keyData: string;
+  keyData: KeyData;
+};
+
+export type AddressKeyInfo = {
+  weight: number;
+  signerAddress: string;
+};
+
+export type Secp256k1KeyInfo = {
+  weight: number;
+  pubkey: string;
+};
+
+export type Secp256r1KeyInfo = {
+  weight: number;
+  pubkey: string;
+};
+
+export type WebAuthnKeyInfo = {
+  weight: number;
+  credentialPubkey: string;
+  credentialId: string;
+  rpIdHash: string;
+  origin: string;
+};
+
+export type OAuthRS256KeyInfo = {
+  weight: number;
+  iss: string;
+  kid: string;
+  sub: string;
+  email: string;
+  verifyEmail: boolean;
+  verifySub: boolean;
+};
+
+export type ZkOAuthRS256KeyInfo = {
+  weight: number;
+  userSpecificVk: string[];
 };

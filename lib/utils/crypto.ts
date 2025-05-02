@@ -1,3 +1,5 @@
+import { ethers } from "ethers";
+
 function sha256Update(data: Uint8Array): number[] {
   if (data.length % 64 !== 0) {
     throw new Error("data length must be a multiple of 64 bytes");
@@ -41,22 +43,27 @@ function getOutOfCircuitHashSegment(jwt: string, keys: string[]): string {
   // 최종 outOfCircuitHashLen 계산: (payOffsetB64 + minOffsetB64)를 hashBlockSize로 나눈 몫에 hashBlockSize를 곱함
   const outOfCircuitHashLen =
     Math.floor((payOffsetB64 + minOffsetB64) / hashBlockSize) * hashBlockSize;
-  console.log("outOfCircuitHashLen: ", outOfCircuitHashLen);
   return jwt.slice(0, outOfCircuitHashLen);
 }
 
-function base64urlToUtf8(base64: string): string {
-  return Buffer.from(base64, "base64url").toString("utf-8");
+function base64urlToUtf8(base64url: string): string {
+  // base64url → base64
+  const base64 =
+    base64url.replace(/-/g, "+").replace(/_/g, "/") +
+    "=".repeat((4 - (base64url.length % 4)) % 4);
+
+  // base64 decode → binary string
+  const binary = atob(base64);
+
+  // binary string → UTF-8 string
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const decoder = new TextDecoder("utf-8");
+  return decoder.decode(bytes);
 }
 
 function Utf8ToUint8Array(utf8: string): Uint8Array {
-  let buffer = Buffer.from(utf8, "utf-8");
-  const uint8Array = new Uint8Array(
-    buffer.buffer,
-    buffer.byteOffset,
-    buffer.byteLength
-  );
-  return uint8Array;
+  const encoder = new TextEncoder();
+  return encoder.encode(utf8);
 }
 
 // 32비트 우측 회전 함수
@@ -182,8 +189,125 @@ const K = [
   0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
+function commonVkParser(
+  commonVk: string[]
+): [string[][], string, string, string, string] {
+  let g1Generator = [commonVk[0], commonVk[1]];
+  let g2Generator = [commonVk[3], commonVk[2], commonVk[5], commonVk[4]];
+  let g2X = [commonVk[7], commonVk[6], commonVk[9], commonVk[8]];
+  let g1Z = [commonVk[10], commonVk[11]];
+  let g2Z = [commonVk[13], commonVk[12], commonVk[15], commonVk[14]];
+
+  let pairingVk = [g1Generator, g2Generator, g2X, g1Z, g2Z];
+
+  let n = commonVk[16];
+  let m0 = commonVk[17];
+  let sigma = commonVk[18];
+  let omega = commonVk[19];
+
+  let verifyingKeyBase: [string[][], string, string, string, string] = [
+    pairingVk,
+    n,
+    m0,
+    sigma,
+    omega,
+  ];
+  return verifyingKeyBase;
+}
+
+function getSignedMessageHash(message: string): string {
+  let signedMessage = ethers.keccak256(
+    ethers.concat([
+      ethers.toUtf8Bytes("\x19Ethereum Signed Message:\n32"),
+      ethers.getBytes(message),
+    ])
+  );
+
+  return signedMessage;
+}
+
+function userSpecificVkParser(userVk: string[] | BigInt[]): bigint[][] {
+  if (userVk.length !== 16) {
+    throw new Error("userVk length must be 16");
+  }
+
+  let g2Mu = [
+    BigInt(userVk[1].toString()),
+    BigInt(userVk[0].toString()),
+    BigInt(userVk[3].toString()),
+    BigInt(userVk[2].toString()),
+  ];
+
+  let g2MuX = [
+    BigInt(userVk[5].toString()),
+    BigInt(userVk[4].toString()),
+    BigInt(userVk[7].toString()),
+    BigInt(userVk[6].toString()),
+  ];
+
+  let g2MuZ = [
+    BigInt(userVk[9].toString()),
+    BigInt(userVk[8].toString()),
+    BigInt(userVk[11].toString()),
+    BigInt(userVk[10].toString()),
+  ];
+
+  let vAcc = [
+    BigInt(userVk[13].toString()),
+    BigInt(userVk[12].toString()),
+    BigInt(userVk[15].toString()),
+    BigInt(userVk[14].toString()),
+  ];
+
+  let userSpecificVk = [g2Mu, g2MuX, g2MuZ, vAcc];
+
+  return userSpecificVk;
+}
+
+function userSpecificVkToStringArray(userSpecificVk: bigint[][]): string[] {
+  if (userSpecificVk.length !== 4) {
+    throw new Error("userSpecificVk must have 4 elements");
+  }
+
+  const [g2Mu, g2MuX, g2MuZ, vAcc] = userSpecificVk;
+
+  // 각 배열의 길이가 4인지 확인
+  if (
+    g2Mu.length !== 4 ||
+    g2MuX.length !== 4 ||
+    g2MuZ.length !== 4 ||
+    vAcc.length !== 4
+  ) {
+    throw new Error("Each element in userSpecificVk must have 4 elements");
+  }
+
+  // 원래 순서대로 재배열
+  return [
+    g2Mu[1].toString(),
+    g2Mu[0].toString(),
+    g2Mu[3].toString(),
+    g2Mu[2].toString(),
+    g2MuX[1].toString(),
+    g2MuX[0].toString(),
+    g2MuX[3].toString(),
+    g2MuX[2].toString(),
+    g2MuZ[1].toString(),
+    g2MuZ[0].toString(),
+    g2MuZ[3].toString(),
+    g2MuZ[2].toString(),
+    vAcc[1].toString(),
+    vAcc[0].toString(),
+    vAcc[3].toString(),
+    vAcc[2].toString(),
+  ];
+}
+
 export default {
   sha256Update,
   getOutOfCircuitHashSegment,
   Utf8ToUint8Array,
+  commonVkParser,
+  userSpecificVkParser,
+  userSpecificVkToStringArray,
+  getSignedMessageHash,
 };

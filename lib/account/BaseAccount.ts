@@ -5,7 +5,7 @@ export abstract class BaseAccount {
     this.address = address;
   }
 
-  abstract signUserOpHash(userOpHash: string): Promise<string>;
+  abstract signUserOpHash(userOpHash: string): Promise<string[]>;
   abstract sendTransaction(userOp: any): Promise<string>;
   abstract getNonce(): Promise<number>;
 

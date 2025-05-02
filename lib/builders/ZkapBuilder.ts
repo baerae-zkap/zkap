@@ -13,32 +13,49 @@ import {
 import { IUserOpSigner } from "../utils/IUserOpSigner";
 import { ethers } from "ethers";
 
+export interface ZkapAccountInfo {
+  chainId: number;
+  entryPoint: string;
+  enUrl: string;
+  txKeySigner?: IUserOpSigner;
+  masterKeySigner?: IUserOpSigner;
+}
+
 export class ZkapBuilder extends BaseAccountBuilder {
   protected factoryInterface: ethers.Interface = new ethers.Interface(
     ZkapAccountFactoryABIstring
   );
   private provider: ethers.JsonRpcProvider;
-  private callContract: string;
-  private callValue: ethers.BigNumberish;
-  private callData: string;
-  private callMethodId: string;
-  private masterKeyInfo: [number, [number, KeyInfo[]]];
-  private txKeyInfo: [number, [number, KeyInfo[]]];
-  private userOpSigner: IUserOpSigner;
-  private isCallFromEntryPoint: boolean;
-  constructor(
-    chainId: number,
-    entryPoint: string,
-    enUrl: string,
-    userOpSigner?: IUserOpSigner
-  ) {
+  private callContract: string | undefined;
+  private callValue: ethers.BigNumberish | undefined;
+  private callData: string | undefined;
+  private callMethodId: string | undefined;
+  private masterKeyInfo: [number, [number, KeyInfo[]]] | undefined;
+  private txKeyInfo: [number, [number, KeyInfo[]]] | undefined;
+  private userOpSigner: IUserOpSigner | undefined;
+  private isCallFromEntryPoint: boolean | undefined;
+  private txKeySigner: IUserOpSigner | undefined;
+  private masterKeySigner: IUserOpSigner | undefined;
+  constructor({
+    chainId,
+    entryPoint,
+    enUrl,
+    txKeySigner,
+    masterKeySigner,
+  }: ZkapAccountInfo) {
     super(chainId, entryPoint);
     this.provider = new ethers.JsonRpcProvider(enUrl);
-    this.userOpSigner = userOpSigner ?? {
-      async signUserOpHash(userOpHash: string): Promise<string> {
-        throw new Error("UserOpSigner is not set");
+    this.txKeySigner = txKeySigner ?? {
+      async signUserOpHash(userOpHash: string): Promise<string[]> {
+        throw new Error("TxKeySigner is not set");
       },
     };
+    this.masterKeySigner = masterKeySigner ?? {
+      async signUserOpHash(userOpHash: string): Promise<string[]> {
+        throw new Error("MasterKeySigner is not set");
+      },
+    };
+    this.userOpSigner = this.txKeySigner;
   }
 
   setMasterKeyInfo(encoded: string): this {
@@ -53,6 +70,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   getMasterKeyInfo(): [number, [number, KeyInfo[]]] {
+    if (!this.masterKeyInfo) {
+      throw new Error("Master key info is not set");
+    }
     return this.masterKeyInfo;
   }
 
@@ -68,6 +88,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   getTxKeyInfo(): [number, [number, KeyInfo[]]] {
+    if (!this.txKeyInfo) {
+      throw new Error("Tx key info is not set");
+    }
     return this.txKeyInfo;
   }
 
@@ -96,14 +119,28 @@ export class ZkapBuilder extends BaseAccountBuilder {
     );
   }
 
-  private async setInitialGasInfo(): Promise<this> {
+  async autoFillUserOp(): Promise<this> {
     if (!this.provider) {
       throw new Error("Provider is not set. Please provide a valid RPC URL.");
+    }
+    if (!this.userOp.sender) {
+      throw new Error("Sender is not set. Please set a valid sender.");
     }
     const feeData = await this.provider.getFeeData();
     if (!feeData || !feeData.gasPrice) {
       throw new Error("Failed to get fee data from provider");
     }
+    if (this.userOp.nonce === undefined) {
+      // nonce 값은 entryPoint 의 getNonce(sender, 0) 값으로 설정
+      const entryPointContract = new ethers.Contract(
+        this.entryPoint,
+        ["function getNonce(address,uint192) view returns(uint256)"],
+        this.provider
+      );
+      const nonce = await entryPointContract.getNonce(this.userOp.sender, 0);
+      this.userOp.nonce = ethers.toBeHex(nonce.toString());
+    }
+
     this.userOp.maxFeePerGas = this.userOp.maxPriorityFeePerGas =
       ethers.toBeHex(feeData.gasPrice.toString());
 
@@ -131,7 +168,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
           const OAUTH_KEY_VALIDATION_GAS = 400000;
           const SECP256K1_KEY_VALIDATION_GAS = 400000;
           const SECP256R1_KEY_VALIDATION_GAS = 400000;
-          const ZK_GROTH16_KEY_VALIDATION_GAS = 500000;
+          const ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 5000000;
           const keyType = Number(key.keyType);
           if (keyType === PrimitiveAccountKeyTypes.keyAddress) {
             this.userOp.verificationGasLimit = ethers.toBeHex(
@@ -168,11 +205,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
                 BigInt(SECP256R1_KEY_VALIDATION_GAS)
               ).toString()
             );
-          } else if (keyType === PrimitiveAccountKeyTypes.keyZkGroth16) {
+          } else if (keyType === PrimitiveAccountKeyTypes.keyZkOAuthRS256) {
             this.userOp.verificationGasLimit = ethers.toBeHex(
               (
                 BigInt(this.userOp.verificationGasLimit) +
-                BigInt(ZK_GROTH16_KEY_VALIDATION_GAS)
+                BigInt(ZK_OAUTH_RS256_KEY_VALIDATION_GAS)
               ).toString()
             );
           }
@@ -230,6 +267,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   private async finalizeUserOp(): Promise<this> {
+    if (!this.userOpSigner) {
+      throw new Error("UserOpSigner is not set");
+    }
     // verificationGasLimit 정확한 값으로 업데이트
     if (
       typeof this.userOp.initCode === "string" &&
@@ -252,7 +292,6 @@ export class ZkapBuilder extends BaseAccountBuilder {
           to: this.userOp.sender,
           data: callData,
         });
-
         this.userOp.verificationGasLimit = ethers.toBeHex(
           ((BigInt(estimatedGas) * BigInt(120)) / BigInt(100)).toString()
         );
@@ -261,29 +300,25 @@ export class ZkapBuilder extends BaseAccountBuilder {
       }
       const newUserOpHash = this.getUserOpHash();
       const signature = await this.userOpSigner.signUserOpHash(newUserOpHash);
-      this.setSignature([signature]);
+      this.setSignature(signature);
       return this;
     }
   }
 
   async completeUserOp(): Promise<this> {
-    if (
-      this.userOp.sender === ethers.ZeroAddress ||
-      this.userOp.nonce === "" ||
-      this.userOp.callData === "0x"
-    ) {
+    if (this.userOp.sender === ethers.ZeroAddress) {
       throw new Error("Required fields are missing");
     }
     if (!this.userOpSigner) {
       throw new Error("UserOpSigner is not set");
     }
 
-    await this.setInitialGasInfo();
+    await this.autoFillUserOp(); // TODO : 각 키 타입마다 필요한 gas 량 측정하여 초기값 설정
     const userOpHash = this.getUserOpHash();
     const signature = await this.userOpSigner.signUserOpHash(userOpHash);
-    this.setSignature([signature]);
+    this.setSignature(signature);
 
-    await this.finalizeUserOp();
+    await this.finalizeUserOp(); // TODO : 이 부분으로 정교하게 맞추는 부분은 제거.
     return this;
   }
 
@@ -332,6 +367,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       throw new Error("Sender is not set");
     }
     this.isCallFromEntryPoint = true;
+    this.userOpSigner = this.masterKeySigner;
     return this;
   }
 
@@ -347,6 +383,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       throw new Error("Sender is not set");
     }
     this.isCallFromEntryPoint = true;
+    this.userOpSigner = this.masterKeySigner;
     return this;
   }
 
@@ -367,6 +404,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     this.callMethodId = data && data.length > 0 ? data.slice(0, 10) : "";
 
     this.userOp.callData = useropCallData;
+    this.userOpSigner = this.txKeySigner;
     return this;
   }
 }

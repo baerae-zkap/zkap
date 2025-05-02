@@ -1,8 +1,9 @@
 import { BaseAccount } from "./BaseAccount";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
 import { ethers } from "ethers";
+import SimpleEntryPoint from "../types/abi/SimpleEntryPoint.json";
 import { PackedUserOperation } from "../types/UserOperation";
-import { EntryPointABIstring } from "../resources/abis";
+
 export class ZkapAccount extends BaseAccount {
   private signer: IUserOpSigner;
   private provider: ethers.JsonRpcProvider;
@@ -19,15 +20,15 @@ export class ZkapAccount extends BaseAccount {
     this.provider = new ethers.JsonRpcProvider(enUrl);
     this.entryPoint = new ethers.Contract(
       entryPointAddress,
-      EntryPointABIstring,
+      SimpleEntryPoint.abi,
       this.provider
     );
   }
 
-  async signUserOpHash(opHash: string): Promise<string> {
+  async signUserOpHash(opHash: string): Promise<string[]> {
     try {
       const signedOp = await this.signer.signUserOpHash(opHash);
-      return signedOp;
+      return [signedOp];
     } catch (e) {
       console.error(e);
       throw e;

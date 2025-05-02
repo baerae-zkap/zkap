@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { ZkapAccountFactoryABIstring } from "../resources/abis";
 
-export class ZkapAccountFactory {
+export class ZkapFactoryBuilder {
   private provider: ethers.JsonRpcProvider;
   private accountFactory: ethers.Contract;
 

@@ -17,7 +17,7 @@ export abstract class BaseAccountBuilder {
   protected applyDefaults(): void {
     const defaultValues: UserOperation = {
       sender: ethers.ZeroAddress,
-      nonce: "",
+      nonce: ethers.toBeHex("0"),
       initCode: "0x",
       callData: "0x",
       callGasLimit: "0x00",

@@ -1,3 +1,3 @@
 export interface IUserOpSigner {
-  signUserOpHash(userOpHash: string): Promise<string>;
+  signUserOpHash(userOpHash: string): Promise<string[]>;
 }
