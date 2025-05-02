@@ -21,5 +21,6 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "moduleResolution": "node"
-  }
+  },
+  "files": ["lib/types/abi/SimpleEntryPoint.json"]
 }

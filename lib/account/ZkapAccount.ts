@@ -28,7 +28,7 @@ export class ZkapAccount extends BaseAccount {
   async signUserOpHash(opHash: string): Promise<string[]> {
     try {
       const signedOp = await this.signer.signUserOpHash(opHash);
-      return [signedOp];
+      return signedOp;
     } catch (e) {
       console.error(e);
       throw e;
