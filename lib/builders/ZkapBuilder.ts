@@ -1,10 +1,6 @@
 import { BaseAccountBuilder } from "./BaseAccountBuilder";
 import { CallDataBuilder } from "./CallDataBuilder";
-import {
-  PrimitiveAccountKeyTypes,
-  KeyInfo,
-  CompositeAccountKeyTypes,
-} from "../types/AccountKey";
+import { PrimitiveAccountKeyTypes, KeyInfo } from "../types/AccountKey";
 import { AccountKeyBuilder } from "./AccountKeyBuilder";
 import {
   ZkapAccountABIstring,
@@ -30,12 +26,13 @@ export class ZkapBuilder extends BaseAccountBuilder {
   private callValue: ethers.BigNumberish | undefined;
   private callData: string | undefined;
   private callMethodId: string | undefined;
-  private masterKeyInfo: [number, [number, KeyInfo[]]] | undefined;
-  private txKeyInfo: [number, [number, KeyInfo[]]] | undefined;
+  // private masterKeyInfo: [number, [number, KeyInfo[]]] | undefined;
+  private txKeyInfo: [number, KeyInfo[]] | undefined;
   private userOpSigner: IUserOpSigner | undefined;
   private isCallFromEntryPoint: boolean | undefined;
   private txKeySigner: IUserOpSigner | undefined;
   private masterKeySigner: IUserOpSigner | undefined;
+  private txKeyTypes: number[] | undefined;
   constructor({
     chainId,
     entryPoint,
@@ -58,40 +55,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
     this.userOpSigner = this.txKeySigner;
   }
 
-  setMasterKeyInfo(encoded: string): this {
-    const accountKeyBuilder = new AccountKeyBuilder();
-    const [keyType, encodedKeys] =
-      accountKeyBuilder.getDecodedCompositeKey(encoded);
-    this.masterKeyInfo = [
-      keyType,
-      accountKeyBuilder.getDecodedPrimitiveKey(encodedKeys),
-    ];
-    return this;
-  }
-
-  getMasterKeyInfo(): [number, [number, KeyInfo[]]] {
-    if (!this.masterKeyInfo) {
-      throw new Error("Master key info is not set");
+  getTxKeyTypes(): number[] {
+    if (!this.txKeyTypes) {
+      throw new Error("Tx key types is not set");
     }
-    return this.masterKeyInfo;
-  }
-
-  setTxKeyInfo(encoded: string): this {
-    const accountKeyBuilder = new AccountKeyBuilder();
-    const [keyType, encodedKeys] =
-      accountKeyBuilder.getDecodedCompositeKey(encoded);
-    this.txKeyInfo = [
-      keyType,
-      accountKeyBuilder.getDecodedPrimitiveKey(encodedKeys),
-    ];
-    return this;
-  }
-
-  getTxKeyInfo(): [number, [number, KeyInfo[]]] {
-    if (!this.txKeyInfo) {
-      throw new Error("Tx key info is not set");
-    }
-    return this.txKeyInfo;
+    return this.txKeyTypes;
   }
 
   getRequiredPrefund(): string {
@@ -160,62 +128,58 @@ export class ZkapBuilder extends BaseAccountBuilder {
       this.userOp.verificationGasLimit = BigInt(
         walletCreationGasLimit
       ).toString();
-      const [keyType, [_, keys]] = this.getTxKeyInfo();
-      if (Number(keyType) === CompositeAccountKeyTypes.keyMultisig) {
-        for (const key of keys) {
-          const ADDRESS_KEY_VALIDATION_GAS = 400000;
-          const WEB_AUTHN_KEY_VALIDATION_GAS = 400000;
-          const OAUTH_KEY_VALIDATION_GAS = 400000;
-          const SECP256K1_KEY_VALIDATION_GAS = 400000;
-          const SECP256R1_KEY_VALIDATION_GAS = 400000;
-          const ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 5000000;
-          const keyType = Number(key.keyType);
-          if (keyType === PrimitiveAccountKeyTypes.keyAddress) {
-            this.userOp.verificationGasLimit = ethers.toBeHex(
-              (
-                BigInt(this.userOp.verificationGasLimit) +
-                BigInt(ADDRESS_KEY_VALIDATION_GAS)
-              ).toString()
-            );
-          } else if (keyType === PrimitiveAccountKeyTypes.keyWebAuthn) {
-            this.userOp.verificationGasLimit = ethers.toBeHex(
-              (
-                BigInt(this.userOp.verificationGasLimit) +
-                BigInt(WEB_AUTHN_KEY_VALIDATION_GAS)
-              ).toString()
-            );
-          } else if (keyType === PrimitiveAccountKeyTypes.keyOAuthRS256) {
-            this.userOp.verificationGasLimit = ethers.toBeHex(
-              (
-                BigInt(this.userOp.verificationGasLimit) +
-                BigInt(OAUTH_KEY_VALIDATION_GAS)
-              ).toString()
-            );
-          } else if (keyType === PrimitiveAccountKeyTypes.keySecp256k1) {
-            this.userOp.verificationGasLimit = ethers.toBeHex(
-              (
-                BigInt(this.userOp.verificationGasLimit) +
-                BigInt(SECP256K1_KEY_VALIDATION_GAS)
-              ).toString()
-            );
-          } else if (keyType === PrimitiveAccountKeyTypes.keySecp256r1) {
-            this.userOp.verificationGasLimit = ethers.toBeHex(
-              (
-                BigInt(this.userOp.verificationGasLimit) +
-                BigInt(SECP256R1_KEY_VALIDATION_GAS)
-              ).toString()
-            );
-          } else if (keyType === PrimitiveAccountKeyTypes.keyZkOAuthRS256) {
-            this.userOp.verificationGasLimit = ethers.toBeHex(
-              (
-                BigInt(this.userOp.verificationGasLimit) +
-                BigInt(ZK_OAUTH_RS256_KEY_VALIDATION_GAS)
-              ).toString()
-            );
-          }
+      const keyTypes = this.getTxKeyTypes();
+
+      for (const keyType of keyTypes) {
+        const ADDRESS_KEY_VALIDATION_GAS = 400000;
+        const WEB_AUTHN_KEY_VALIDATION_GAS = 400000;
+        const OAUTH_KEY_VALIDATION_GAS = 400000;
+        const SECP256K1_KEY_VALIDATION_GAS = 400000;
+        const SECP256R1_KEY_VALIDATION_GAS = 400000;
+        const ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 5000000;
+        if (keyType === PrimitiveAccountKeyTypes.keyAddress) {
+          this.userOp.verificationGasLimit = ethers.toBeHex(
+            (
+              BigInt(this.userOp.verificationGasLimit) +
+              BigInt(ADDRESS_KEY_VALIDATION_GAS)
+            ).toString()
+          );
+        } else if (keyType === PrimitiveAccountKeyTypes.keyWebAuthn) {
+          this.userOp.verificationGasLimit = ethers.toBeHex(
+            (
+              BigInt(this.userOp.verificationGasLimit) +
+              BigInt(WEB_AUTHN_KEY_VALIDATION_GAS)
+            ).toString()
+          );
+        } else if (keyType === PrimitiveAccountKeyTypes.keyOAuthRS256) {
+          this.userOp.verificationGasLimit = ethers.toBeHex(
+            (
+              BigInt(this.userOp.verificationGasLimit) +
+              BigInt(OAUTH_KEY_VALIDATION_GAS)
+            ).toString()
+          );
+        } else if (keyType === PrimitiveAccountKeyTypes.keySecp256k1) {
+          this.userOp.verificationGasLimit = ethers.toBeHex(
+            (
+              BigInt(this.userOp.verificationGasLimit) +
+              BigInt(SECP256K1_KEY_VALIDATION_GAS)
+            ).toString()
+          );
+        } else if (keyType === PrimitiveAccountKeyTypes.keySecp256r1) {
+          this.userOp.verificationGasLimit = ethers.toBeHex(
+            (
+              BigInt(this.userOp.verificationGasLimit) +
+              BigInt(SECP256R1_KEY_VALIDATION_GAS)
+            ).toString()
+          );
+        } else if (keyType === PrimitiveAccountKeyTypes.keyZkOAuthRS256) {
+          this.userOp.verificationGasLimit = ethers.toBeHex(
+            (
+              BigInt(this.userOp.verificationGasLimit) +
+              BigInt(ZK_OAUTH_RS256_KEY_VALIDATION_GAS)
+            ).toString()
+          );
         }
-      } else {
-        throw new Error("Invalid key type");
       }
     } else {
       // 지갑이 만들어져있는 상태에서 verification 할 때에는 verificationGasLimit 을 signature 의 길이에 비례하여 대략적으로 초기값을 설정
@@ -299,8 +263,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
         throw new Error("Error estimating gas: " + error);
       }
       const newUserOpHash = this.getUserOpHash();
+      // TODO : (keyIndexList, keySignatureList) = abi.decode(userOp.signature,(uint8[], bytes[])); 형태로 인코딩 하기
       const signature = await this.userOpSigner.signUserOpHash(newUserOpHash);
-      this.setSignature(signature);
+      this.setSignature([0], signature);
       return this;
     }
   }
@@ -316,7 +281,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     await this.autoFillUserOp(); // TODO : 각 키 타입마다 필요한 gas 량 측정하여 초기값 설정
     const userOpHash = this.getUserOpHash();
     const signature = await this.userOpSigner.signUserOpHash(userOpHash);
-    this.setSignature(signature);
+    this.setSignature([0], signature);
 
     await this.finalizeUserOp(); // TODO : 이 부분으로 정교하게 맞추는 부분은 제거.
     return this;
@@ -325,32 +290,38 @@ export class ZkapBuilder extends BaseAccountBuilder {
   setInitCode(
     zkapFactory: string,
     salt: ethers.BigNumberish,
-    compositeAccountKeyfactory: string,
     encodedMasterKey: string,
     encodedTxKey: string
   ): this {
     const callDataBuilder = new CallDataBuilder(ZkapAccountFactoryABIstring);
+
     const callData = callDataBuilder.encode("createAccount", [
       salt,
-      compositeAccountKeyfactory,
       encodedMasterKey,
       encodedTxKey,
     ]);
 
     const initCode = ethers.concat([zkapFactory, callData]);
-    this.setMasterKeyInfo(encodedMasterKey);
-    this.setTxKeyInfo(encodedTxKey);
+
+    this.setTxKeyTypes(encodedTxKey);
 
     this.userOp.initCode = initCode;
     return this;
   }
 
-  setSignature(signatureArray: string[]): this {
+  setTxKeyTypes(encodedKey: string): this {
+    const accountKeyBuilder = new AccountKeyBuilder();
+    const keyTypes = accountKeyBuilder.getDecodedKeyTypes(encodedKey);
+    this.txKeyTypes = keyTypes;
+    return this;
+  }
+
+  setSignature(keyIndexList: number[], keySignatureList: string[]): this {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
 
     this.userOp.signature = defaultAbiCoder.encode(
-      ["bytes[]"],
-      [signatureArray]
+      ["uint8[]", "bytes[]"],
+      [keyIndexList, keySignatureList]
     );
     return this;
   }

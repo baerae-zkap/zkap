@@ -16,17 +16,14 @@ export class ZkapFactoryBuilder {
 
   async calcAccountAddress(
     salt: string,
-    compositeAccountKeyFactoryAddress: string,
     encodedMasterKey: string,
     encodedTxKey: string
   ) {
     const address = await this.accountFactory.calcAccountAddress(
       salt,
-      compositeAccountKeyFactoryAddress,
       encodedMasterKey,
       encodedTxKey
     );
-
     return address;
   }
 }

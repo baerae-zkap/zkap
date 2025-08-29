@@ -1,5 +1,10 @@
 import { ethers } from "ethers";
 
+const BN254_FR =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+const MODULUS_BIT_SIZE = 254;
+const LIMB_WIDTH = Math.floor((MODULUS_BIT_SIZE - 1) / 8); // = 31
+
 function sha256Update(data: Uint8Array): number[] {
   if (data.length % 64 !== 0) {
     throw new Error("data length must be a multiple of 64 bytes");
@@ -302,6 +307,110 @@ function userSpecificVkToStringArray(userSpecificVk: bigint[][]): string[] {
   ];
 }
 
+/**
+ * Solidity의 formattingModulorN 함수와 동일한 로직을 수행합니다.
+ * 바이트 배열을 뒤집고, 8바이트 청크로 나누어 little-endian 방식으로
+ * uint256(bigint) 배열로 변환합니다.
+ * @param n '0x' 접두사를 포함한 16진수 문자열 또는 Uint8Array
+ * @returns bigint[] 타입의 배열
+ */
+export function formattingModulorN(n: string | Uint8Array): string[] {
+  const bytes = ethers.getBytes(n);
+  if (bytes.length % 8 !== 0) {
+    throw new Error("Input length must be a multiple of 8");
+  }
+
+  const reversedBytes = bytes.slice().reverse();
+
+  const chunks = reversedBytes.length / 8;
+  const result: string[] = [];
+
+  for (let i = 0; i < chunks; i++) {
+    const chunk = reversedBytes.slice(i * 8, (i + 1) * 8);
+
+    let value = 0n;
+
+    for (let j = 0; j < 8; j++) {
+      value |= BigInt(chunk[j]) << (8n * BigInt(j));
+    }
+
+    result.push(ethers.toBeHex(value));
+  }
+
+  return result;
+}
+
+/**
+ * Rust의 calculate_max_claim_len을 TypeScript로 변환
+ * @param userMaxClaimLen 사용자가 요청한 최대 claim 길이
+ * @param modulusBitSize   필드의 모듈러스 비트 크기 (기본값: BN254)
+ * @returns 필드 limb 단위로 맞춘 max_claim_len
+ */
+export function calculateMaxClaimLen(
+  userMaxClaimLen: number,
+  modulusBitSize: number = MODULUS_BIT_SIZE
+): number {
+  const limbWidth = Math.floor((modulusBitSize - 1) / 8);
+  const nLimbs = Math.ceil(userMaxClaimLen / limbWidth);
+  const maxClaimLen = nLimbs * limbWidth;
+  return maxClaimLen;
+}
+
+/**
+ * 문자열을 지정된 길이로 패딩
+ * @param s 문자열
+ * @param targetLen 목표 길이
+ * @param padChar 패딩에 사용할 문자 (u8 코드 값)
+ * @returns 패딩된 문자열
+ */
+export function padStr(s: string, targetLen: number, padChar: number): string {
+  const len = s.length;
+
+  if (len < targetLen) {
+    s += String.fromCharCode(padChar).repeat(targetLen - len);
+  }
+
+  return s;
+}
+
+/** big-endian bytes -> bigint */
+function beBytesToBigInt(bytes: Uint8Array): bigint {
+  let x = 0n;
+  for (let i = 0; i < bytes.length; i++) x = (x << 8n) + BigInt(bytes[i]);
+  return x;
+}
+
+/** Rust의 F::from_be_bytes_mod_order와 동일: 31바이트씩 끊어 mod p */
+function strToFieldsBN254(s: string): bigint[] {
+  const bytes = new TextEncoder().encode(s);
+
+  if (bytes.length % LIMB_WIDTH !== 0) {
+    throw new Error(
+      `Input length (${bytes.length}) must be a multiple of ${LIMB_WIDTH}.`
+    );
+  }
+
+  const out: bigint[] = [];
+  for (let i = 0; i < bytes.length; i += LIMB_WIDTH) {
+    const chunk = bytes.subarray(i, i + LIMB_WIDTH);
+    const n = beBytesToBigInt(chunk) % BN254_FR;
+    out.push(n);
+  }
+  return out;
+}
+
+export function padAndStrToFieldsBN254(
+  s: string,
+  userMaxClaimLen: number,
+  padChar: number
+): bigint[] {
+  let maxClaimLen = calculateMaxClaimLen(userMaxClaimLen);
+
+  s = padStr(s, maxClaimLen, padChar);
+
+  return strToFieldsBN254(s);
+}
+
 export default {
   sha256Update,
   getOutOfCircuitHashSegment,
@@ -310,4 +419,6 @@ export default {
   userSpecificVkParser,
   userSpecificVkToStringArray,
   getSignedMessageHash,
+  formattingModulorN,
+  padAndStrToFieldsBN254,
 };

@@ -152,6 +152,17 @@ export class ZkOAuthRS256KeySigner implements IUserOpSigner {
         // TODO : Kakao OAUTH 공개키 받아오는 함수 구현
       }
       if (!publicKey) {
+        // Test 용 public key
+        publicKey = {
+          e: "AQAB",
+          n: process.env.TEST_PUBLIC_KEY_MODULUS!,
+          alg: "RS256",
+          kid: "test",
+          kty: "RSA",
+          use: "sig",
+        };
+      }
+      if (!publicKey) {
         throw new Error("공개키를 찾을 수 없습니다.");
       }
 

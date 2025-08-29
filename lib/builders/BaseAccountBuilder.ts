@@ -7,7 +7,10 @@ export abstract class BaseAccountBuilder {
   protected entryPoint: string;
 
   abstract setInitCode(...initCodes: string[]): this;
-  abstract setSignature(signature: any): this;
+  abstract setSignature(
+    keyIndexList: number[],
+    keySignatureList: string[]
+  ): this;
 
   constructor(chainId: number, entryPoint: string) {
     this.chainId = chainId;
@@ -33,6 +36,32 @@ export abstract class BaseAccountBuilder {
     };
 
     this.userOp = { ...defaultValues, ...this.userOp };
+  }
+
+  encodeUserOpForPaymaster(packedUserOp: PackedUserOperation): string {
+    const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
+    return defaultAbiCoder.encode(
+      [
+        "address",
+        "uint256",
+        "bytes32",
+        "uint256",
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "bytes32",
+      ],
+      [
+        packedUserOp.sender,
+        packedUserOp.nonce,
+        packedUserOp.accountGasLimits,
+        packedUserOp.preVerificationGas,
+        packedUserOp.gasFees,
+        ethers.keccak256(packedUserOp.initCode),
+        ethers.keccak256(packedUserOp.callData),
+        ethers.keccak256(packedUserOp.paymasterAndData.slice(0, -130)),
+      ]
+    );
   }
 
   encodeUserOp(packedUserOp: PackedUserOperation, forSignature = true): string {
@@ -213,6 +242,7 @@ export abstract class BaseAccountBuilder {
     this.applyDefaults(); // 기본값 적용
 
     if (!this.userOp.sender) {
+      console.log(this.userOp);
       throw new Error("Required fields are missing");
     }
 
@@ -233,5 +263,18 @@ export abstract class BaseAccountBuilder {
       [userOpHash, this.entryPoint, this.chainId]
     );
     return ethers.keccak256(enc);
+  }
+
+  getUserOpHashForPaymaster(): string {
+    const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const userOpHash = ethers.keccak256(
+      this.encodeUserOpForPaymaster(this.getPackedUserOp())
+    );
+    const enc = defaultAbiCoder.encode(
+      ["bytes32", "uint256"],
+      [userOpHash, this.chainId]
+    );
+    const userOpHashForPaymaster = ethers.keccak256(enc);
+    return userOpHashForPaymaster;
   }
 }

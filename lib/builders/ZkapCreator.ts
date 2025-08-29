@@ -1,12 +1,11 @@
 import { ZkapBuilder } from "./ZkapBuilder";
 import { ZkapFactoryBuilder } from "./ZkapFactoryBuilder";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
-import { ethers } from "hardhat";
+import { ethers } from "ethers";
 
 export interface ZkapCreatorInfo {
   chainId: number;
   entryPoint: string;
-  keyFactory: string;
   zkapFactory: string;
   enUrl: string;
   txKeySigner: IUserOpSigner;
@@ -18,7 +17,6 @@ export interface ZkapCreatorInfo {
 export class ZkapCreator extends ZkapBuilder {
   private zkapFactory: string;
   private enUrl: string;
-  private keyFactory: string;
   private salt: string;
   private encodedMasterKey: string;
   private encodedTxKey: string;
@@ -27,7 +25,6 @@ export class ZkapCreator extends ZkapBuilder {
     chainId,
     entryPoint,
     zkapFactory,
-    keyFactory,
     enUrl,
     txKeySigner,
     salt,
@@ -40,37 +37,29 @@ export class ZkapCreator extends ZkapBuilder {
       enUrl,
       txKeySigner,
     });
-    this.setInitCode(
-      zkapFactory,
-      salt,
-      keyFactory,
-      encodedMasterKey,
-      encodedTxKey
-    );
+    this.setInitCode(zkapFactory, salt, encodedMasterKey, encodedTxKey);
     this.zkapFactory = zkapFactory;
-    this.keyFactory = keyFactory;
     this.salt = salt;
     this.encodedMasterKey = encodedMasterKey;
     this.encodedTxKey = encodedTxKey;
     this.enUrl = enUrl;
   }
 
-  async getZkapAddress(): Promise<string> {
+  async deriveZkapAddress(): Promise<string> {
     if (this.address != ethers.ZeroAddress) return this.address;
     const zkapFactory = new ZkapFactoryBuilder(this.zkapFactory, this.enUrl);
     const zkapAddress = await zkapFactory.calcAccountAddress(
       this.salt,
-      this.keyFactory,
       this.encodedMasterKey,
       this.encodedTxKey
     );
     this.address = zkapAddress;
+    this.setSender(zkapAddress);
     return zkapAddress;
   }
 
   async completeUserOp(): Promise<this> {
-    const zkapAddress = await this.getZkapAddress();
-    this.setSender(zkapAddress);
+    await this.deriveZkapAddress();
     await super.completeUserOp();
     return this;
   }
