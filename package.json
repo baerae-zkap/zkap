@@ -1,6 +1,6 @@
 {
   "name": "@baerae-zkap/zkap-aa-sdk",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/baerae-zkap/zkap-aa-sdk#readme",
   "files": [
-    "dist/lib"
+    "dist/lib/**"
   ],
   "dependencies": {
     "@levischuck/tiny-cbor": "^0.2.11",
@@ -32,5 +32,12 @@
     "jwt-decode": "^4.0.0"
   },
   "main": "dist/lib/index.js",
-  "types": "dist/lib/index.d.ts"
+  "types": "dist/lib/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/lib/index.js",
+      "require": "./dist/lib/index.js",
+      "types": "./dist/lib/index.d.ts"
+    }
+  }
 }
