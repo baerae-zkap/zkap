@@ -21,7 +21,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
   protected factoryInterface: ethers.Interface = new ethers.Interface(
     ZkapAccountFactoryABIstring
   );
-  private provider: ethers.JsonRpcProvider;
+  protected provider: ethers.JsonRpcProvider;
   private callContract: string | undefined;
   private callValue: ethers.BigNumberish | undefined;
   private callData: string | undefined;
@@ -40,8 +40,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
     txKeySigner,
     masterKeySigner,
   }: ZkapAccountInfo) {
-    super(chainId, entryPoint);
-    this.provider = new ethers.JsonRpcProvider(enUrl);
+    const provider = new ethers.JsonRpcProvider(enUrl);
+    super(chainId, entryPoint, provider);
+    this.provider = provider;
     this.txKeySigner = txKeySigner ?? {
       async signUserOpHash(userOpHash: string): Promise<string[]> {
         throw new Error("TxKeySigner is not set");
@@ -114,7 +115,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
     this.userOp.callGasLimit = ethers.toBeHex("0");
     this.userOp.preVerificationGas = ethers.toBeHex("25000"); // preVerificationGas 값은 25000으로 고정
-    this.userOp.verificationGasLimit = ethers.toBeHex("0");
+    // TODO: @kaikookim 아래 코드는 임시로 설정한 값이므로, 추후 수정 필요
+    // this.userOp.verificationGasLimit = ethers.toBeHex("0");
+    this.userOp.verificationGasLimit = ethers.toBeHex("1500000");
 
     // verification 할 때 필요한 gas 계산 -> 각 키 타입에 따라 필요한 gas 를 사전에 정의한 값으로 설정
     if (this.userOp.initCode !== "0x" && this.userOp.initCode !== undefined) {
@@ -132,7 +135,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
       for (const keyType of keyTypes) {
         const ADDRESS_KEY_VALIDATION_GAS = 400000;
-        const WEB_AUTHN_KEY_VALIDATION_GAS = 400000;
+        const WEB_AUTHN_KEY_VALIDATION_GAS = 1500000;
         const OAUTH_KEY_VALIDATION_GAS = 400000;
         const SECP256K1_KEY_VALIDATION_GAS = 400000;
         const SECP256R1_KEY_VALIDATION_GAS = 400000;
@@ -185,9 +188,12 @@ export class ZkapBuilder extends BaseAccountBuilder {
       // 지갑이 만들어져있는 상태에서 verification 할 때에는 verificationGasLimit 을 signature 의 길이에 비례하여 대략적으로 초기값을 설정
       // check signature length && length / 64 * 100000 을 this.userOp.verificationGasLimit 에 할당
       const signatureLength = this.userOp.signature?.length ?? 0 / 64;
-      this.userOp.verificationGasLimit = ethers.toBeHex(
-        (signatureLength * 100000).toString()
-      );
+      // this.userOp.verificationGasLimit = ethers.toBeHex(
+      //   (signatureLength * 100000).toString()
+      // );
+
+      // TODO: @kaikookim verificationGasLimit 구하는 것을 pimlico 로직 참고해서 변경
+      // this.userOp.verificationGasLimit = ethers.toBeHex((100000).toString());
     }
 
     // set callGasLimit
@@ -256,9 +262,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
           to: this.userOp.sender,
           data: callData,
         });
-        this.userOp.verificationGasLimit = ethers.toBeHex(
-          ((BigInt(estimatedGas) * BigInt(120)) / BigInt(100)).toString()
-        );
+        // TODO: @kaikookim 아래 주석 처리된 verificationGasLimit 설정해주는 부분은 원래 들어가야하나, paymaster signature 만드는 과정에서 데이터가 트러져서 일단 주석처리 해놓음
+        // 주석처리된 로직 반영 필요
+        // this.userOp.verificationGasLimit = ethers.toBeHex(
+        //   ((BigInt(estimatedGas) * BigInt(120)) / BigInt(100)).toString()
+        // );
       } catch (error) {
         throw new Error("Error estimating gas: " + error);
       }
@@ -305,6 +313,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
     this.setTxKeyTypes(encodedTxKey);
 
+    this.userOp.initCode = initCode;
+    return this;
+  }
+
+  setRawInitCode(initCode: string): this {
     this.userOp.initCode = initCode;
     return this;
   }
@@ -376,6 +389,116 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
     this.userOp.callData = useropCallData;
     this.userOpSigner = this.txKeySigner;
+    return this;
+  }
+
+  getUserOpHashForPaymaster(): string {
+    const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
+
+    const userOpHash = ethers.keccak256(
+      this.encodeUserOpForPaymaster(this.getPackedUserOp())
+    );
+
+    const enc = defaultAbiCoder.encode(
+      ["bytes32", "uint256"],
+      [userOpHash, this.chainId]
+    );
+    const userOpHashForPaymaster = ethers.keccak256(enc);
+    return userOpHashForPaymaster;
+  }
+
+  // TODO: @kaikookim 아래 함수는 검증되지 않은 함수이므로, 테스트 후 사용해야 함
+  // setFeeDelegatedUserOpCallData
+  setFeeDelegatedUserOpCallData(erc20Token: string, treasury: string): this {
+    if (!this.userOp.callData || this.userOp.callData === "0x") {
+      throw new Error(
+        "Call data is not set. Please set a valid call data first."
+      );
+    }
+
+    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+
+    // execute 함수의 selector: 0xb61d27f6
+    const executeSelector = "0xb61d27f6";
+    // executeBatch 함수의 selector: 0x47e1da2a
+    const executeBatchSelector = "0x47e1da2a";
+
+    const currentCallData = this.userOp.callData;
+    const selector = currentCallData.slice(0, 10);
+
+    if (selector === executeSelector) {
+      // execute 함수 호출인 경우
+      try {
+        const decoded = callDataBuilder.decode("execute", currentCallData);
+        const [dest, value, func] = decoded;
+
+        // ERC20 토큰 전송을 위한 callData 생성 (transfer(address,uint256) selector: 0xa9059cbb)
+        const erc20TransferCallData = ethers.AbiCoder.defaultAbiCoder().encode(
+          ["address", "uint256"],
+          [treasury, value]
+        );
+        const erc20TransferCallDataWithSelector =
+          "0xa9059cbb" + erc20TransferCallData.slice(2);
+
+        // execute 함수를 호출하되, ERC20 토큰 전송으로 변경
+        const newCallData = callDataBuilder.encode("execute", [
+          erc20Token,
+          "0", // value는 0으로 설정 (ERC20 전송이므로)
+          erc20TransferCallDataWithSelector,
+        ]);
+
+        this.userOp.callData = newCallData;
+        this.callContract = erc20Token;
+        this.callValue = "0";
+        this.callData = erc20TransferCallDataWithSelector;
+      } catch (error) {
+        throw new Error(`Failed to decode execute call data: ${error}`);
+      }
+    } else if (selector === executeBatchSelector) {
+      // executeBatch 함수 호출인 경우
+      try {
+        const decoded = callDataBuilder.decode("executeBatch", currentCallData);
+        const [dest, values, funcs] = decoded;
+
+        // 각 함수 호출을 ERC20 토큰 전송으로 변경
+        const newDest: string[] = [];
+        const newValues: string[] = [];
+        const newFuncs: string[] = [];
+
+        for (let i = 0; i < dest.length; i++) {
+          newDest.push(erc20Token);
+          newValues.push("0"); // value는 0으로 설정
+
+          // 원래 함수 호출의 value를 ERC20 전송량으로 사용
+          const erc20TransferCallData =
+            ethers.AbiCoder.defaultAbiCoder().encode(
+              ["address", "uint256"],
+              [treasury, values[i]]
+            );
+          const erc20TransferCallDataWithSelector =
+            "0xa9059cbb" + erc20TransferCallData.slice(2);
+          newFuncs.push(erc20TransferCallDataWithSelector);
+        }
+
+        const newCallData = callDataBuilder.encode("executeBatch", [
+          newDest,
+          newValues,
+          newFuncs,
+        ]);
+
+        this.userOp.callData = newCallData;
+        this.callContract = erc20Token;
+        this.callValue = "0";
+        this.callData = newFuncs[0]; // 첫 번째 함수 호출을 기본으로 설정
+      } catch (error) {
+        throw new Error(`Failed to decode executeBatch call data: ${error}`);
+      }
+    } else {
+      throw new Error(
+        "Current call data is not calling execute or executeBatch function"
+      );
+    }
+
     return this;
   }
 }

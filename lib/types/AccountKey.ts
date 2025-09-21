@@ -40,19 +40,19 @@ export type OAuthRS256KeyData = {
 };
 
 export type ZkOAuthRS256KeyData = {
-    n: number;
-    k: number;
-    commitment: string[];
-    poseidonMerkleTreeDirectory: string;
+  n: number;
+  k: number;
+  commitment: string[];
+  poseidonMerkleTreeDirectory: string;
 };
 
 export type KeyData =
-    | AddressKeyData
-    | Secp256k1KeyData
-    | Secp256r1KeyData
-    | WebAuthnKeyData
-    | OAuthRS256KeyData
-    | ZkOAuthRS256KeyData;
+  | AddressKeyData
+  | Secp256k1KeyData
+  | Secp256r1KeyData
+  | WebAuthnKeyData
+  | OAuthRS256KeyData
+  | ZkOAuthRS256KeyData;
 
 export type KeyInfo = {
   keyType: number;
