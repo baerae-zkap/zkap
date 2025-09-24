@@ -113,7 +113,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     this.userOp.maxFeePerGas = this.userOp.maxPriorityFeePerGas =
       ethers.toBeHex(feeData.gasPrice.toString());
 
-    this.userOp.callGasLimit = ethers.toBeHex("0");
+    this.userOp.callGasLimit = ethers.toBeHex("100000");
     this.userOp.preVerificationGas = ethers.toBeHex("25000"); // preVerificationGas 값은 25000으로 고정
     // TODO: @kaikookim 아래 코드는 임시로 설정한 값이므로, 추후 수정 필요
     // this.userOp.verificationGasLimit = ethers.toBeHex("0");
@@ -291,7 +291,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     const signature = await this.userOpSigner.signUserOpHash(userOpHash);
     this.setSignature([0], signature);
 
-    await this.finalizeUserOp(); // TODO : 이 부분으로 정교하게 맞추는 부분은 제거.
+    // await this.finalizeUserOp(); // TODO : 이 부분으로 정교하게 맞추는 부분은 제거.
     return this;
   }
 

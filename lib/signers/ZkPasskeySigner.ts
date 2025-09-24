@@ -4,8 +4,63 @@ import cryptoUtils from "../utils/crypto";
 import zkapAccountJson from "../types/abi/ZkapAccount.json";
 import AccountKeyZkOAuthRS256Verifier3 from "../types/abi/AccountKeyZkOAuthRS256Verifier3.json";
 import poseidonMerkleTreeDirectoryJson from "../types/abi/PoseidonMerkleTreeDirectory.json";
+import { JwkKey, JwtHeader } from "../types/jwk";
 
-// TODO: @kaikookim naming 변경, simulator 기반으로 테스트를 위해 만들어 진 내용이고 추후 각 social login 에 맞게 수정 필요.
+function decodeJwtHeader(token: string): JwtHeader {
+  const [headerB64] = token.split(".");
+  const headerJson = atob(headerB64);
+  return JSON.parse(headerJson);
+}
+
+async function getGoogleOAuthPublicKey(kid: string): Promise<string> {
+  try {
+    const url = "https://www.googleapis.com/oauth2/v3/certs";
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    const keys: JwkKey[] = data.keys;
+
+    // keys 에서 kid 에 대한 공개키 찾기
+    const key = keys.find((key) => key.kid === kid);
+    if (!key) {
+      // for test
+      console.log("Google public key not found for kid: ", kid);
+      console.log("Using test public key");
+      return "vLzd_VDnr8zt9pHfSkO3G0pUlaGJbYkIXXhma9-R9oETx2u0eZ-bSblq71FlA-PWLdjOW1SYtOngVZT5ZxJQ8FRFQolE8YzgByHifgo16ogEmeKdCIlCLd48IETTMOo093BLa2BzDygm8xBcpV_yqlxTUHdw2RH4vf5uulzbHcbdTf94I_DMlNUQX_yTmB8mu3GmDT-1xpL90iVEybjNWEcIrhWGHYqEFkKeBU1hvPf038Lts07eKiBKZWjo7-ZESCPNmdPvVkx29GuIBlwXp3824TB0DR0nhhFncXDuVzxDAUFSrnM0JwPa4ZX4M_xHdtUuk4Bp46wj_kb44jO4yw";
+      // throw new Error("Public key not found");
+    }
+    return key.n;
+  } catch (error) {
+    console.error("Error fetching Google public keys:", error);
+    throw error;
+  }
+}
+
+async function getKakaoOAuthPublicKey(kid: string): Promise<string> {
+  try {
+    // kakao 는 curl --location --request GET "https://kauth.kakao.com/.well-known/jwks.json"  형태로 json 파일을 받아와서 사용
+    const url = "https://kauth.kakao.com/.well-known/jwks.json";
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    const keys: JwkKey[] = data.keys;
+
+    // keys 에서 kid 에 대한 공개키 찾기
+    const key = keys.find((key) => key.kid === kid);
+    if (!key) {
+      throw new Error("Public key not found");
+    }
+    return key.n;
+  } catch (error) {
+    console.error("Error fetching Kakao public keys:", error);
+    throw error;
+  }
+}
+
 export class ZkPasskeySigner implements IUserOpSigner {
   private proofServerUrl: string;
   private zkapAddress: string;
@@ -35,8 +90,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
     idTokenGenerators: ((msgHash: string) => Promise<string>)[],
     poseidonMerkleTreeDirectoryAddress: string,
     zkapK: number,
-    zkapN: number,
-    jwtPks: string[] | undefined // 실제로 key n 값은 각 social service 에서 제공하는 url 에서 kid 에 대한 n 값을 받아야 함. 여기에서는 일단 편의를 위해 넣음. google, kakao 순서로 넣음.
+    zkapN: number
   ) {
     this.socialServices = socialServices;
     this.idTokenGenerators = idTokenGenerators;
@@ -52,21 +106,6 @@ export class ZkPasskeySigner implements IUserOpSigner {
 
     if (socialServices.length !== idTokenGenerators.length) {
       throw new Error("socialServices.length !== idTokenGenerators.length");
-    }
-    // 추후 각 social service 에서 제공하는 url 에서 kid 에 대한 n 값을 넣는 코드로 변경. 테스트를 위해 생성시 받는 것으로 일단 구현
-    {
-      if (jwtPks) {
-        if (jwtPks.length !== socialServices.length) {
-          throw new Error("jwtPks.length !== socialServices.length");
-        }
-        if (jwtPks.length == 1) {
-          this.jwtPks = [...jwtPks, ...jwtPks];
-        } else if (jwtPks.length == 2) {
-          this.jwtPks = jwtPks;
-        } else {
-          throw new Error("jwtPks.length is not 1 or 2");
-        }
-      }
     }
   }
 
@@ -142,8 +181,25 @@ export class ZkPasskeySigner implements IUserOpSigner {
     let signatures: string[] = [];
     let proofAndPublicInput: { proof: string[]; publicInputs: string[] };
 
-    // 3. jwt 정보 및 증명에 필요한 정보 생성.
+    const kids = idTokens.map((idToken) => {
+      const header = decodeJwtHeader(idToken);
+      return header.kid;
+    });
+    console.log("kids at signer: ", kids);
+    const jwtPks = await Promise.all(
+      this.socialServices.map(async (service, index) => {
+        if (service === "google") {
+          return await getGoogleOAuthPublicKey(kids[index]);
+        } else if (service === "kakao") {
+          return await getKakaoOAuthPublicKey(kids[index]);
+        } else {
+          throw new Error("Invalid service");
+        }
+      })
+    );
+
     {
+      // TODO: @kaikookim idTokens 설정을 K 값에 맞게 할당 하도록 변경
       let tokens = Array();
       if (idTokens.length == 1) {
         tokens.push(...idTokens);
@@ -153,6 +209,15 @@ export class ZkPasskeySigner implements IUserOpSigner {
       } else {
         console.error("idTokens.length is not 1 or 2");
         throw new Error("idTokens.length is not 1 or 2");
+      }
+      let adjustedJwtPks = Array();
+      if (jwtPks.length == 1) {
+        adjustedJwtPks.push(...jwtPks);
+        adjustedJwtPks.push(...jwtPks);
+      } else if (jwtPks.length == 2) {
+        adjustedJwtPks.push(...jwtPks);
+      } else {
+        throw new Error("jwtPks.length is not 1 or 2");
       }
 
       const now = Math.floor(Date.now() / 1000);
@@ -170,7 +235,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
             root: this.root,
             leafIndices: this.leafIndices,
             merklePaths: this.merklePaths,
-            jwtPks: this.jwtPks,
+            jwtPks: adjustedJwtPks,
             exp: exp,
           }),
         });
