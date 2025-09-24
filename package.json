@@ -17,7 +17,7 @@
   },
   "license": "ISC",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://asia-northeast3-npm.pkg.dev/zkap-dev/zkap-npm-packages/"
   },
   "bugs": {
     "url": "https://github.com/baerae-zkap/zkap-aa-sdk/issues"
