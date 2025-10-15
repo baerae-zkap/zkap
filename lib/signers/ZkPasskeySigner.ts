@@ -61,6 +61,7 @@ async function getKakaoOAuthPublicKey(kid: string): Promise<string> {
   }
 }
 
+// TODO: @kaikookim naming 변경, simulator 기반으로 테스트를 위해 만들어 진 내용이고 추후 각 social login 에 맞게 수정 필요.
 export class ZkPasskeySigner implements IUserOpSigner {
   private proofServerUrl: string;
   private zkapAddress: string;
@@ -74,13 +75,9 @@ export class ZkPasskeySigner implements IUserOpSigner {
   private merklePaths: string[][] | undefined;
   private root: string | undefined;
   private leafIndices: number[] | undefined;
-  private jwtPks: string[] | undefined;
   private socialServices: string[];
   private idTokenGenerators: ((msgHash: string) => Promise<string>)[];
   private selector: boolean[] | undefined;
-
-  private LEAF_IDX_GOOGLE = 0;
-  private LEAF_IDX_KAKAO = 1;
 
   constructor(
     proofServerUrl: string,
@@ -135,37 +132,6 @@ export class ZkPasskeySigner implements IUserOpSigner {
       this.provider
     );
 
-    // 스마트 컨트랙트로부터 머클패스, 루트 가져오기. 및 leafIdxs 설정
-    {
-      const pathGoogle = await this.poseidonMerkleTreeDirectory.getMerklePath(
-        this.LEAF_IDX_GOOGLE
-      );
-      const pathKakao = await this.poseidonMerkleTreeDirectory.getMerklePath(
-        this.LEAF_IDX_KAKAO
-      );
-
-      const pathUintGoogle = pathGoogle.map((x: string) =>
-        ethers.toBigInt(x).toString()
-      );
-      const pathUintKakao = pathKakao.map((x: string) =>
-        ethers.toBigInt(x).toString()
-      );
-
-      let rootHex = await this.poseidonMerkleTreeDirectory.getRoot();
-      let rootDecimal = ethers.toBigInt(rootHex).toString();
-
-      this.root = rootDecimal;
-      if (this.socialServices.length == 1) {
-        this.leafIndices = [this.LEAF_IDX_GOOGLE, this.LEAF_IDX_GOOGLE];
-        this.merklePaths = [pathUintGoogle, pathUintGoogle];
-      } else if (this.socialServices.length == 2) {
-        this.leafIndices = [this.LEAF_IDX_GOOGLE, this.LEAF_IDX_KAKAO];
-        this.merklePaths = [pathUintGoogle, pathUintKakao];
-      } else {
-        throw new Error("socialServices.length is not 1 or 2");
-      }
-    }
-
     this.isInitialized = true;
   }
 
@@ -185,7 +151,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
       const header = decodeJwtHeader(idToken);
       return header.kid;
     });
-    console.log("kids at signer: ", kids);
+
     const jwtPks = await Promise.all(
       this.socialServices.map(async (service, index) => {
         if (service === "google") {
@@ -197,6 +163,44 @@ export class ZkPasskeySigner implements IUserOpSigner {
         }
       })
     );
+
+    if (!this.poseidonMerkleTreeDirectory) {
+      throw new Error("poseidonMerkleTreeDirectory is not initialized");
+    }
+    const rootHex = await this.poseidonMerkleTreeDirectory.getRoot();
+    this.root = ethers.toBigInt(rootHex).toString();
+
+    const results = await Promise.all(
+      jwtPks.map(async (jwtPk) => {
+        const jwtHash = ethers.toBeHex(
+          ethers.sha256(ethers.toUtf8Bytes(jwtPk)),
+          32
+        );
+        const leafIndex =
+          await this.poseidonMerkleTreeDirectory!.getLeafIndexByPubkeyHash(
+            jwtHash
+          );
+        const path = await this.poseidonMerkleTreeDirectory!.getMerklePath(
+          leafIndex
+        );
+
+        const pathUint = path.map((x: string) => ethers.toBigInt(x).toString());
+
+        return { leafIndex: parseInt(leafIndex), pathUint };
+      })
+    );
+
+    this.leafIndices = results.map((r) => r.leafIndex as number);
+    this.merklePaths = results.map((r) => r.pathUint);
+
+    if (this.leafIndices && this.merklePaths && this.leafIndices.length == 1) {
+      this.leafIndices = [this.leafIndices[0], this.leafIndices[0]];
+      this.merklePaths = [this.merklePaths[0], this.merklePaths[0]];
+    } else {
+      console.log("leafIndices: ", this.leafIndices);
+      console.log("merklePaths: ", this.merklePaths);
+      throw new Error("leafIndices or merklePaths is not set");
+    }
 
     {
       // TODO: @kaikookim idTokens 설정을 K 값에 맞게 할당 하도록 변경
