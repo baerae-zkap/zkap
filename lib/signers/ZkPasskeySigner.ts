@@ -29,7 +29,6 @@ async function getGoogleOAuthPublicKey(kid: string): Promise<string> {
       console.log("Google public key not found for kid: ", kid);
       console.log("Using test public key");
       return "vLzd_VDnr8zt9pHfSkO3G0pUlaGJbYkIXXhma9-R9oETx2u0eZ-bSblq71FlA-PWLdjOW1SYtOngVZT5ZxJQ8FRFQolE8YzgByHifgo16ogEmeKdCIlCLd48IETTMOo093BLa2BzDygm8xBcpV_yqlxTUHdw2RH4vf5uulzbHcbdTf94I_DMlNUQX_yTmB8mu3GmDT-1xpL90iVEybjNWEcIrhWGHYqEFkKeBU1hvPf038Lts07eKiBKZWjo7-ZESCPNmdPvVkx29GuIBlwXp3824TB0DR0nhhFncXDuVzxDAUFSrnM0JwPa4ZX4M_xHdtUuk4Bp46wj_kb44jO4yw";
-      // throw new Error("Public key not found");
     }
     return key.n;
   } catch (error) {
@@ -72,9 +71,6 @@ export class ZkPasskeySigner implements IUserOpSigner {
   private anchor: string[] | undefined;
   private poseidonMerkleTreeDirectory: ethers.Contract | undefined;
   private poseidonMerkleTreeDirectoryAddress: string;
-  private merklePaths: string[][] | undefined;
-  private root: string | undefined;
-  private leafIndices: number[] | undefined;
   private socialServices: string[];
   private idTokenGenerators: ((msgHash: string) => Promise<string>)[];
   private selector: boolean[] | undefined;
@@ -135,6 +131,74 @@ export class ZkPasskeySigner implements IUserOpSigner {
     this.isInitialized = true;
   }
 
+  async getSignatures(
+    idTokens: string[],
+    jwtPks: string[],
+    leafIndices: number[],
+    merklePaths: string[][]
+  ): Promise<string[]> {
+    if (!this.poseidonMerkleTreeDirectory) {
+      throw new Error("poseidonMerkleTreeDirectory is not initialized");
+    }
+
+    const rootHex = await this.poseidonMerkleTreeDirectory.getRoot();
+    const root = ethers.toBigInt(rootHex).toString();
+
+    let adjustedIdTokens: string[] = [];
+    let adjustedPublicKeys: string[] = [];
+    let adjustedLeafIndices: number[] = [];
+    let adjustedMerklePaths: string[][] = [];
+    let signatures: string[] = [];
+    let proofAndPublicInput: { proof: string[]; publicInputs: string[] };
+
+    if (idTokens!.length == 1) {
+      adjustedIdTokens = [idTokens[0], idTokens[0], idTokens[0]];
+      adjustedPublicKeys = [jwtPks[0], jwtPks[0], jwtPks[0]];
+      adjustedLeafIndices = [leafIndices[0], leafIndices[0], leafIndices[0]];
+      adjustedMerklePaths = [merklePaths[0], merklePaths[0], merklePaths[0]];
+    } else if (idTokens!.length == 2) {
+      adjustedIdTokens = [idTokens[0], idTokens[0], idTokens[1]];
+      adjustedPublicKeys = [jwtPks[0], jwtPks[0], jwtPks[1]];
+      adjustedLeafIndices = [leafIndices[0], leafIndices[0], leafIndices[1]];
+      adjustedMerklePaths = [merklePaths[0], merklePaths[0], merklePaths[1]];
+    } else if (idTokens!.length == 3) {
+      adjustedIdTokens = [...idTokens];
+      adjustedPublicKeys = [...jwtPks];
+      adjustedLeafIndices = [...leafIndices];
+      adjustedMerklePaths = [...merklePaths];
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const exp = now.toString();
+    {
+      const response = await fetch(`${this.proofServerUrl}/proof2`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          anchor: this.anchor,
+          selector: this.selector,
+          jwts: adjustedIdTokens,
+          root: root,
+          leafIndices: adjustedLeafIndices,
+          merklePaths: adjustedMerklePaths,
+          jwtPks: adjustedPublicKeys,
+          exp: exp,
+        }),
+      });
+
+      proofAndPublicInput = await response.json();
+      const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+      const encoded = abiCoder.encode(
+        ["uint256[8]", "uint256[8]"],
+        [proofAndPublicInput.publicInputs, proofAndPublicInput.proof]
+      );
+      signatures.push(encoded);
+    }
+    return signatures;
+  }
+
   async signUserOpHash(userOpHash: string): Promise<string[]> {
     if (!this.isInitialized) {
       await this.init();
@@ -143,9 +207,6 @@ export class ZkPasskeySigner implements IUserOpSigner {
     const idTokens = await Promise.all(
       this.idTokenGenerators.map((generator) => generator(signedUserOpHash))
     );
-
-    let signatures: string[] = [];
-    let proofAndPublicInput: { proof: string[]; publicInputs: string[] };
 
     const kids = idTokens.map((idToken) => {
       const header = decodeJwtHeader(idToken);
@@ -163,12 +224,6 @@ export class ZkPasskeySigner implements IUserOpSigner {
         }
       })
     );
-
-    if (!this.poseidonMerkleTreeDirectory) {
-      throw new Error("poseidonMerkleTreeDirectory is not initialized");
-    }
-    const rootHex = await this.poseidonMerkleTreeDirectory.getRoot();
-    this.root = ethers.toBigInt(rootHex).toString();
 
     const results = await Promise.all(
       jwtPks.map(async (jwtPk) => {
@@ -190,70 +245,9 @@ export class ZkPasskeySigner implements IUserOpSigner {
       })
     );
 
-    this.leafIndices = results.map((r) => r.leafIndex as number);
-    this.merklePaths = results.map((r) => r.pathUint);
+    const leafIndices = results.map((r) => r.leafIndex as number);
+    const merklePaths = results.map((r) => r.pathUint);
 
-    if (this.leafIndices && this.merklePaths && this.leafIndices.length == 1) {
-      this.leafIndices = [this.leafIndices[0], this.leafIndices[0]];
-      this.merklePaths = [this.merklePaths[0], this.merklePaths[0]];
-    } else {
-      console.log("leafIndices: ", this.leafIndices);
-      console.log("merklePaths: ", this.merklePaths);
-      throw new Error("leafIndices or merklePaths is not set");
-    }
-
-    {
-      // TODO: @kaikookim idTokens 설정을 K 값에 맞게 할당 하도록 변경
-      let tokens = Array();
-      if (idTokens.length == 1) {
-        tokens.push(...idTokens);
-        tokens.push(...idTokens);
-      } else if (idTokens.length == 2) {
-        tokens.push(...idTokens);
-      } else {
-        console.error("idTokens.length is not 1 or 2");
-        throw new Error("idTokens.length is not 1 or 2");
-      }
-      let adjustedJwtPks = Array();
-      if (jwtPks.length == 1) {
-        adjustedJwtPks.push(...jwtPks);
-        adjustedJwtPks.push(...jwtPks);
-      } else if (jwtPks.length == 2) {
-        adjustedJwtPks.push(...jwtPks);
-      } else {
-        throw new Error("jwtPks.length is not 1 or 2");
-      }
-
-      const now = Math.floor(Date.now() / 1000);
-      const exp = now.toString();
-      {
-        const response = await fetch(`${this.proofServerUrl}/proof2`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            anchor: this.anchor,
-            selector: this.selector,
-            jwts: tokens,
-            root: this.root,
-            leafIndices: this.leafIndices,
-            merklePaths: this.merklePaths,
-            jwtPks: adjustedJwtPks,
-            exp: exp,
-          }),
-        });
-
-        proofAndPublicInput = await response.json();
-        const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-        const encoded = abiCoder.encode(
-          ["uint256[8]", "uint256[8]"],
-          [proofAndPublicInput.publicInputs, proofAndPublicInput.proof]
-        );
-        signatures.push(encoded);
-      }
-    }
-
-    return signatures;
+    return this.getSignatures(idTokens, jwtPks, leafIndices, merklePaths);
   }
 }
