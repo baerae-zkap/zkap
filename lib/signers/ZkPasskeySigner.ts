@@ -204,9 +204,11 @@ export class ZkPasskeySigner implements IUserOpSigner {
       await this.init();
     }
     const signedUserOpHash = cryptoUtils.getSignedMessageHash(userOpHash);
-    const idTokens = await Promise.all(
-      this.idTokenGenerators.map((generator) => generator(signedUserOpHash))
-    );
+    const idTokens: string[] = [];
+    for (const generator of this.idTokenGenerators) {
+      const idToken = await generator(signedUserOpHash);
+      idTokens.push(idToken);
+    }
 
     const kids = idTokens.map((idToken) => {
       const header = decodeJwtHeader(idToken);
