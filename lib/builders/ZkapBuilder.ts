@@ -392,6 +392,31 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  setExecuteBatchCallData(
+    contractAddresses: string[],
+    values: ethers.BigNumberish[],
+    data: string[]
+  ): this {
+    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+    const useropCallData = callDataBuilder.encode("executeBatch", [
+      contractAddresses,
+      values,
+      data,
+    ]);
+    this.callContract = this.userOp.sender;
+    // values 의 합계를 계산
+    const callValue = 0;
+    this.callValue = callValue;
+    this.callData = useropCallData;
+    this.callMethodId = useropCallData.slice(0, 10);
+
+    this.isCallFromEntryPoint = true;
+
+    this.userOp.callData = useropCallData;
+    this.userOpSigner = this.txKeySigner;
+    return this;
+  }
+
   getUserOpHashForPaymaster(): string {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
 
