@@ -1,6 +1,6 @@
 import { BaseAccountBuilder } from "./BaseAccountBuilder";
 import { CallDataBuilder } from "./CallDataBuilder";
-import { PrimitiveAccountKeyTypes, KeyInfo } from "../types/AccountKey";
+import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
 import { AccountKeyBuilder } from "./AccountKeyBuilder";
 import {
   ZkapAccountABIstring,
@@ -22,14 +22,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     ZkapAccountFactoryABIstring
   );
   protected provider: ethers.JsonRpcProvider;
-  private callContract: string | undefined;
-  private callValue: ethers.BigNumberish | undefined;
-  private callData: string | undefined;
-  private callMethodId: string | undefined;
-  // private masterKeyInfo: [number, [number, KeyInfo[]]] | undefined;
-  private txKeyInfo: [number, KeyInfo[]] | undefined;
   private userOpSigner: IUserOpSigner | undefined;
-  private isCallFromEntryPoint: boolean | undefined;
   private txKeySigner: IUserOpSigner | undefined;
   private masterKeySigner: IUserOpSigner | undefined;
   private txKeyTypes: number[] | undefined;
@@ -88,6 +81,92 @@ export class ZkapBuilder extends BaseAccountBuilder {
     );
   }
 
+  private async estimateCallGasLimit(): Promise<string> {
+    // sender 주소에 코드가 있는지 확인하여 배포 여부를 판단
+    const code = await this.provider.getCode(this.userOp.sender as string);
+
+    if (code !== "0x") {
+      // 지갑이 이미 배포된 경우
+      const callGasLimit = await this.provider.estimateGas({
+        from: this.entryPoint,
+        to: this.userOp.sender,
+        data: this.userOp.callData,
+        // callValue가 정의되지 않은 경우를 대비하여 기본값 0을 사용합니다.
+        value: (this.userOp as any).callValue || ethers.parseEther("0"),
+      });
+      return ethers.toBeHex(callGasLimit.toString());
+    } else {
+      // 지갑이 생성되어 있지 않고 initCode가 없으면 잘못된 시나리오
+      if (!this.userOp.initCode || this.userOp.initCode === "0x") {
+        throw new Error("Wallet not deployed and no initCode provided");
+      }
+
+      // initCode는 있지만 callData가 없는 경우 (지갑 생성만)
+      if (!this.userOp.callData || this.userOp.callData === "0x") {
+        return ethers.toBeHex("1000"); // 최소한의 가스만 설정
+      }
+
+      // initCode와 callData가 모두 있는 경우
+      const callData = this.userOp.callData as string;
+      const iface = new ethers.Interface(ZkapAccountABIstring);
+
+      try {
+        const parsedTx = iface.parseTransaction({ data: callData });
+        const GAS_BUFFER = BigInt(25000); // 지갑 실행 로직 오버헤드 및 변동성을 위한 보정 계수
+
+        switch (parsedTx?.name) {
+          case "execute": {
+            const { dest, value, func } = parsedTx.args;
+            const gasEstimate = await this.provider.estimateGas({
+              from: this.userOp.sender,
+              to: dest,
+              data: func,
+              value: value,
+            });
+            return ethers.toBeHex((gasEstimate + GAS_BUFFER).toString());
+          }
+
+          case "executeBatch": {
+            const { dest, value, func } = parsedTx.args;
+
+            if (dest.length === 0) {
+              return ethers.toBeHex(GAS_BUFFER.toString()); // 실행할 것이 없으면 버퍼만 반환
+            }
+
+            const estimationPromises = dest.map((dest: string, i: number) =>
+              this.provider.estimateGas({
+                from: this.userOp.sender,
+                to: dest,
+                data: func[i],
+                value: value[i],
+              })
+            );
+
+            const estimates = await Promise.all(estimationPromises);
+            const totalGas = estimates.reduce(
+              (acc, val) => BigInt(acc) + BigInt(val),
+              BigInt(0)
+            );
+
+            return ethers.toBeHex((totalGas + GAS_BUFFER).toString());
+          }
+
+          default:
+            // 지원하지 않는 함수일 경우, 에러를 던져 수동 처리를 유도합니다.
+            throw new Error(
+              `Unsupported function for gas estimation: ${parsedTx?.name}`
+            );
+        }
+      } catch (error) {
+        // 파싱 실패 (예: ABI에 없는 함수)
+        console.error("Failed to parse callData for gas estimation:", error);
+        throw new Error(
+          "callData could not be parsed. Manual callGasLimit required."
+        );
+      }
+    }
+  }
+
   async autoFillUserOp(): Promise<this> {
     if (!this.provider) {
       throw new Error("Provider is not set. Please provide a valid RPC URL.");
@@ -113,7 +192,8 @@ export class ZkapBuilder extends BaseAccountBuilder {
     this.userOp.maxFeePerGas = this.userOp.maxPriorityFeePerGas =
       ethers.toBeHex(feeData.gasPrice.toString());
 
-    this.userOp.callGasLimit = ethers.toBeHex("100000");
+    this.userOp.callGasLimit = await this.estimateCallGasLimit();
+
     this.userOp.preVerificationGas = ethers.toBeHex("25000"); // preVerificationGas 값은 25000으로 고정
     // TODO: @kaikookim 아래 코드는 임시로 설정한 값이므로, 추후 수정 필요
     // this.userOp.verificationGasLimit = ethers.toBeHex("0");
@@ -196,86 +276,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       // this.userOp.verificationGasLimit = ethers.toBeHex((100000).toString());
     }
 
-    // set callGasLimit
-    if (
-      this.userOp.callData !== "0x" &&
-      typeof this.userOp.callData === "string"
-    ) {
-      // ZKap 시나리오 상 지갑을 만들면서 바로 staking 하는 시나리오. 지갑에 잔고가 있기 전에 userOp를 만들어야 해서 아래 코드로 처리.
-      // submit(address) : 0xa1903eab
-      if (this.userOp.initCode !== "0x" && this.callMethodId === "0xa1903eab") {
-        this.userOp.callGasLimit = ethers.toBeHex("110000");
-      } else {
-        let callGasLimit;
-        if (this.isCallFromEntryPoint) {
-          callGasLimit = await this.provider.estimateGas({
-            from: this.entryPoint,
-            to: this.callContract,
-            data: this.callData,
-            value: this.callValue,
-          });
-        } else {
-          callGasLimit = await this.provider.estimateGas({
-            from: this.userOp.sender,
-            to: this.callContract,
-            data: this.callData,
-            value: this.callValue,
-          });
-        }
-        this.userOp.callGasLimit = ethers.toBeHex(callGasLimit);
-      }
-    } else {
-      if (this.userOp.initCode !== "0x") {
-        // initCode 가 있고, callData 가 없는 경우 기본으로 1000 으로 설정
-        this.userOp.callGasLimit = ethers.toBeHex("1000");
-      } else {
-        throw new Error("Call data is not set. Please set a valid call data.");
-      }
-    }
-
     return this;
-  }
-
-  private async finalizeUserOp(): Promise<this> {
-    if (!this.userOpSigner) {
-      throw new Error("UserOpSigner is not set");
-    }
-    // verificationGasLimit 정확한 값으로 업데이트
-    if (
-      typeof this.userOp.initCode === "string" &&
-      this.userOp.initCode !== "0x"
-    ) {
-      // initCode 있는 경우 verificationGasLimit 을 추가로 진행 대신 초기 셋팅 값 사용
-      return this;
-    } else {
-      const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
-      const callData = callDataBuilder.encode("validateUserOp", [
-        this.getPackedUserOp(),
-        this.getUserOpHash(),
-        ethers.parseEther("0.000001"),
-      ]);
-
-      let estimatedGas;
-      try {
-        estimatedGas = await this.provider.estimateGas({
-          from: this.entryPoint,
-          to: this.userOp.sender,
-          data: callData,
-        });
-        // TODO: @kaikookim 아래 주석 처리된 verificationGasLimit 설정해주는 부분은 원래 들어가야하나, paymaster signature 만드는 과정에서 데이터가 트러져서 일단 주석처리 해놓음
-        // 주석처리된 로직 반영 필요
-        // this.userOp.verificationGasLimit = ethers.toBeHex(
-        //   ((BigInt(estimatedGas) * BigInt(120)) / BigInt(100)).toString()
-        // );
-      } catch (error) {
-        throw new Error("Error estimating gas: " + error);
-      }
-      const newUserOpHash = this.getUserOpHash();
-      // TODO : (keyIndexList, keySignatureList) = abi.decode(userOp.signature,(uint8[], bytes[])); 형태로 인코딩 하기
-      const signature = await this.userOpSigner.signUserOpHash(newUserOpHash);
-      this.setSignature([0], signature);
-      return this;
-    }
   }
 
   async completeUserOp(): Promise<this> {
@@ -343,14 +344,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
     const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
     const callData = callDataBuilder.encode("updateTxKey", [encoded]);
     this.userOp.callData = callData;
-    if (this.userOp.sender) {
-      this.callContract = this.userOp.sender;
-      this.callValue = ethers.parseEther("0");
-      this.callData = callData;
-    } else {
+    if (!this.userOp.sender) {
       throw new Error("Sender is not set");
     }
-    this.isCallFromEntryPoint = true;
     this.userOpSigner = this.masterKeySigner;
     return this;
   }
@@ -359,14 +355,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
     const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
     const callData = callDataBuilder.encode("updateMasterKey", [encoded]);
     this.userOp.callData = callData;
-    if (this.userOp.sender) {
-      this.callContract = this.userOp.sender;
-      this.callValue = ethers.parseEther("0");
-      this.callData = callData;
-    } else {
+    if (!this.userOp.sender) {
       throw new Error("Sender is not set");
     }
-    this.isCallFromEntryPoint = true;
     this.userOpSigner = this.masterKeySigner;
     return this;
   }
@@ -382,10 +373,6 @@ export class ZkapBuilder extends BaseAccountBuilder {
       value,
       data,
     ]);
-    this.callContract = contractAddress;
-    this.callValue = value;
-    this.callData = data;
-    this.callMethodId = data && data.length > 0 ? data.slice(0, 10) : "";
 
     this.userOp.callData = useropCallData;
     this.userOpSigner = this.txKeySigner;
@@ -403,14 +390,6 @@ export class ZkapBuilder extends BaseAccountBuilder {
       values,
       data,
     ]);
-    this.callContract = this.userOp.sender;
-    // values 의 합계를 계산
-    const callValue = 0;
-    this.callValue = callValue;
-    this.callData = useropCallData;
-    this.callMethodId = useropCallData.slice(0, 10);
-
-    this.isCallFromEntryPoint = true;
 
     this.userOp.callData = useropCallData;
     this.userOpSigner = this.txKeySigner;
@@ -430,100 +409,5 @@ export class ZkapBuilder extends BaseAccountBuilder {
     );
     const userOpHashForPaymaster = ethers.keccak256(enc);
     return userOpHashForPaymaster;
-  }
-
-  // TODO: @kaikookim 아래 함수는 검증되지 않은 함수이므로, 테스트 후 사용해야 함
-  // setFeeDelegatedUserOpCallData
-  setFeeDelegatedUserOpCallData(erc20Token: string, treasury: string): this {
-    if (!this.userOp.callData || this.userOp.callData === "0x") {
-      throw new Error(
-        "Call data is not set. Please set a valid call data first."
-      );
-    }
-
-    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
-
-    // execute 함수의 selector: 0xb61d27f6
-    const executeSelector = "0xb61d27f6";
-    // executeBatch 함수의 selector: 0x47e1da2a
-    const executeBatchSelector = "0x47e1da2a";
-
-    const currentCallData = this.userOp.callData;
-    const selector = currentCallData.slice(0, 10);
-
-    if (selector === executeSelector) {
-      // execute 함수 호출인 경우
-      try {
-        const decoded = callDataBuilder.decode("execute", currentCallData);
-        const [dest, value, func] = decoded;
-
-        // ERC20 토큰 전송을 위한 callData 생성 (transfer(address,uint256) selector: 0xa9059cbb)
-        const erc20TransferCallData = ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "uint256"],
-          [treasury, value]
-        );
-        const erc20TransferCallDataWithSelector =
-          "0xa9059cbb" + erc20TransferCallData.slice(2);
-
-        // execute 함수를 호출하되, ERC20 토큰 전송으로 변경
-        const newCallData = callDataBuilder.encode("execute", [
-          erc20Token,
-          "0", // value는 0으로 설정 (ERC20 전송이므로)
-          erc20TransferCallDataWithSelector,
-        ]);
-
-        this.userOp.callData = newCallData;
-        this.callContract = erc20Token;
-        this.callValue = "0";
-        this.callData = erc20TransferCallDataWithSelector;
-      } catch (error) {
-        throw new Error(`Failed to decode execute call data: ${error}`);
-      }
-    } else if (selector === executeBatchSelector) {
-      // executeBatch 함수 호출인 경우
-      try {
-        const decoded = callDataBuilder.decode("executeBatch", currentCallData);
-        const [dest, values, funcs] = decoded;
-
-        // 각 함수 호출을 ERC20 토큰 전송으로 변경
-        const newDest: string[] = [];
-        const newValues: string[] = [];
-        const newFuncs: string[] = [];
-
-        for (let i = 0; i < dest.length; i++) {
-          newDest.push(erc20Token);
-          newValues.push("0"); // value는 0으로 설정
-
-          // 원래 함수 호출의 value를 ERC20 전송량으로 사용
-          const erc20TransferCallData =
-            ethers.AbiCoder.defaultAbiCoder().encode(
-              ["address", "uint256"],
-              [treasury, values[i]]
-            );
-          const erc20TransferCallDataWithSelector =
-            "0xa9059cbb" + erc20TransferCallData.slice(2);
-          newFuncs.push(erc20TransferCallDataWithSelector);
-        }
-
-        const newCallData = callDataBuilder.encode("executeBatch", [
-          newDest,
-          newValues,
-          newFuncs,
-        ]);
-
-        this.userOp.callData = newCallData;
-        this.callContract = erc20Token;
-        this.callValue = "0";
-        this.callData = newFuncs[0]; // 첫 번째 함수 호출을 기본으로 설정
-      } catch (error) {
-        throw new Error(`Failed to decode executeBatch call data: ${error}`);
-      }
-    } else {
-      throw new Error(
-        "Current call data is not calling execute or executeBatch function"
-      );
-    }
-
-    return this;
   }
 }
