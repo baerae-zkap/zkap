@@ -182,6 +182,11 @@ export abstract class BaseAccountBuilder {
     };
   }
 
+  setUserOp(userOp: UserOperation): this {
+    this.userOp = userOp;
+    return this;
+  }
+
   setSender(sender: string): this {
     this.userOp.sender = sender;
     return this;

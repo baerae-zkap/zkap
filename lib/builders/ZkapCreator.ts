@@ -1,6 +1,5 @@
 import { ZkapBuilder } from "./ZkapBuilder";
 import { ZkapFactoryBuilder } from "./ZkapFactoryBuilder";
-import { IUserOpSigner } from "../utils/IUserOpSigner";
 import { ethers } from "ethers";
 
 export interface ZkapCreatorInfo {
@@ -8,7 +7,6 @@ export interface ZkapCreatorInfo {
   entryPoint: string;
   zkapFactory: string;
   enUrl: string;
-  txKeySigner: IUserOpSigner;
   salt: string;
   encodedMasterKey: string;
   encodedTxKey: string;
@@ -26,7 +24,6 @@ export class ZkapCreator extends ZkapBuilder {
     entryPoint,
     zkapFactory,
     enUrl,
-    txKeySigner,
     salt,
     encodedMasterKey,
     encodedTxKey,
@@ -35,7 +32,6 @@ export class ZkapCreator extends ZkapBuilder {
       chainId,
       entryPoint,
       enUrl,
-      txKeySigner,
     });
     this.setInitCode(zkapFactory, salt, encodedMasterKey, encodedTxKey);
     this.zkapFactory = zkapFactory;
@@ -58,9 +54,9 @@ export class ZkapCreator extends ZkapBuilder {
     return zkapAddress;
   }
 
-  async completeUserOp(): Promise<this> {
-    await this.deriveZkapAddress();
-    await super.completeUserOp();
-    return this;
-  }
+  // async completeUserOp(): Promise<this> {
+  //   await this.deriveZkapAddress();
+  //   await super.completeUserOp();
+  //   return this;
+  // }
 }

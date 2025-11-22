@@ -1,20 +1,25 @@
 import { BaseAccountBuilder } from "./BaseAccountBuilder";
 import { CallDataBuilder } from "./CallDataBuilder";
 import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
-import { AccountKeyBuilder } from "./AccountKeyBuilder";
 import {
   ZkapAccountABIstring,
   ZkapAccountFactoryABIstring,
 } from "../resources/abis";
-import { IUserOpSigner } from "../utils/IUserOpSigner";
 import { ethers } from "ethers";
+import {
+  PaymasterService,
+  PaymasterServiceConfig,
+} from "../utils/PaymasterService";
 
 export interface ZkapAccountInfo {
   chainId: number;
   entryPoint: string;
   enUrl: string;
-  txKeySigner?: IUserOpSigner;
-  masterKeySigner?: IUserOpSigner;
+  /**
+   * Paymaster 설정 (대납 기능 활성화)
+   * 설정하면 autoFillUserOp에서 paymaster 관련 데이터를 자동으로 채움
+   */
+  paymaster?: PaymasterServiceConfig;
 }
 
 export class ZkapBuilder extends BaseAccountBuilder {
@@ -22,38 +27,26 @@ export class ZkapBuilder extends BaseAccountBuilder {
     ZkapAccountFactoryABIstring
   );
   protected provider: ethers.JsonRpcProvider;
-  private userOpSigner: IUserOpSigner | undefined;
-  private txKeySigner: IUserOpSigner | undefined;
-  private masterKeySigner: IUserOpSigner | undefined;
-  private txKeyTypes: number[] | undefined;
-  constructor({
-    chainId,
-    entryPoint,
-    enUrl,
-    txKeySigner,
-    masterKeySigner,
-  }: ZkapAccountInfo) {
+  private signerKeyTypes: number[] | undefined;
+  private paymasterService: PaymasterService | undefined;
+
+  constructor({ chainId, entryPoint, enUrl, paymaster }: ZkapAccountInfo) {
     const provider = new ethers.JsonRpcProvider(enUrl);
     super(chainId, entryPoint, provider);
     this.provider = provider;
-    this.txKeySigner = txKeySigner ?? {
-      async signUserOpHash(userOpHash: string): Promise<string[]> {
-        throw new Error("TxKeySigner is not set");
-      },
-    };
-    this.masterKeySigner = masterKeySigner ?? {
-      async signUserOpHash(userOpHash: string): Promise<string[]> {
-        throw new Error("MasterKeySigner is not set");
-      },
-    };
-    this.userOpSigner = this.txKeySigner;
-  }
 
-  getTxKeyTypes(): number[] {
-    if (!this.txKeyTypes) {
-      throw new Error("Tx key types is not set");
+    // Paymaster 설정이 있으면 PaymasterService 인스턴스 생성
+    if (paymaster) {
+      const paymasterServiceConfig: PaymasterServiceConfig = {
+        serverUrl: paymaster.serverUrl,
+        paymasterAddress: paymaster.paymasterAddress,
+        chainId: paymaster.chainId,
+        mode: paymaster.mode,
+      };
+      this.paymasterService = new PaymasterService(paymasterServiceConfig);
+      // Paymaster 주소 설정
+      this.setPaymaster(paymaster.paymasterAddress);
     }
-    return this.txKeyTypes;
   }
 
   getRequiredPrefund(): string {
@@ -195,9 +188,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     this.userOp.callGasLimit = await this.estimateCallGasLimit();
 
     this.userOp.preVerificationGas = ethers.toBeHex("25000"); // preVerificationGas 값은 25000으로 고정
-    // TODO: @kaikookim 아래 코드는 임시로 설정한 값이므로, 추후 수정 필요
-    // this.userOp.verificationGasLimit = ethers.toBeHex("0");
-    this.userOp.verificationGasLimit = ethers.toBeHex("1500000");
+    let verificationGasLimit = 25000n;
 
     // verification 할 때 필요한 gas 계산 -> 각 키 타입에 따라 필요한 gas 를 사전에 정의한 값으로 설정
     if (this.userOp.initCode !== "0x" && this.userOp.initCode !== undefined) {
@@ -208,93 +199,115 @@ export class ZkapBuilder extends BaseAccountBuilder {
         data: callData,
       });
 
-      this.userOp.verificationGasLimit = BigInt(
-        walletCreationGasLimit
-      ).toString();
-      const keyTypes = this.getTxKeyTypes();
+      verificationGasLimit += BigInt(walletCreationGasLimit);
+    }
 
-      for (const keyType of keyTypes) {
-        const ADDRESS_KEY_VALIDATION_GAS = 400000;
-        const WEB_AUTHN_KEY_VALIDATION_GAS = 1500000;
-        const OAUTH_KEY_VALIDATION_GAS = 400000;
-        const SECP256K1_KEY_VALIDATION_GAS = 400000;
-        const SECP256R1_KEY_VALIDATION_GAS = 400000;
-        const ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 5000000;
-        if (keyType === PrimitiveAccountKeyTypes.keyAddress) {
-          this.userOp.verificationGasLimit = ethers.toBeHex(
-            (
-              BigInt(this.userOp.verificationGasLimit) +
-              BigInt(ADDRESS_KEY_VALIDATION_GAS)
-            ).toString()
-          );
-        } else if (keyType === PrimitiveAccountKeyTypes.keyWebAuthn) {
-          this.userOp.verificationGasLimit = ethers.toBeHex(
-            (
-              BigInt(this.userOp.verificationGasLimit) +
-              BigInt(WEB_AUTHN_KEY_VALIDATION_GAS)
-            ).toString()
-          );
-        } else if (keyType === PrimitiveAccountKeyTypes.keyOAuthRS256) {
-          this.userOp.verificationGasLimit = ethers.toBeHex(
-            (
-              BigInt(this.userOp.verificationGasLimit) +
-              BigInt(OAUTH_KEY_VALIDATION_GAS)
-            ).toString()
-          );
-        } else if (keyType === PrimitiveAccountKeyTypes.keySecp256k1) {
-          this.userOp.verificationGasLimit = ethers.toBeHex(
-            (
-              BigInt(this.userOp.verificationGasLimit) +
-              BigInt(SECP256K1_KEY_VALIDATION_GAS)
-            ).toString()
-          );
-        } else if (keyType === PrimitiveAccountKeyTypes.keySecp256r1) {
-          this.userOp.verificationGasLimit = ethers.toBeHex(
-            (
-              BigInt(this.userOp.verificationGasLimit) +
-              BigInt(SECP256R1_KEY_VALIDATION_GAS)
-            ).toString()
-          );
-        } else if (keyType === PrimitiveAccountKeyTypes.keyZkOAuthRS256) {
-          this.userOp.verificationGasLimit = ethers.toBeHex(
-            (
-              BigInt(this.userOp.verificationGasLimit) +
-              BigInt(ZK_OAUTH_RS256_KEY_VALIDATION_GAS)
-            ).toString()
-          );
-        }
+    const keyTypes = this.signerKeyTypes ?? [];
+
+    for (const keyType of keyTypes) {
+      const ADDRESS_KEY_VALIDATION_GAS = 15000n;
+      const WEB_AUTHN_KEY_VALIDATION_GAS = 470000n; // 측정시 약 45만 gas 소모
+      const ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 340000n;
+
+      if (keyType === PrimitiveAccountKeyTypes.keyAddress) {
+        verificationGasLimit += BigInt(ADDRESS_KEY_VALIDATION_GAS);
+      } else if (keyType === PrimitiveAccountKeyTypes.keyWebAuthn) {
+        verificationGasLimit += BigInt(WEB_AUTHN_KEY_VALIDATION_GAS);
+      } else if (keyType === PrimitiveAccountKeyTypes.keyZkOAuthRS256) {
+        verificationGasLimit += BigInt(ZK_OAUTH_RS256_KEY_VALIDATION_GAS);
       }
-    } else {
-      // 지갑이 만들어져있는 상태에서 verification 할 때에는 verificationGasLimit 을 signature 의 길이에 비례하여 대략적으로 초기값을 설정
-      // check signature length && length / 64 * 100000 을 this.userOp.verificationGasLimit 에 할당
-      const signatureLength = this.userOp.signature?.length ?? 0 / 64;
-      // this.userOp.verificationGasLimit = ethers.toBeHex(
-      //   (signatureLength * 100000).toString()
-      // );
+    }
 
-      // TODO: @kaikookim verificationGasLimit 구하는 것을 pimlico 로직 참고해서 변경
-      // this.userOp.verificationGasLimit = ethers.toBeHex((100000).toString());
+    this.userOp.verificationGasLimit = ethers.toBeHex(
+      verificationGasLimit.toString()
+    );
+
+    // Paymaster가 설정되어 있으면 paymaster 관련 데이터 자동 채우기
+    if (this.paymasterService) {
+      await this.autoFillPaymasterData();
     }
 
     return this;
   }
 
-  async completeUserOp(): Promise<this> {
-    if (this.userOp.sender === ethers.ZeroAddress) {
-      throw new Error("Required fields are missing");
-    }
-    if (!this.userOpSigner) {
-      throw new Error("UserOpSigner is not set");
+  /**
+   * Paymaster 관련 데이터를 자동으로 채웁니다.
+   * PaymasterService가 설정되어 있을 때만 호출됩니다.
+   */
+  private async autoFillPaymasterData(): Promise<void> {
+    if (!this.paymasterService) {
+      return;
     }
 
-    await this.autoFillUserOp(); // TODO : 각 키 타입마다 필요한 gas 량 측정하여 초기값 설정
-    const userOpHash = this.getUserOpHash();
-    const signature = await this.userOpSigner.signUserOpHash(userOpHash);
-    this.setSignature([0], signature);
+    // Paymaster 검증 및 PostOp 가스 한도 설정
+    this.userOp.paymasterVerificationGasLimit = ethers.toBeHex(
+      this.paymasterService.estimatePaymasterVerificationGasLimit().toString()
+    );
+    this.userOp.paymasterPostOpGasLimit = ethers.toBeHex(
+      this.paymasterService.estimatePaymasterPostOpGasLimit().toString()
+    );
 
-    // await this.finalizeUserOp(); // TODO : 이 부분으로 정교하게 맞추는 부분은 제거.
+    // Paymaster 데이터 가져오기
+    const userOp = this.getUserOp();
+    const paymasterData = await this.paymasterService.getPaymasterData(userOp);
+    this.setPaymasterData(paymasterData);
+  }
+
+  /**
+   * Paymaster 설정을 변경합니다.
+   * @param paymaster Paymaster 설정
+   */
+  setPaymasterConfig(paymaster: PaymasterServiceConfig): this {
+    const paymasterServiceConfig: PaymasterServiceConfig = {
+      serverUrl: paymaster.serverUrl,
+      paymasterAddress: paymaster.paymasterAddress,
+      chainId: this.chainId,
+      mode: paymaster.mode,
+    };
+    this.paymasterService = new PaymasterService(paymasterServiceConfig);
+    this.setPaymaster(paymaster.paymasterAddress);
     return this;
   }
+
+  /**
+   * Paymaster 설정을 제거합니다 (대납 기능 비활성화).
+   */
+  removePaymasterConfig(): this {
+    this.paymasterService = undefined;
+    this.setPaymaster(ethers.ZeroAddress);
+    this.setPaymasterData("0x");
+    this.setPaymasterVerificationGasLimit("0x00");
+    this.setPaymasterPostOpGasLimit("0x00");
+    return this;
+  }
+
+  // async completeUserOp(): Promise<this> {
+  //   if (this.userOp.sender === ethers.ZeroAddress) {
+  //     throw new Error("Required fields are missing");
+  //   }
+  //   if (!this.userOpSigner) {
+  //     throw new Error("UserOpSigner is not set");
+  //   }
+
+  //   await this.autoFillUserOp();
+  //   const userOpHash = this.getUserOpHash();
+  //   const signature = await this.userOpSigner.signUserOpHash(userOpHash);
+  //   this.setSignature([0], signature);
+
+  //   return this;
+  // }
+
+  // async completeUserOpWithSigner(signer: IUserOpSigner): Promise<this> {
+  //   if (!signer) {
+  //     throw new Error("Signer is not set");
+  //   }
+  //   this.userOpSigner = signer;
+  //   await this.autoFillUserOp();
+  //   const userOpHash = this.getUserOpHash();
+  //   const signature = await signer.signUserOpHash(userOpHash);
+  //   this.setSignature([0], signature);
+  //   return this;
+  // }
 
   setInitCode(
     zkapFactory: string,
@@ -312,21 +325,13 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
     const initCode = ethers.concat([zkapFactory, callData]);
 
-    this.setTxKeyTypes(encodedTxKey);
-
     this.userOp.initCode = initCode;
+    this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyWebAuthn];
     return this;
   }
 
   setRawInitCode(initCode: string): this {
     this.userOp.initCode = initCode;
-    return this;
-  }
-
-  setTxKeyTypes(encodedKey: string): this {
-    const accountKeyBuilder = new AccountKeyBuilder();
-    const keyTypes = accountKeyBuilder.getDecodedKeyTypes(encodedKey);
-    this.txKeyTypes = keyTypes;
     return this;
   }
 
@@ -347,7 +352,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     if (!this.userOp.sender) {
       throw new Error("Sender is not set");
     }
-    this.userOpSigner = this.masterKeySigner;
+    this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
     return this;
   }
 
@@ -358,7 +363,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     if (!this.userOp.sender) {
       throw new Error("Sender is not set");
     }
-    this.userOpSigner = this.masterKeySigner;
+    this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
     return this;
   }
 
@@ -375,7 +380,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     ]);
 
     this.userOp.callData = useropCallData;
-    this.userOpSigner = this.txKeySigner;
+    this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyWebAuthn];
     return this;
   }
 
@@ -392,7 +397,12 @@ export class ZkapBuilder extends BaseAccountBuilder {
     ]);
 
     this.userOp.callData = useropCallData;
-    this.userOpSigner = this.txKeySigner;
+    this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyWebAuthn];
+    return this;
+  }
+
+  setSignerKeyTypes(keyTypes: number[]): this {
+    this.signerKeyTypes = keyTypes;
     return this;
   }
 
