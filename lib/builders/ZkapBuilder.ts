@@ -160,6 +160,60 @@ export class ZkapBuilder extends BaseAccountBuilder {
     }
   }
 
+  updateUserOpCallDataForPaymasterERC20(
+    dest: ethers.AddressLike,
+    tokenAddress: ethers.AddressLike,
+    value: ethers.BigNumberish
+  ): this {
+    if (!this.userOp.callData || this.userOp.callData === "0x") {
+      throw new Error("Call data is not set");
+    }
+
+    const callData = this.userOp.callData as string;
+    // callData 가 ZkapAccount의 execute 함수 호출인지 executeBatch 함수 호출인지 판단
+    const iface = new ethers.Interface(ZkapAccountABIstring);
+    const parsedTx = iface.parseTransaction({ data: callData });
+    if (parsedTx?.name !== "execute" && parsedTx?.name !== "executeBatch") {
+      throw new Error("Call data is not a valid ZkapAccount function call");
+    }
+
+    // function transfer(address to, uint256 value)  함수 호출하는 callData 생성
+    const ERC20TransferABIstring =
+      '[{"inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "value", "type": "uint256"}], "name": "transfer", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"}]';
+    const erc20TransferCallData = new ethers.Interface(
+      ERC20TransferABIstring
+    ).encodeFunctionData("transfer", [dest, value]);
+
+    if (parsedTx?.name === "execute") {
+      // execute 함수 호출인 경우, 기존 excute 함수 호출 대신에 executeBatch 함수 호출하는 것으로 변경하고, ERC20 토큰을 paymaster account 에 전송하는 로직을 추가
+      const userRequiredDest = parsedTx?.args[0];
+      const userRequiredValue = parsedTx?.args[1];
+      const userRequiredFunc = parsedTx?.args[2];
+
+      const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+      const callData = callDataBuilder.encode("executeBatch", [
+        [tokenAddress, userRequiredDest],
+        [0, userRequiredValue],
+        [erc20TransferCallData, userRequiredFunc],
+      ]);
+      this.userOp.callData = callData;
+    }
+    if (parsedTx?.name === "executeBatch") {
+      const userRequiredDestList = parsedTx?.args[0];
+      const userRequiredValueList = parsedTx?.args[1];
+      const userRequiredFuncList = parsedTx?.args[2];
+      const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+      const callData = callDataBuilder.encode("executeBatch", [
+        [tokenAddress, ...userRequiredDestList],
+        [0, ...userRequiredValueList],
+        [erc20TransferCallData, ...userRequiredFuncList],
+      ]);
+      this.userOp.callData = callData;
+    }
+
+    return this;
+  }
+
   async autoFillUserOp(): Promise<this> {
     if (!this.provider) {
       throw new Error("Provider is not set. Please provide a valid RPC URL.");
