@@ -272,6 +272,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
       }
     }
 
+    // make verificationGasLimit 20% more
+    verificationGasLimit = (verificationGasLimit * BigInt(120)) / BigInt(100);
+
     this.userOp.verificationGasLimit = ethers.toBeHex(
       verificationGasLimit.toString()
     );
@@ -290,7 +293,10 @@ export class ZkapBuilder extends BaseAccountBuilder {
    */
   private async autoFillPaymasterData(): Promise<void> {
     if (!this.paymasterService) {
-      return;
+      // error throw
+      throw new Error(
+        "Paymaster service is not set. Please set a valid paymaster service."
+      );
     }
 
     // Paymaster 검증 및 PostOp 가스 한도 설정
@@ -452,6 +458,21 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
     this.userOp.callData = useropCallData;
     this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyWebAuthn];
+    return this;
+  }
+
+  setCallData(callData: string): this {
+    // if this.signerKeyTypes is not set, throw an error
+    if (
+      !this.signerKeyTypes ||
+      this.signerKeyTypes.length === 0 ||
+      this.signerKeyTypes.includes(0)
+    ) {
+      throw new Error(
+        "Signer key types are not set. Please set a valid signer key types."
+      );
+    }
+    super.setCallData(callData);
     return this;
   }
 
