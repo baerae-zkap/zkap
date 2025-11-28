@@ -1,7 +1,9 @@
 import { ethers } from "ethers";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
+import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
 
 export class AddressKeySigner implements IUserOpSigner {
+  public keyTypes: number[] = [PrimitiveAccountKeyTypes.keyAddress];
   private privateKeys: string[];
 
   constructor(privateKeys: string[]) {

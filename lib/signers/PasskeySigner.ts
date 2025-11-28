@@ -8,8 +8,10 @@ import {
 } from "../utils/signature";
 import { ethers } from "ethers";
 import cryptoUtils from "../utils/crypto";
+import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
 
 export class PasskeySigner implements IUserOpSigner {
+  public keyTypes: number[] = [PrimitiveAccountKeyTypes.keyWebAuthn];
   private credentialId: string;
   private verifyWithPasskey: (
     credentialId: string,

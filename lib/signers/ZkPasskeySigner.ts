@@ -5,6 +5,7 @@ import zkapAccountJson from "../types/abi/ZkapAccount.json";
 import AccountKeyZkOAuthRS256Verifier3 from "../types/abi/AccountKeyZkOAuthRS256Verifier3.json";
 import poseidonMerkleTreeDirectoryJson from "../types/abi/PoseidonMerkleTreeDirectory.json";
 import { JwkKey, JwtHeader } from "../types/jwk";
+import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
 
 function decodeJwtHeader(token: string): JwtHeader {
   const [headerB64] = token.split(".");
@@ -25,10 +26,7 @@ async function getGoogleOAuthPublicKey(kid: string): Promise<string> {
     // keys 에서 kid 에 대한 공개키 찾기
     const key = keys.find((key) => key.kid === kid);
     if (!key) {
-      // for test
-      console.log("Google public key not found for kid: ", kid);
-      console.log("Using test public key");
-      return "vLzd_VDnr8zt9pHfSkO3G0pUlaGJbYkIXXhma9-R9oETx2u0eZ-bSblq71FlA-PWLdjOW1SYtOngVZT5ZxJQ8FRFQolE8YzgByHifgo16ogEmeKdCIlCLd48IETTMOo093BLa2BzDygm8xBcpV_yqlxTUHdw2RH4vf5uulzbHcbdTf94I_DMlNUQX_yTmB8mu3GmDT-1xpL90iVEybjNWEcIrhWGHYqEFkKeBU1hvPf038Lts07eKiBKZWjo7-ZESCPNmdPvVkx29GuIBlwXp3824TB0DR0nhhFncXDuVzxDAUFSrnM0JwPa4ZX4M_xHdtUuk4Bp46wj_kb44jO4yw";
+      throw new Error("Public key not found");
     }
     return key.n;
   } catch (error) {
@@ -62,6 +60,7 @@ async function getKakaoOAuthPublicKey(kid: string): Promise<string> {
 
 // TODO: @kaikookim naming 변경, simulator 기반으로 테스트를 위해 만들어 진 내용이고 추후 각 social login 에 맞게 수정 필요.
 export class ZkPasskeySigner implements IUserOpSigner {
+  public keyTypes: number[] = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
   private proofServerUrl: string;
   private zkapAddress: string;
   private provider: ethers.JsonRpcProvider;
@@ -74,6 +73,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
   private socialServices: string[];
   private idTokenGenerators: ((msgHash: string) => Promise<string>)[];
   private selector: boolean[] | undefined;
+  private idTokens: string[] | undefined;
 
   constructor(
     proofServerUrl: string,
@@ -100,6 +100,9 @@ export class ZkPasskeySigner implements IUserOpSigner {
     if (socialServices.length !== idTokenGenerators.length) {
       throw new Error("socialServices.length !== idTokenGenerators.length");
     }
+
+    // idTokens : string[] = socialServices.length 만큼 초기화
+    this.idTokens = Array(socialServices.length).fill("");
   }
 
   async init() {
@@ -199,18 +202,30 @@ export class ZkPasskeySigner implements IUserOpSigner {
     return signatures;
   }
 
-  async signUserOpHash(userOpHash: string): Promise<string[]> {
+  async prepareIdToken(userOpHash: string, index: number): Promise<string[]> {
+    if (!(index < this.idTokens!.length))
+      throw new Error("index is out of range");
     if (!this.isInitialized) {
       await this.init();
     }
     const signedUserOpHash = cryptoUtils.getSignedMessageHash(userOpHash);
-    const idTokens: string[] = [];
-    for (const generator of this.idTokenGenerators) {
-      const idToken = await generator(signedUserOpHash);
-      idTokens.push(idToken);
+    if (!this.idTokenGenerators[index])
+      throw new Error("idTokenGenerator undefined");
+    const idToken = await this.idTokenGenerators[index](signedUserOpHash);
+    if (!idToken) throw new Error("idToken is undefined");
+
+    this.idTokens![index] = idToken;
+    return this.idTokens!;
+  }
+
+  async signUserOpHash(userOpHash?: string): Promise<string[]> {
+    // this.idTokens 가 모두 초기화 되어 있는지 확인
+    if (!this.idTokens) throw new Error("idTokens is undefined");
+    for (const idToken of this.idTokens) {
+      if (idToken === "") throw new Error("idToken is not initialized");
     }
 
-    const kids = idTokens.map((idToken) => {
+    const kids = this.idTokens.map((idToken) => {
       const header = decodeJwtHeader(idToken);
       return header.kid;
     });
@@ -250,6 +265,6 @@ export class ZkPasskeySigner implements IUserOpSigner {
     const leafIndices = results.map((r) => r.leafIndex as number);
     const merklePaths = results.map((r) => r.pathUint);
 
-    return this.getSignatures(idTokens, jwtPks, leafIndices, merklePaths);
+    return this.getSignatures(this.idTokens!, jwtPks, leafIndices, merklePaths);
   }
 }
