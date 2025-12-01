@@ -1,7 +1,7 @@
 import { BaseAccount } from "./BaseAccount";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
 import { ethers } from "ethers";
-import SimpleEntryPoint from "../types/abi/SimpleEntryPoint.json";
+import EntryPoint from "../types/abi/EntryPoint.json";
 import { PackedUserOperation } from "../types/UserOperation";
 
 export class ZkapAccount extends BaseAccount {
@@ -20,7 +20,7 @@ export class ZkapAccount extends BaseAccount {
     this.provider = new ethers.JsonRpcProvider(enUrl);
     this.entryPoint = new ethers.Contract(
       entryPointAddress,
-      SimpleEntryPoint.abi,
+      EntryPoint.abi,
       this.provider
     );
   }

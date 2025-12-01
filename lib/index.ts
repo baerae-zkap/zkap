@@ -3,6 +3,7 @@ export * from "./types/UserOperation";
 export * from "./types/AccountKey";
 export * from "./types/jwk";
 export * from "./types/Swap";
+export * from "./types/abi";
 
 // Account 관련 클래스
 export { BaseAccount } from "./account/BaseAccount";

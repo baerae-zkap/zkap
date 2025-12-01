@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
 import cryptoUtils from "../utils/crypto";
 import zkapAccountJson from "../types/abi/ZkapAccount.json";
-import AccountKeyZkOAuthRS256Verifier3 from "../types/abi/AccountKeyZkOAuthRS256Verifier3.json";
+import AccountKeyZkOAuthRS256VerifierJson from "../types/abi/AccountKeyZkOAuthRS256Verifier.json";
 import poseidonMerkleTreeDirectoryJson from "../types/abi/PoseidonMerkleTreeDirectory.json";
 import { JwkKey, JwtHeader } from "../types/jwk";
 import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
@@ -115,7 +115,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
 
     this.zkOAuthRS256Verifier = new ethers.Contract(
       masterKeyAddress,
-      AccountKeyZkOAuthRS256Verifier3.abi,
+      AccountKeyZkOAuthRS256VerifierJson.abi,
       this.provider
     );
     // 스마트 컨트랙트로부터 앵커 가져오기
