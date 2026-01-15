@@ -23,6 +23,7 @@ export { OneInchAggregator } from "./builders/aggregators/OneInchAggregator";
 export { AddressKeySigner } from "./signers/AddressKeySigner";
 export { PasskeySigner } from "./signers/PasskeySigner";
 export { ZkPasskeySigner } from "./signers/ZkPasskeySigner";
+export { ZkOidcSigner } from "./signers/ZkOidcSigner";
 
 // 유틸리티 함수 및 인터페이스
 export * from "./utils/crypto";
