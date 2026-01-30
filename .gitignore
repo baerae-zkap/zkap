@@ -1,3 +1,11 @@
 dist/
 node_modules/
 .npmrc
+coverage/
+*.log
+.DS_Store
+
+# Use npm, not yarn
+yarn.lock
+.yarn/
+.pnp.*

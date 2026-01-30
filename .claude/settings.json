@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/load-project-context.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/post-edit-reminder.sh \"$TOOL_INPUT_FILE_PATH\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/post-edit-reminder.sh \"$TOOL_INPUT_FILE_PATH\""
+          }
+        ]
+      }
+    ]
+  },
+  "context": {
+    "files": [
+      "CLAUDE.md",
+      ".claude/cache/project-context.md"
+    ]
+  },
+  "model": "sonnet"
+}
