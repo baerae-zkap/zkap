@@ -32,7 +32,20 @@ jobs:
       - name: Run tests with coverage
         run: |
           mkdir -p coverage
+          set -o pipefail
           npm run test:coverage 2>&1 | tee coverage/coverage.txt
+
+      - name: Check coverage thresholds
+        if: always()
+        run: |
+          echo "Checking if coverage meets thresholds..."
+          if grep -q "Jest: \"global\" coverage threshold" coverage/coverage.txt; then
+            echo "❌ Coverage thresholds not met!"
+            grep "Jest: \"global\" coverage threshold" coverage/coverage.txt
+            exit 1
+          else
+            echo "✅ All coverage thresholds met!"
+          fi
 
       - name: Post coverage comment to PR
         if: github.event_name == 'pull_request'
