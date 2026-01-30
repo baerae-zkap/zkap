@@ -195,6 +195,13 @@ describe('BaseAccountBuilder', () => {
       const userOp = builder.getUserOp();
       expect(userOp.sender).toBe(ethers.ZeroAddress);
     });
+
+    it('should throw error when sender is explicitly set to empty value', () => {
+      // Explicitly set sender to undefined to trigger error path
+      (builder as any).userOp = { sender: undefined };
+
+      expect(() => builder.getUserOp()).toThrow('Required fields are missing');
+    });
   });
 
   describe('packAccountGasLimits', () => {

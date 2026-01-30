@@ -13,6 +13,7 @@ const mockGetCode = jest.fn();
 const mockEstimateGas = jest.fn();
 const mockGetFeeData = jest.fn();
 const mockGetNonce = jest.fn();
+const mockParseTransaction = jest.fn();
 
 jest.mock('ethers', () => {
   const actual = jest.requireActual('ethers');
@@ -31,10 +32,7 @@ jest.mock('ethers', () => {
       Interface: jest.fn().mockImplementation(() => ({
         getFunction: jest.fn().mockReturnValue(true),
         encodeFunctionData: jest.fn().mockReturnValue('0xEncodedCallData'),
-        parseTransaction: jest.fn().mockReturnValue({
-          name: 'execute',
-          args: ['0x' + '11'.repeat(20), BigInt(0), '0x1234'],
-        }),
+        parseTransaction: mockParseTransaction,
       })),
       AbiCoder: {
         defaultAbiCoder: () => ({
@@ -89,12 +87,17 @@ describe('ZkapBuilder', () => {
     mockEstimateGas.mockReset();
     mockGetFeeData.mockReset();
     mockGetNonce.mockReset();
+    mockParseTransaction.mockReset();
 
     // Default mock values
     mockGetCode.mockResolvedValue('0x1234'); // Wallet deployed
     mockEstimateGas.mockResolvedValue(BigInt(21000));
     mockGetFeeData.mockResolvedValue({ gasPrice: BigInt(1000000000) });
     mockGetNonce.mockResolvedValue(BigInt(0));
+    mockParseTransaction.mockReturnValue({
+      name: 'execute',
+      args: { dest: '0x' + '11'.repeat(20), value: BigInt(0), func: '0x1234' },
+    });
   });
 
   describe('constructor', () => {
@@ -529,6 +532,43 @@ describe('ZkapBuilder', () => {
 
       const userOp = builder.getUserOp();
       expect(userOp.callGasLimit).toBeDefined();
+    });
+  });
+
+  describe('estimateCallGasLimit - complex cases', () => {
+    beforeEach(() => {
+      mockGetCode.mockResolvedValue('0x'); // Wallet NOT deployed (required for parseTransaction path)
+      mockEstimateGas.mockResolvedValue(BigInt(21000));
+      mockGetFeeData.mockResolvedValue({
+        gasPrice: BigInt(1000000000),
+        maxFeePerGas: BigInt(1000000000),
+        maxPriorityFeePerGas: BigInt(1500000000),
+      });
+      mockGetNonce.mockResolvedValue(BigInt(1));
+      // Reset parseTransaction to default 'execute' behavior
+      mockParseTransaction.mockReturnValue({
+        name: 'execute',
+        args: { dest: '0x' + '11'.repeat(20), value: BigInt(0), func: '0x1234' },
+      });
+    });
+
+    it('should throw error when parseTransaction fails', async () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '33'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      // Must set initCode for non-deployed wallet
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+
+      // Mock parseTransaction to throw error AFTER builder setup
+      mockParseTransaction.mockImplementation(() => {
+        throw new Error('Invalid transaction data');
+      });
+
+      builder.setCallData('0xInvalidCallData');
+
+      await expect(builder.autoFillUserOp()).rejects.toThrow(
+        'callData could not be parsed. Manual callGasLimit required.'
+      );
     });
   });
 
