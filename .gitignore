@@ -9,3 +9,17 @@ coverage/
 yarn.lock
 .yarn/
 .pnp.*
+
+# Build artifacts
+dist.tar.gz
+*.tgz
+
+# Claude Code settings (개인 설정)
+.claude/settings.json
+.claude/settings.local.json
+.claude/cache/
+.claude/commands/
+.claude/hooks/
+
+# Oh-My-Claudecode (세션 및 상태)
+.omc/
