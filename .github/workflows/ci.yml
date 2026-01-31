@@ -48,7 +48,7 @@ jobs:
           fi
 
       - name: Post coverage comment to PR
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: MishaKav/jest-coverage-comment@main
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -61,10 +61,10 @@ jobs:
           junitxml-path: ./coverage/junit.xml
           junitxml-title: 🧪 테스트 결과
           create-new-comment: false
-          update-comment: true
           hide-comment: false
           report-only-changed-files: false
           remove-links-to-files: true
+          unique-id-for-comment: coverage-report
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
