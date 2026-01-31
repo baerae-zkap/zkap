@@ -70,32 +70,41 @@ jobs:
               statusMsg = '## ❌ Coverage Thresholds: FAILED\n\n```\n' + thresholdStatus + '\n```\n\n**Merge is blocked until coverage targets are met.**';
             }
 
-            // Find existing comment
+            // Create new comment (old ones already deleted)
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: statusMsg
+            });
+
+      - name: Delete old coverage comments
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
 
-            const botComment = comments.data.find(comment =>
+            // Find all coverage report comments (both detailed and threshold status)
+            const coverageComments = comments.data.filter(comment =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('Coverage Thresholds:')
+              (comment.body.includes('테스트 커버리지 리포트') ||
+               comment.body.includes('Coverage Thresholds:'))
             );
 
-            if (botComment) {
-              await github.rest.issues.updateComment({
+            // Delete all old coverage comments
+            for (const comment of coverageComments) {
+              await github.rest.issues.deleteComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: statusMsg
+                comment_id: comment.id,
               });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: statusMsg
-              });
+              console.log(`Deleted old coverage comment: ${comment.id}`);
             }
 
       - name: Post coverage comment to PR
@@ -111,11 +120,10 @@ jobs:
           coverage-path: ./coverage/coverage.txt
           junitxml-path: ./coverage/junit.xml
           junitxml-title: 🧪 테스트 결과
-          create-new-comment: false
+          create-new-comment: true
           hide-comment: false
           report-only-changed-files: false
           remove-links-to-files: true
-          unique-id-for-comment: coverage-report
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
