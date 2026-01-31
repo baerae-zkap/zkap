@@ -64,10 +64,24 @@ jobs:
 
             let statusMsg = '';
             if (thresholdMet) {
-              statusMsg = '## ✅ Coverage Thresholds: PASSED\n\nAll coverage targets have been met!';
+              statusMsg = `# ✅ Coverage Check: PASSED
+
+All coverage thresholds have been met! 🎉
+
+> **Status**: Ready to merge`;
             } else {
               const thresholdStatus = fs.readFileSync('coverage/threshold-status.txt', 'utf8');
-              statusMsg = '## ❌ Coverage Thresholds: FAILED\n\n```\n' + thresholdStatus + '\n```\n\n**Merge is blocked until coverage targets are met.**';
+              statusMsg = `# ❌ Coverage Check: FAILED
+
+The following coverage thresholds were not met:
+
+\`\`\`
+${thresholdStatus}
+\`\`\`
+
+> **Status**: ⛔ **Merge is blocked**
+>
+> Please add tests to improve coverage before merging.`;
             }
 
             // Create new comment (old ones already deleted)
@@ -107,13 +121,25 @@ jobs:
               console.log(`Deleted old coverage comment: ${comment.id}`);
             }
 
+      - name: Set coverage report title
+        if: always()
+        id: report_title
+        run: |
+          if [ "${{ steps.coverage_check.outputs.threshold_met }}" = "true" ]; then
+            echo "title=✅ 테스트 커버리지 리포트 - PASSED" >> $GITHUB_OUTPUT
+            echo "summary=✅ 목표 달성" >> $GITHUB_OUTPUT
+          else
+            echo "title=❌ 테스트 커버리지 리포트 - FAILED" >> $GITHUB_OUTPUT
+            echo "summary=❌ 목표 미달 (Merge 차단됨)" >> $GITHUB_OUTPUT
+          fi
+
       - name: Post coverage comment to PR
         if: always() && github.event_name == 'pull_request'
         uses: MishaKav/jest-coverage-comment@main
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          title: 📊 테스트 커버리지 리포트
-          summary-title: 📈 커버리지 요약
+          title: ${{ steps.report_title.outputs.title }}
+          summary-title: ${{ steps.report_title.outputs.summary }}
           badge-title: Coverage
           coverage-title: 📁 파일별 커버리지
           coverage-summary-path: ./coverage/coverage-summary.json
