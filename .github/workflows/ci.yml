@@ -93,24 +93,17 @@ jobs:
 
             let statusMsg = '';
             if (thresholdMet) {
-              statusMsg = `# ✅ Coverage Check: PASSED
-
-All coverage thresholds have been met! 🎉
-
-> **Status**: Ready to merge`;
+              statusMsg = '# ✅ Coverage Check: PASSED\n\n';
+              statusMsg += 'All coverage thresholds have been met! 🎉\n\n';
+              statusMsg += '> **Status**: Ready to merge';
             } else {
               const thresholdStatus = fs.readFileSync('coverage/threshold-status.txt', 'utf8');
-              statusMsg = `# ❌ Coverage Check: FAILED
-
-The following coverage thresholds were not met:
-
-\`\`\`
-${thresholdStatus}
-\`\`\`
-
-> **Status**: ⛔ **Merge is blocked**
->
-> Please add tests to improve coverage before merging.`;
+              statusMsg = '# ❌ Coverage Check: FAILED\n\n';
+              statusMsg += 'The following coverage thresholds were not met:\n\n';
+              statusMsg += '```\n' + thresholdStatus + '\n```\n\n';
+              statusMsg += '> **Status**: ⛔ **Merge is blocked**\n';
+              statusMsg += '>\n';
+              statusMsg += '> Please add tests to improve coverage before merging.';
             }
 
             // Create new comment (old ones already deleted)
