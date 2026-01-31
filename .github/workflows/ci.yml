@@ -61,6 +61,7 @@ jobs:
           junitxml-path: ./coverage/junit.xml
           junitxml-title: 🧪 테스트 결과
           create-new-comment: false
+          update-comment: true
           hide-comment: false
           report-only-changed-files: false
           remove-links-to-files: true
