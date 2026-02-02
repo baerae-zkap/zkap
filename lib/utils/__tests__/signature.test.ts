@@ -1,0 +1,314 @@
+/**
+ * signature.ts 테스트
+ *
+ * 함수 목록:
+ * - unwrapSignature: DER 인코딩된 서명에서 r, s 추출
+ * - flipSecp256r1Signature: s가 N/2보다 크면 flip (malleability 방지)
+ * - wrapSignature: r, s를 DER 형식으로 래핑
+ * - toHex: Uint8Array → hex string
+ * - fromHex: hex string → Uint8Array
+ */
+
+import {
+  unwrapSignature,
+  flipSecp256r1Signature,
+  wrapSignature,
+  toHex,
+  fromHex,
+} from '../signature';
+
+describe('signature', () => {
+  describe('toHex', () => {
+    it('should convert Uint8Array to hex string', () => {
+      const input = new Uint8Array([0xad, 0xce, 0x00, 0x02, 0x35]);
+      const result = toHex(input);
+
+      expect(result).toBe('adce000235');
+    });
+
+    it('should handle empty array', () => {
+      const result = toHex(new Uint8Array([]));
+      expect(result).toBe('');
+    });
+
+    it('should pad single digit hex values with zero', () => {
+      const input = new Uint8Array([0x00, 0x01, 0x0f]);
+      const result = toHex(input);
+
+      expect(result).toBe('00010f');
+    });
+
+    it('should handle all possible byte values', () => {
+      const input = new Uint8Array([0x00, 0x7f, 0x80, 0xff]);
+      const result = toHex(input);
+
+      expect(result).toBe('007f80ff');
+    });
+
+    it('should produce lowercase hex', () => {
+      const input = new Uint8Array([0xAB, 0xCD, 0xEF]);
+      const result = toHex(input);
+
+      expect(result).toBe('abcdef');
+    });
+  });
+
+  describe('fromHex', () => {
+    it('should convert hex string to Uint8Array', () => {
+      const result = fromHex('adce000235');
+
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(Array.from(result)).toEqual([0xad, 0xce, 0x00, 0x02, 0x35]);
+    });
+
+    it('should handle null input', () => {
+      const result = fromHex(null);
+
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result.length).toBe(0);
+    });
+
+    it('should handle empty string (returns empty array, not throw)', () => {
+      // Empty string is falsy in JS, so fromHex returns empty array
+      const result = fromHex('');
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result.length).toBe(0);
+    });
+
+    it('should handle uppercase hex', () => {
+      const result = fromHex('ABCDEF');
+
+      expect(Array.from(result)).toEqual([0xab, 0xcd, 0xef]);
+    });
+
+    it('should handle mixed case hex', () => {
+      const result = fromHex('AbCdEf');
+
+      expect(Array.from(result)).toEqual([0xab, 0xcd, 0xef]);
+    });
+
+    it('should throw on odd length hex string', () => {
+      expect(() => fromHex('abc')).toThrow('Invalid hex string');
+    });
+
+    it('should throw on invalid hex characters', () => {
+      expect(() => fromHex('ghij')).toThrow('Invalid hex string');
+      expect(() => fromHex('12g4')).toThrow('Invalid hex string');
+      expect(() => fromHex('12 34')).toThrow('Invalid hex string');
+    });
+
+    it('should handle long hex string', () => {
+      const hex = 'ff'.repeat(32); // 64 chars = 32 bytes
+      const result = fromHex(hex);
+
+      expect(result.length).toBe(32);
+      expect(result.every(b => b === 0xff)).toBe(true);
+    });
+  });
+
+  describe('toHex and fromHex roundtrip', () => {
+    it('should roundtrip correctly', () => {
+      const original = new Uint8Array([0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0]);
+      const hex = toHex(original);
+      const back = fromHex(hex);
+
+      expect(Array.from(back)).toEqual(Array.from(original));
+    });
+
+    it('should roundtrip 32-byte values (common for signatures)', () => {
+      const original = new Uint8Array(32);
+      for (let i = 0; i < 32; i++) {
+        original[i] = i;
+      }
+      const hex = toHex(original);
+      const back = fromHex(hex);
+
+      expect(Array.from(back)).toEqual(Array.from(original));
+    });
+  });
+
+  describe('wrapSignature', () => {
+    it('should wrap r and s into DER format', () => {
+      const r = new Uint8Array(32).fill(0x11);
+      const s = new Uint8Array(32).fill(0x22);
+
+      const result = wrapSignature(r, s);
+
+      expect(result).toBeInstanceOf(Uint8Array);
+      // DER format: 0x30 (SEQUENCE) + length + 0x02 (INTEGER) + 0x20 (32 bytes) + r + 0x02 + 0x20 + s
+      expect(result[0]).toBe(0x30); // SEQUENCE tag
+      expect(result[1]).toBe(0x44); // Total length (68 bytes)
+      expect(result[2]).toBe(0x02); // INTEGER tag for r
+      expect(result[3]).toBe(0x20); // Length of r (32 bytes)
+      // r starts at index 4
+      expect(result.slice(4, 36)).toEqual(r);
+      expect(result[36]).toBe(0x02); // INTEGER tag for s
+      expect(result[37]).toBe(0x20); // Length of s (32 bytes)
+      // s starts at index 38
+      expect(result.slice(38, 70)).toEqual(s);
+    });
+
+    it('should produce correct total length', () => {
+      const r = new Uint8Array(32).fill(0xaa);
+      const s = new Uint8Array(32).fill(0xbb);
+
+      const result = wrapSignature(r, s);
+
+      // 4 (header) + 32 (r) + 2 (s header) + 32 (s) = 70 bytes
+      expect(result.length).toBe(70);
+    });
+  });
+
+  describe('unwrapSignature', () => {
+    it('should extract r and s from wrapped signature', () => {
+      // Create a valid DER-encoded signature
+      const r = new Uint8Array(32).fill(0x11);
+      const s = new Uint8Array(32).fill(0x22);
+      const wrapped = wrapSignature(r, s);
+
+      const [extractedR, extractedS] = unwrapSignature(wrapped);
+
+      expect(Array.from(extractedR)).toEqual(Array.from(r));
+      expect(Array.from(extractedS)).toEqual(Array.from(s));
+    });
+
+    it('should handle signatures with leading zeros in r', () => {
+      // When r has a high bit set, DER encoding adds a 0x00 prefix
+      const r = new Uint8Array(32);
+      r.fill(0x00);
+      r[0] = 0x80; // High bit set
+      const s = new Uint8Array(32).fill(0x33);
+
+      // Manually create DER with padding
+      const derSig = Buffer.concat([
+        new Uint8Array([0x30, 0x45, 0x02, 0x21, 0x00]), // SEQUENCE, len, INTEGER, len+1, padding
+        r,
+        new Uint8Array([0x02, 0x20]),
+        s,
+      ]);
+
+      const [extractedR, extractedS] = unwrapSignature(derSig);
+
+      expect(Array.from(extractedR)).toEqual(Array.from(r));
+      expect(Array.from(extractedS)).toEqual(Array.from(s));
+    });
+
+    it('should roundtrip wrap and unwrap', () => {
+      const r = new Uint8Array(32);
+      const s = new Uint8Array(32);
+      for (let i = 0; i < 32; i++) {
+        r[i] = i;
+        s[i] = 255 - i;
+      }
+
+      const wrapped = wrapSignature(r, s);
+      const [extractedR, extractedS] = unwrapSignature(wrapped);
+
+      expect(Array.from(extractedR)).toEqual(Array.from(r));
+      expect(Array.from(extractedS)).toEqual(Array.from(s));
+    });
+  });
+
+  describe('flipSecp256r1Signature', () => {
+    // secp256r1 curve order N
+    const N_HEX = 'FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551';
+    // N/2 (halfN)
+    const HALF_N_HEX = '7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a8';
+
+    it('should not flip s when s < N/2', () => {
+      const r = new Uint8Array(32).fill(0x11);
+      // s = 1 (very small, definitely < N/2)
+      const s = new Uint8Array(32).fill(0x00);
+      s[31] = 0x01;
+
+      const [resultR, resultS] = flipSecp256r1Signature(r, s);
+
+      // r should be unchanged
+      expect(Array.from(resultR)).toEqual(Array.from(r));
+      // s should be unchanged (not flipped)
+      expect(Array.from(resultS)).toEqual(Array.from(s));
+    });
+
+    it('should flip s when s > N/2', () => {
+      const r = new Uint8Array(32).fill(0x11);
+      // s = N - 1 (very large, definitely > N/2)
+      const s = fromHex('FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632550');
+
+      const [resultR, resultS] = flipSecp256r1Signature(r, s);
+
+      // r should be unchanged
+      expect(Array.from(resultR)).toEqual(Array.from(r));
+      // s should be flipped: N - s = N - (N-1) = 1
+      expect(resultS[resultS.length - 1]).toBe(0x01);
+    });
+
+    it('should handle s exactly at boundary', () => {
+      const r = new Uint8Array(32).fill(0x22);
+      // s = halfN + 1 (just above threshold, should be flipped)
+      const halfNPlusOne = fromHex('7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a9');
+
+      const [resultR, resultS] = flipSecp256r1Signature(r, halfNPlusOne);
+
+      // Should be flipped
+      expect(Array.from(resultR)).toEqual(Array.from(r));
+      // Result should be <= halfN (low-s form)
+      // s' = N - s = N - (halfN + 1) ≈ halfN
+      const resultBigInt = BigInt('0x' + toHex(resultS));
+      const halfNBigInt = BigInt('0x' + HALF_N_HEX);
+      expect(resultBigInt <= halfNBigInt).toBe(true);
+    });
+
+    it('should preserve r unchanged', () => {
+      const r = new Uint8Array(32);
+      for (let i = 0; i < 32; i++) {
+        r[i] = i;
+      }
+      const s = fromHex('FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632550');
+
+      const [resultR] = flipSecp256r1Signature(r, s);
+
+      expect(Array.from(resultR)).toEqual(Array.from(r));
+    });
+
+    it('should produce valid low-s signature for malleability prevention', () => {
+      const r = new Uint8Array(32).fill(0xaa);
+      // High s value
+      const highS = fromHex('EEEEEEEE00000000EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE');
+
+      const [, resultS] = flipSecp256r1Signature(r, highS);
+
+      // Result should satisfy low-s requirement (s <= N/2)
+      const resultBigInt = BigInt('0x' + toHex(resultS));
+      const halfNBigInt = BigInt('0x' + HALF_N_HEX);
+      expect(resultBigInt <= halfNBigInt).toBe(true);
+    });
+  });
+
+  describe('integration: full signature processing', () => {
+    it('should process WebAuthn-style signature correctly', () => {
+      // Simulate a typical flow: unwrap -> flip -> wrap
+      const r = new Uint8Array(32);
+      const s = new Uint8Array(32);
+      for (let i = 0; i < 32; i++) {
+        r[i] = i + 1;
+        s[i] = (i + 1) * 2;
+      }
+
+      // Wrap original
+      const wrapped = wrapSignature(r, s);
+
+      // Unwrap
+      const [unwrappedR, unwrappedS] = unwrapSignature(wrapped);
+
+      // Flip if needed
+      const [flippedR, flippedS] = flipSecp256r1Signature(unwrappedR, unwrappedS);
+
+      // Wrap again
+      const rewrapped = wrapSignature(flippedR, flippedS);
+
+      // Should produce valid DER structure
+      expect(rewrapped[0]).toBe(0x30);
+      expect(rewrapped[2]).toBe(0x02);
+    });
+  });
+});

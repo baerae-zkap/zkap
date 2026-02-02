@@ -1,25 +1,56 @@
 # zkap-aa-sdk
 
+![CI](https://github.com/baerae-zkap/zkap-aa-sdk/workflows/CI/badge.svg)
+[![codecov](https://img.shields.io/badge/coverage-95%25-brightgreen)](https://github.com/baerae-zkap/zkap-aa-sdk)
+
 A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.
+
+## Test Coverage
+
+- **Statements**: 95.01%
+- **Branches**: 89.2%
+- **Functions**: 98.19%
+- **Lines**: 94.99%
+
+## 개발 환경 설정
+
+### 의존성 설치
+
+```bash
+npm install
+```
+
+### 테스트 실행
+
+```bash
+# 전체 테스트
+npm test
+
+# 커버리지 포함
+npm run test:coverage
+
+# Watch 모드
+npm run test:watch
+```
 
 ## 빌드 및 배포
 
 ### 빌드
 
 ```bash
-yarn build
+npm run build
 ```
 
 ### 퍼블리시
 
 ```bash
-yarn pub
+npm run pub
 ```
 
 ## 패키지 설치 방법
 
 ```bash
-yarn add @baerae-zkap/zkap-aa-sdk@<version>
+npm install @baerae-zkap/zkap-aa-sdk@<version>
 ```
 
 ## npmrc 파일 작성 방법
