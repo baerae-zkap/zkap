@@ -427,6 +427,20 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  setUpdateKeysCallData(encodedMasterKey: string, encodedTxKey: string): this {
+    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+    const callData = callDataBuilder.encode("updateKeys", [
+      encodedMasterKey,
+      encodedTxKey,
+    ]);
+    this.userOp.callData = callData;
+    if (!this.userOp.sender) {
+      throw new Error("Sender is not set");
+    }
+    this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
+    return this;
+  }
+
   setExecuteCallData(
     contractAddress: string,
     value: ethers.BigNumberish,

@@ -268,6 +268,50 @@ describe('ZkapBuilder', () => {
     });
   });
 
+  describe('setUpdateKeysCallData', () => {
+    it('should set update keys call data with both master and tx keys', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      const encodedMasterKey = '0x' + 'ee'.repeat(64);
+      const encodedTxKey = '0x' + 'ff'.repeat(64);
+      builder.setUpdateKeysCallData(encodedMasterKey, encodedTxKey);
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callData).toBeDefined();
+      expect(userOp.callData).not.toBe('0x');
+    });
+
+    it('should throw when sender is not set', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+
+      expect(() =>
+        builder.setUpdateKeysCallData('0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64))
+      ).toThrow('Sender is not set');
+    });
+
+    it('should set signer key types to ZkOAuthRS256', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      const encodedMasterKey = '0x' + 'ee'.repeat(64);
+      const encodedTxKey = '0x' + 'ff'.repeat(64);
+      builder.setUpdateKeysCallData(encodedMasterKey, encodedTxKey);
+
+      // After setUpdateKeysCallData, setCallData should work (keyTypes set)
+      expect(() => builder.setCallData('0x9999')).not.toThrow();
+    });
+
+    it('should return builder instance for method chaining', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      const result = builder.setUpdateKeysCallData('0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+
+      expect(result).toBe(builder);
+    });
+  });
+
   describe('setCallData (overridden)', () => {
     it('should throw when signer key types are not set', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
