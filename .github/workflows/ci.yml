@@ -19,12 +19,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
 
       - name: Type check
-        run: yarn tsc --noEmit
+        run: npx tsc --noEmit
 
       - name: Run tests with coverage
-        run: yarn test:coverage --verbose=false --coverageReporters=text-summary
+        run: npm run test:coverage -- --verbose=false --coverageReporters=text-summary
