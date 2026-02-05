@@ -349,13 +349,14 @@ export class AccountKeyBuilder {
     const commitment = zkOAuthRS256KeyData.commitment;
     const n = zkOAuthRS256KeyData.n;
     const k = zkOAuthRS256KeyData.k;
+    const hAudList = zkOAuthRS256KeyData.hAudList;
     const poseidonMerkleTreeDirectory =
       zkOAuthRS256KeyData.poseidonMerkleTreeDirectory;
 
     let abiCoder = ethers.AbiCoder.defaultAbiCoder();
     let encoded = abiCoder.encode(
-      ["uint256", "uint256", "uint256[]"],
-      [n, k, commitment]
+      ["uint256", "uint256", "uint256", "uint256[]"],
+      [n, k, hAudList, commitment]
     );
 
     // let encoded = this.getEncodedCommitment(commitment);
@@ -483,14 +484,15 @@ export class AccountKeyBuilder {
         const zkOAuthRS256KeyData = keyInfo.keyData as ZkOAuthRS256KeyData;
         const n = zkOAuthRS256KeyData.n;
         const k = zkOAuthRS256KeyData.k;
+        const hAudList = zkOAuthRS256KeyData.hAudList;
         const commitment = zkOAuthRS256KeyData.commitment;
         const poseidonMerkleTreeDirectory =
           zkOAuthRS256KeyData.poseidonMerkleTreeDirectory;
 
         let abiCoder = ethers.AbiCoder.defaultAbiCoder();
         let encoded = abiCoder.encode(
-          ["uint256", "uint256", "uint256[]"],
-          [n, k, commitment]
+          ["uint256", "uint256", "uint256", "uint256[]"],
+          [n, k, hAudList, commitment]
         );
 
         const AccountKeyZkOAuthRS256Verifier3ABI = [

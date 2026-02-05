@@ -42,6 +42,7 @@ export type OAuthRS256KeyData = {
 export type ZkOAuthRS256KeyData = {
   n: number;
   k: number;
+  hAudList: string;
   commitment: string[];
   poseidonMerkleTreeDirectory: string;
 };

@@ -289,6 +289,7 @@ describe('AccountKeyBuilder', () => {
       const zkOAuthKeyData: ZkOAuthRS256KeyData = {
         n: 17,
         k: 2,
+        hAudList: '0x123',
         commitment: ['0x1', '0x2', '0x3'],
         poseidonMerkleTreeDirectory: '0x' + '44'.repeat(20),
       };
@@ -306,6 +307,7 @@ describe('AccountKeyBuilder', () => {
       const encoded1 = builder.getEncodedZkOAuthRS256KeyInitData({
         n: 17,
         k: 2,
+        hAudList: '0x123',
         commitment: ['0x1'],
         poseidonMerkleTreeDirectory: '0x' + '55'.repeat(20),
       });
@@ -313,6 +315,7 @@ describe('AccountKeyBuilder', () => {
       const encoded2 = builder.getEncodedZkOAuthRS256KeyInitData({
         n: 32,
         k: 4,
+        hAudList: '0x456',
         commitment: ['0x1'],
         poseidonMerkleTreeDirectory: '0x' + '55'.repeat(20),
       });
@@ -412,6 +415,7 @@ describe('AccountKeyBuilder', () => {
           keyData: {
             n: 17,
             k: 2,
+            hAudList: '0x123',
             commitment: ['0x1', '0x2'],
             poseidonMerkleTreeDirectory: '0x' + '55'.repeat(20),
           } as ZkOAuthRS256KeyData,
@@ -476,6 +480,7 @@ describe('AccountKeyBuilder', () => {
           keyData: {
             n: 17,
             k: 2,
+            hAudList: '0xabc',
             commitment: ['0x1'],
             poseidonMerkleTreeDirectory: '0x' + '77'.repeat(20),
           } as ZkOAuthRS256KeyData,
@@ -515,6 +520,7 @@ describe('AccountKeyBuilder', () => {
           keyData: {
             n: 17,
             k: 2,
+            hAudList: '0x456',
             commitment: ['0x1', '0x2', '0x3'],
             poseidonMerkleTreeDirectory: '0x' + '88'.repeat(20),
           } as ZkOAuthRS256KeyData,
@@ -741,6 +747,7 @@ describe('AccountKeyBuilder', () => {
           keyData: {
             n: 17,
             k: 2,
+            hAudList: '0x789',
             commitment: [],
             poseidonMerkleTreeDirectory: '0x' + 'ff'.repeat(20),
           } as ZkOAuthRS256KeyData,
