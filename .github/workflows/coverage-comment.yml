@@ -1,0 +1,15 @@
+name: Coverage Comment
+
+on:
+  workflow_run:
+    workflows: ["Dev PR CI"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  comment:
+    uses: baerae-zkap/zkap-workflows/.github/workflows/coverage-comment.yml@main
+    secrets: inherit
