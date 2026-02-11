@@ -14,5 +14,5 @@ jobs:
     with:
       package-manager: npm
       use-private-packages: false
-      runner: self-hosted
+      runner: ubuntu-latest
     secrets: inherit
