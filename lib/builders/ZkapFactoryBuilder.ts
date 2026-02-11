@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { ZkapAccountFactoryABIstring } from "../resources/abis";
+import { ZkapAccountFactoryABI } from "../types/abi";
 
 export class ZkapFactoryBuilder {
   private provider: ethers.JsonRpcProvider;
@@ -9,7 +9,7 @@ export class ZkapFactoryBuilder {
     this.provider = new ethers.JsonRpcProvider(enUrl);
     this.accountFactory = new ethers.Contract(
       address,
-      ZkapAccountFactoryABIstring,
+      ZkapAccountFactoryABI,
       this.provider
     );
   }
