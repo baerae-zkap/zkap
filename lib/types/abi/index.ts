@@ -4,6 +4,7 @@ import AccountKeyZkOAuthRS256Verifier from "./AccountKeyZkOAuthRS256Verifier.jso
 import EntryPoint from "./EntryPoint.json";
 import PoseidonMerkleTreeDirectory from "./PoseidonMerkleTreeDirectory.json";
 import ZkapAccount from "./ZkapAccount.json";
+import ZkapAccountFactory from "./ZkapAccountFactory.json";
 import ZkapPaymaster from "./ZkapPaymaster.json";
 
 // 각 Hardhat artifact JSON 에서 abi 필드만 export
@@ -17,4 +18,5 @@ export const PoseidonMerkleTreeDirectoryABI = (
   PoseidonMerkleTreeDirectory as any
 ).abi;
 export const ZkapAccountABI = (ZkapAccount as any).abi;
+export const ZkapAccountFactoryABI = (ZkapAccountFactory as any).abi;
 export const ZkapPaymasterABI = (ZkapPaymaster as any).abi;

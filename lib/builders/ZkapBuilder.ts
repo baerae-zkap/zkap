@@ -2,9 +2,9 @@ import { BaseAccountBuilder } from "./BaseAccountBuilder";
 import { CallDataBuilder } from "./CallDataBuilder";
 import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
 import {
-  ZkapAccountABIstring,
-  ZkapAccountFactoryABIstring,
-} from "../resources/abis";
+  ZkapAccountABI,
+  ZkapAccountFactoryABI,
+} from "../types/abi";
 import { ethers } from "ethers";
 import {
   PaymasterService,
@@ -24,7 +24,7 @@ export interface ZkapAccountInfo {
 
 export class ZkapBuilder extends BaseAccountBuilder {
   protected factoryInterface: ethers.Interface = new ethers.Interface(
-    ZkapAccountFactoryABIstring
+    ZkapAccountFactoryABI
   );
   protected provider: ethers.JsonRpcProvider;
   private signerKeyTypes: number[] | undefined;
@@ -101,7 +101,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
       // initCode와 callData가 모두 있는 경우
       const callData = this.userOp.callData as string;
-      const iface = new ethers.Interface(ZkapAccountABIstring);
+      const iface = new ethers.Interface(ZkapAccountABI);
 
       try {
         const parsedTx = iface.parseTransaction({ data: callData });
@@ -171,7 +171,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
     const callData = this.userOp.callData as string;
     // callData 가 ZkapAccount의 execute 함수 호출인지 executeBatch 함수 호출인지 판단
-    const iface = new ethers.Interface(ZkapAccountABIstring);
+    const iface = new ethers.Interface(ZkapAccountABI);
     const parsedTx = iface.parseTransaction({ data: callData });
     if (parsedTx?.name !== "execute" && parsedTx?.name !== "executeBatch") {
       throw new Error("Call data is not a valid ZkapAccount function call");
@@ -190,7 +190,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       const userRequiredValue = parsedTx?.args[1];
       const userRequiredFunc = parsedTx?.args[2];
 
-      const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+      const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
       const callData = callDataBuilder.encode("executeBatch", [
         [tokenAddress, userRequiredDest],
         [0, userRequiredValue],
@@ -202,7 +202,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       const userRequiredDestList = parsedTx?.args[0];
       const userRequiredValueList = parsedTx?.args[1];
       const userRequiredFuncList = parsedTx?.args[2];
-      const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+      const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
       const callData = callDataBuilder.encode("executeBatch", [
         [tokenAddress, ...userRequiredDestList],
         [0, ...userRequiredValueList],
@@ -261,7 +261,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     for (const keyType of keyTypes) {
       const ADDRESS_KEY_VALIDATION_GAS = 15000n;
       const WEB_AUTHN_KEY_VALIDATION_GAS = 470000n; // 측정시 약 45만 gas 소모
-      const ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 340000n;
+      const ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 1000000n;
 
       if (keyType === PrimitiveAccountKeyTypes.keyAddress) {
         verificationGasLimit += BigInt(ADDRESS_KEY_VALIDATION_GAS);
@@ -375,7 +375,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     encodedMasterKey: string,
     encodedTxKey: string
   ): this {
-    const callDataBuilder = new CallDataBuilder(ZkapAccountFactoryABIstring);
+    const callDataBuilder = new CallDataBuilder(ZkapAccountFactoryABI);
 
     const callData = callDataBuilder.encode("createAccount", [
       salt,
@@ -406,7 +406,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   setUpdateTxKeyCallData(encoded: string): this {
-    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+    const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const callData = callDataBuilder.encode("updateTxKey", [encoded]);
     this.userOp.callData = callData;
     if (!this.userOp.sender) {
@@ -417,7 +417,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   setUpdateMasterKeyCallData(encoded: string): this {
-    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+    const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const callData = callDataBuilder.encode("updateMasterKey", [encoded]);
     this.userOp.callData = callData;
     if (!this.userOp.sender) {
@@ -428,7 +428,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   setUpdateKeysCallData(encodedMasterKey: string, encodedTxKey: string): this {
-    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+    const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const callData = callDataBuilder.encode("updateKeys", [
       encodedMasterKey,
       encodedTxKey,
@@ -446,7 +446,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     value: ethers.BigNumberish,
     data: string
   ): this {
-    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+    const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const useropCallData = callDataBuilder.encode("execute", [
       contractAddress,
       value,
@@ -463,7 +463,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     values: ethers.BigNumberish[],
     data: string[]
   ): this {
-    const callDataBuilder = new CallDataBuilder(ZkapAccountABIstring);
+    const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const useropCallData = callDataBuilder.encode("executeBatch", [
       contractAddresses,
       values,

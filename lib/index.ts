@@ -30,6 +30,3 @@ export * from "./utils/crypto";
 export * from "./utils/signature";
 export * from "./utils/base64url";
 export { IUserOpSigner } from "./utils/IUserOpSigner";
-
-// ABI 리소스
-export * from "./resources/abis";
