@@ -15,10 +15,6 @@ jest.mock('ethers', () => ({
   },
 }));
 
-// Mock ABI
-jest.mock('../../resources/abis', () => ({
-  ZkapAccountFactoryABIstring: '[]',
-}));
 
 import { ZkapFactoryBuilder } from '../ZkapFactoryBuilder';
 

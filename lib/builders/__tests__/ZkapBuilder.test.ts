@@ -36,7 +36,7 @@ jest.mock('ethers', () => {
       })),
       AbiCoder: {
         defaultAbiCoder: () => ({
-          encode: jest.fn().mockReturnValue('0xEncoded'),
+          encode: jest.fn().mockReturnValue('0x' + '0a'.repeat(100)),
         }),
       },
       concat: jest.fn().mockImplementation((arr) => arr.join('')),
@@ -56,11 +56,6 @@ jest.mock('ethers', () => {
   };
 });
 
-// Mock ABIs
-jest.mock('../../resources/abis', () => ({
-  ZkapAccountABIstring: '[]',
-  ZkapAccountFactoryABIstring: '[]',
-}));
 
 import { ZkapBuilder, ZkapAccountInfo } from '../ZkapBuilder';
 import { PaymasterMode } from '../../utils/PaymasterService';
@@ -97,6 +92,7 @@ describe('ZkapBuilder', () => {
     mockParseTransaction.mockReturnValue({
       name: 'execute',
       args: { dest: '0x' + '11'.repeat(20), value: BigInt(0), func: '0x1234' },
+      fragment: { inputs: [{}, {}, {}] },
     });
   });
 
@@ -138,7 +134,7 @@ describe('ZkapBuilder', () => {
       builder.setSender('0x' + '11'.repeat(20));
 
       expect(() => builder.getRequiredPrefund()).toThrow(
-        'Verification gas limit and call gas limit are not set'
+        'Required gas fields not set:'
       );
     });
   });
@@ -344,6 +340,27 @@ describe('ZkapBuilder', () => {
       // After setting key types, setCallData should work
       expect(() => builder.setCallData('0x1234')).not.toThrow();
     });
+
+    it('should throw for empty array', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      expect(() => builder.setSignerKeyTypes([])).toThrow('keyTypes must be a non-empty array');
+    });
+
+    it('should throw for invalid keyType value', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      expect(() => builder.setSignerKeyTypes([99])).toThrow('Invalid keyType: 99');
+    });
+
+    it('should throw for keyType 0', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      expect(() => builder.setSignerKeyTypes([0])).toThrow('Invalid keyType: 0');
+    });
+
+    it('should accept all valid keyTypes', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      // keyAddress=1, keySecp256k1=2, keySecp256r1=3, keyWebAuthn=4, keyOAuthRS256=5, keyZkOAuthRS256=6
+      expect(() => builder.setSignerKeyTypes([1, 2, 3, 4, 5, 6])).not.toThrow();
+    });
   });
 
   describe('setPaymasterConfig', () => {
@@ -404,6 +421,7 @@ describe('ZkapBuilder', () => {
 
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([1]); // keyAddress — signerKeyTypes 필수
 
       await expect(builder.autoFillUserOp()).rejects.toThrow(
         'Failed to get fee data from provider'
@@ -411,14 +429,19 @@ describe('ZkapBuilder', () => {
     });
 
     it('should auto fill paymaster data when paymaster is configured', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // convergence loop: autoFillPaymasterData called up to MAX_PAYMASTER_PASSES (3) times
+      const paymasterResponse = {
         ok: true,
         json: () => Promise.resolve({
           result: {
-            userOp: { paymasterData: '0xPaymasterData' },
+            userOp: { paymasterData: '0xabcd1234' },
           },
         }),
-      });
+      };
+      mockFetch
+        .mockResolvedValueOnce(paymasterResponse)
+        .mockResolvedValueOnce(paymasterResponse)
+        .mockResolvedValueOnce(paymasterResponse);
 
       const accountInfoWithPaymaster = {
         ...mockAccountInfo,
@@ -461,6 +484,7 @@ describe('ZkapBuilder', () => {
         '0x' + 'aa'.repeat(64),
         '0x' + 'bb'.repeat(64)
       );
+      builder.setSignerKeyTypes([4]); // keyWebAuthn
 
       await builder.autoFillUserOp();
 
@@ -475,7 +499,7 @@ describe('ZkapBuilder', () => {
       builder
         .setSender('0x' + '11'.repeat(20))
         .setPaymaster('0x' + '22'.repeat(20))
-        .setPaymasterData('0x1234')
+        .setPaymasterData('0x' + 'aa'.repeat(66))
         .setPaymasterVerificationGasLimit('0x6978')
         .setPaymasterPostOpGasLimit('0x0');
 
@@ -529,13 +553,14 @@ describe('ZkapBuilder', () => {
         '0x' + 'aa'.repeat(64),
         '0x' + 'bb'.repeat(64)
       );
+      builder.setSignerKeyTypes([4]); // keyWebAuthn
       // No callData set - should return minimal gas
 
       await builder.autoFillUserOp();
 
       const userOp = builder.getUserOp();
       expect(userOp.callGasLimit).toBeDefined();
-      expect(userOp.callGasLimit).toBe('0x3e8'); // 1000 in hex
+      expect(userOp.callGasLimit).toBe('0x5208'); // MIN_CALL_GAS_LIMIT (21000) floor applied
     });
   });
 
@@ -550,6 +575,42 @@ describe('ZkapBuilder', () => {
 
       const userOp = builder.getUserOp();
       expect(userOp.verificationGasLimit).toBeDefined();
+    });
+
+    it('should calculate verificationGasLimit for keySecp256k1', async () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([2]); // keySecp256k1
+      builder.setCallData('0x1234');
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(BigInt(userOp.verificationGasLimit)).toBeGreaterThan(0n);
+    });
+
+    it('should calculate verificationGasLimit for keySecp256r1', async () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([3]); // keySecp256r1
+      builder.setCallData('0x1234');
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(BigInt(userOp.verificationGasLimit)).toBeGreaterThan(0n);
+    });
+
+    it('should calculate verificationGasLimit for keyOAuthRS256', async () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([5]); // keyOAuthRS256
+      builder.setCallData('0x1234');
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(BigInt(userOp.verificationGasLimit)).toBeGreaterThan(0n);
     });
 
     it('should use existing nonce when already set', async () => {
@@ -593,6 +654,7 @@ describe('ZkapBuilder', () => {
       mockParseTransaction.mockReturnValue({
         name: 'execute',
         args: { dest: '0x' + '11'.repeat(20), value: BigInt(0), func: '0x1234' },
+        fragment: { inputs: [{}, {}, {}] },
       });
     });
 
@@ -611,8 +673,231 @@ describe('ZkapBuilder', () => {
       builder.setCallData('0xInvalidCallData');
 
       await expect(builder.autoFillUserOp()).rejects.toThrow(
+        'Invalid transaction data'
+      );
+    });
+
+    it('should estimate gas for execute call when wallet not deployed with initCode', async () => {
+      // parsedTx returns 'execute' (already set in beforeEach)
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '33'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setCallData('0xSomeCallData');
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBeDefined();
+    });
+
+    it('should estimate gas for executeBatch (array style) when wallet not deployed', async () => {
+      mockParseTransaction.mockReturnValue({
+        name: 'executeBatch',
+        args: [
+          ['0x' + '11'.repeat(20), '0x' + '22'.repeat(20)],
+          [BigInt(0), BigInt(100)],
+          ['0x1234', '0x5678'],
+        ],
+        fragment: { inputs: [{}, {}, {}] },
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '33'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setCallData('0xSomeCallData');
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBeDefined();
+    });
+
+    it('should estimate gas for executeBatch (tuple/calls style) when wallet not deployed', async () => {
+      mockParseTransaction.mockReturnValue({
+        name: 'executeBatch',
+        args: [
+          [
+            { target: '0x' + '11'.repeat(20), value: BigInt(0), data: '0x1234' },
+            { target: '0x' + '22'.repeat(20), value: BigInt(100), data: '0x5678' },
+          ],
+        ],
+        fragment: { inputs: [{}] },
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '33'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setCallData('0xSomeCallData');
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBeDefined();
+    });
+
+    it('should return buffer gas when executeBatch has empty dest list', async () => {
+      mockParseTransaction.mockReturnValue({
+        name: 'executeBatch',
+        args: [[], [], []],
+        fragment: { inputs: [{}, {}, {}] },
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '33'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setCallData('0xSomeCallData');
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      // 25000 (GAS_BUFFER) in hex = 0x61a8
+      expect(userOp.callGasLimit).toBe('0x61a8');
+    });
+
+    it('should throw when callData uses unsupported function name', async () => {
+      mockParseTransaction.mockReturnValue({
+        name: 'unsupportedFunction',
+        args: {},
+        fragment: { inputs: [] },
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '33'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setCallData('0xSomeCallData');
+
+      await expect(builder.autoFillUserOp()).rejects.toThrow(
+        'Unsupported function for gas estimation: unsupportedFunction'
+      );
+    });
+
+    it('should throw when parseTransaction returns null (unknown selector)', async () => {
+      mockParseTransaction.mockReturnValue(null);
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '33'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setCallData('0xSomeCallData');
+
+      await expect(builder.autoFillUserOp()).rejects.toThrow(
         'callData could not be parsed. Manual callGasLimit required.'
       );
+    });
+
+    it('should wrap non-Error throw from parseTransaction', async () => {
+      // parseTransaction이 Error 아닌 값을 throw → catch의 non-Error 분기 커버
+      mockParseTransaction.mockImplementationOnce(() => { throw 'string error'; });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '33'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setCallData('0xSomeCallData');
+
+      await expect(builder.autoFillUserOp()).rejects.toThrow(
+        'callData could not be parsed. Manual callGasLimit required.'
+      );
+    });
+  });
+
+  describe('getUserOp - zero address validation', () => {
+    it('should throw when sender is zero address (default)', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      // Don't set sender — applyDefaults sets it to ZeroAddress
+
+      expect(() => builder.getUserOp()).toThrow(
+        'Sender is not set or is zero address'
+      );
+    });
+
+    it('should throw when sender is explicitly set to zero address', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x0000000000000000000000000000000000000000');
+
+      expect(() => builder.getUserOp()).toThrow(
+        'Sender is not set or is zero address'
+      );
+    });
+  });
+
+  describe('updateUserOpCallDataForPaymasterERC20 - additional cases', () => {
+    it('should throw when callData function is not execute or executeBatch', () => {
+      mockParseTransaction.mockReturnValue({
+        name: 'someOtherFunction',
+        args: {},
+        fragment: { inputs: [] },
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setCallData('0x1234');
+
+      expect(() =>
+        builder.updateUserOpCallDataForPaymasterERC20(
+          '0x' + '22'.repeat(20),
+          '0x' + '33'.repeat(20),
+          BigInt(1000)
+        )
+      ).toThrow('Call data is not a valid ZkapAccount function call');
+    });
+
+    it('should update call data for ERC20 paymaster with executeBatch (array style)', () => {
+      mockParseTransaction.mockReturnValue({
+        name: 'executeBatch',
+        args: [
+          ['0x' + '11'.repeat(20)],
+          [BigInt(0)],
+          ['0x1234'],
+        ],
+        fragment: { inputs: [{}, {}, {}] },
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setCallData('0xBatchCallData');
+
+      builder.updateUserOpCallDataForPaymasterERC20(
+        '0x' + '55'.repeat(20),
+        '0x' + '66'.repeat(20),
+        BigInt(1000)
+      );
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callData).toBeDefined();
+    });
+
+    it('should update call data for ERC20 paymaster with executeBatch (tuple/calls style)', () => {
+      mockParseTransaction.mockReturnValue({
+        name: 'executeBatch',
+        args: [
+          [
+            { target: '0x' + '11'.repeat(20), value: BigInt(0), data: '0x1234' },
+          ],
+        ],
+        fragment: { inputs: [{}] },
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setCallData('0xBatchCallData');
+
+      builder.updateUserOpCallDataForPaymasterERC20(
+        '0x' + '55'.repeat(20),
+        '0x' + '66'.repeat(20),
+        BigInt(1000)
+      );
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callData).toBeDefined();
     });
   });
 

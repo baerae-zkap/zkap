@@ -42,7 +42,7 @@ export class ZkapCreator extends ZkapBuilder {
   }
 
   async deriveZkapAddress(): Promise<string> {
-    if (this.address != ethers.ZeroAddress) return this.address;
+    if (this.address !== ethers.ZeroAddress) return this.address;
     const zkapFactory = new ZkapFactoryBuilder(this.zkapFactory, this.enUrl);
     const zkapAddress = await zkapFactory.calcAccountAddress(
       this.salt,
@@ -54,9 +54,4 @@ export class ZkapCreator extends ZkapBuilder {
     return zkapAddress;
   }
 
-  // async completeUserOp(): Promise<this> {
-  //   await this.deriveZkapAddress();
-  //   await super.completeUserOp();
-  //   return this;
-  // }
 }

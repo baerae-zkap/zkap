@@ -43,11 +43,6 @@ jest.mock('ethers', () => {
   };
 });
 
-// Mock ABIs
-jest.mock('../../resources/abis', () => ({
-  ZkapAccountABIstring: '[]',
-  ZkapAccountFactoryABIstring: '[]',
-}));
 
 import { ZkapCreator, ZkapCreatorInfo } from '../ZkapCreator';
 import { ZkapFactoryBuilder } from '../ZkapFactoryBuilder';

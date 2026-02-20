@@ -46,13 +46,13 @@ describe('OneInchAggregator', () => {
     it('should fetch allowance successfully', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ allowance: 1000000 }),
+        json: () => Promise.resolve({ allowance: '1000000' }),
       });
 
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
       const result = await aggregator.checkAllowance('0xToken', '0xWallet');
 
-      expect(result).toBe(1000000);
+      expect(result).toBe('1000000');
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/approve/allowance'),
         expect.objectContaining({
@@ -76,38 +76,33 @@ describe('OneInchAggregator', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null on HTTP error', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+    it('should throw on HTTP error', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
+        status: 401,
         statusText: 'Unauthorized',
       });
 
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
-      const result = await aggregator.checkAllowance('0xToken', '0xWallet');
-
-      expect(result).toBeNull();
-      consoleSpy.mockRestore();
+      await expect(aggregator.checkAllowance('0xToken', '0xWallet')).rejects.toThrow(
+        'Error fetching allowance: 401 Unauthorized'
+      );
     });
 
-    it('should return null on fetch error', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+    it('should propagate fetch error', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
-      const result = await aggregator.checkAllowance('0xToken', '0xWallet');
-
-      expect(result).toBeNull();
-      consoleSpy.mockRestore();
+      await expect(aggregator.checkAllowance('0xToken', '0xWallet')).rejects.toThrow('Network error');
     });
   });
 
   describe('getApprovalTxData', () => {
     it('should fetch approval transaction data successfully', async () => {
       const mockTx = {
-        to: '0xTokenContract',
+        to: '0x1111111111111111111111111111111111111111',
         value: '0',
-        data: '0xapproveData',
+        data: '0xabcd1234',
       };
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -118,16 +113,16 @@ describe('OneInchAggregator', () => {
       const result = await aggregator.getApprovalTxData('0xToken', '1000000');
 
       expect(result).toEqual({
-        contractAddress: '0xTokenContract',
+        contractAddress: '0x1111111111111111111111111111111111111111',
         value: '0',
-        data: '0xapproveData',
+        data: '0xabcd1234',
       });
     });
 
     it('should fetch approval without amount', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ to: '0x1', value: '0', data: '0x' }),
+        json: () => Promise.resolve({ to: '0x2222222222222222222222222222222222222222', value: '0', data: '0x' }),
       });
 
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
@@ -154,6 +149,26 @@ describe('OneInchAggregator', () => {
 
       consoleSpy.mockRestore();
     });
+
+    it('should throw when response to address is invalid', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ to: 'not-an-address', value: '0', data: '0x' }),
+      });
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      await expect(aggregator.getApprovalTxData('0xToken', '100'))
+        .rejects.toThrow("Invalid approval response: 'to' is not a valid address");
+    });
+
+    it('should throw when response data is not valid hex', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ to: '0x1111111111111111111111111111111111111111', value: '0', data: 'not-hex' }),
+      });
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      await expect(aggregator.getApprovalTxData('0xToken', '100'))
+        .rejects.toThrow('Invalid approval response: data is not valid hex');
+    });
   });
 
   describe('getSwapTxData', () => {
@@ -168,9 +183,9 @@ describe('OneInchAggregator', () => {
     it('should fetch swap transaction data successfully', async () => {
       const mockTx = {
         tx: {
-          to: '0xRouterContract',
+          to: '0x3333333333333333333333333333333333333333',
           value: '0',
-          data: '0xswapData',
+          data: '0xdead1234',
         },
       };
       mockFetch.mockResolvedValueOnce({
@@ -182,16 +197,16 @@ describe('OneInchAggregator', () => {
       const result = await aggregator.getSwapTxData(mockSwapParams);
 
       expect(result).toEqual({
-        contractAddress: '0xRouterContract',
+        contractAddress: '0x3333333333333333333333333333333333333333',
         value: '0',
-        data: '0xswapData',
+        data: '0xdead1234',
       });
     });
 
     it('should include swap params in URL', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ tx: { to: '0x', value: '0', data: '0x' } }),
+        json: () => Promise.resolve({ tx: { to: '0x4444444444444444444444444444444444444444', value: '0', data: '0x' } }),
       });
 
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
@@ -204,8 +219,7 @@ describe('OneInchAggregator', () => {
       expect(calledUrl).toContain('from=0xSender');
     });
 
-    it('should return error object on 400 status', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+    it('should throw on 400 status', async () => {
       const errorData = { error: 'Insufficient liquidity' };
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -214,10 +228,9 @@ describe('OneInchAggregator', () => {
       });
 
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
-      const result = await aggregator.getSwapTxData(mockSwapParams);
 
-      expect(result).toEqual({ error: errorData });
-      consoleSpy.mockRestore();
+      await expect(aggregator.getSwapTxData(mockSwapParams))
+        .rejects.toThrow('1inch API error (400):');
     });
 
     it('should throw on non-400 HTTP error', async () => {
@@ -233,10 +246,30 @@ describe('OneInchAggregator', () => {
         .rejects.toThrow('HTTP Error! Status: 500 - Internal Server Error');
     });
 
+    it('should throw when swap response to address is invalid', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ tx: { to: 'not-an-address', value: '0', data: '0x' } }),
+      });
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      await expect(aggregator.getSwapTxData(mockSwapParams))
+        .rejects.toThrow("Invalid swap response: 'to' is not a valid address");
+    });
+
+    it('should throw when swap response data is not valid hex', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ tx: { to: '0x3333333333333333333333333333333333333333', value: '0', data: 'not-hex' } }),
+      });
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      await expect(aggregator.getSwapTxData(mockSwapParams))
+        .rejects.toThrow('Invalid swap response: data is not valid hex');
+    });
+
     it('should use correct headers', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ tx: { to: '0x', value: '0', data: '0x' } }),
+        json: () => Promise.resolve({ tx: { to: '0x5555555555555555555555555555555555555555', value: '0', data: '0x' } }),
       });
 
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);

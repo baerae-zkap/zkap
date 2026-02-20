@@ -37,14 +37,12 @@ describe('SwapBuilder', () => {
       expect(OneInchAggregator).toHaveBeenCalledWith(mockChainId, mockApiKey);
     });
 
-    it('should not create aggregator for unsupported aggregator name', () => {
+    it('should throw for unsupported aggregator name', () => {
       // Clear mock calls
-      (OneInchAggregator as jest.Mock).mockClear();
+      (OneInchAggregator as unknown as jest.Mock).mockClear();
 
-      const builder = new SwapBuilder('unsupported', mockChainId, mockApiKey, mockBundlerAddress);
-
-      // Unsupported aggregators don't create an instance
-      expect(builder).toBeInstanceOf(SwapBuilder);
+      expect(() => new SwapBuilder('unsupported', mockChainId, mockApiKey, mockBundlerAddress))
+        .toThrow('Unsupported aggregator: "unsupported"');
     });
   });
 
@@ -151,7 +149,6 @@ describe('SwapBuilder', () => {
       const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
 
       const result = await builder.getApprovalTxData(
-        '0xSender',
         '0xToken',
         '1000000000000000000'
       );
@@ -163,13 +160,12 @@ describe('SwapBuilder', () => {
       mockGetApprovalTxData.mockResolvedValueOnce({});
 
       const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
-      const sender = '0x' + '11'.repeat(20);
       const token = '0x' + '22'.repeat(20);
       const amount = '999999999';
 
-      await builder.getApprovalTxData(sender, token, amount);
+      await builder.getApprovalTxData(token, amount);
 
-      expect(mockGetApprovalTxData).toHaveBeenCalledWith(token, amount, sender);
+      expect(mockGetApprovalTxData).toHaveBeenCalledWith(token, amount);
     });
 
     it('should propagate aggregator errors', async () => {
@@ -179,7 +175,7 @@ describe('SwapBuilder', () => {
       const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
 
       await expect(
-        builder.getApprovalTxData('0xSender', '0xToken', '100')
+        builder.getApprovalTxData('0xToken', '100')
       ).rejects.toThrow('Token not found');
     });
   });
@@ -189,7 +185,7 @@ describe('SwapBuilder', () => {
       new SwapBuilder('1inch', 137, mockApiKey, mockBundlerAddress);
       expect(OneInchAggregator).toHaveBeenCalledWith(137, mockApiKey);
 
-      (OneInchAggregator as jest.Mock).mockClear();
+      (OneInchAggregator as unknown as jest.Mock).mockClear();
 
       new SwapBuilder('1inch', 8453, mockApiKey, mockBundlerAddress);
       expect(OneInchAggregator).toHaveBeenCalledWith(8453, mockApiKey);

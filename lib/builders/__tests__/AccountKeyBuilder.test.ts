@@ -24,6 +24,7 @@ jest.mock('@levischuck/tiny-cbor', () => ({
     const mockMap = new Map();
     mockMap.set(1, 2); // kty = EC2
     mockMap.set(3, -7); // alg = ES256
+    mockMap.set(-1, 1); // crv = P-256
     mockMap.set(-2, new Uint8Array(32).fill(0xaa)); // x
     mockMap.set(-3, new Uint8Array(32).fill(0xbb)); // y
     return [mockMap, input.length];
@@ -143,9 +144,9 @@ describe('AccountKeyBuilder', () => {
 
       const encoded = builder.getEncodedAddressKeyInitData(addressKeyData);
 
+      // raw abi.encode(address) — no function selector
       expect(encoded).toMatch(/^0x/);
-      // initialize(address) selector is 0xc4d66de8
-      expect(encoded.slice(0, 10)).toBe('0xc4d66de8');
+      expect(encoded.length).toBe(66); // 0x + 64 hex chars (32 bytes)
     });
   });
 
@@ -211,6 +212,26 @@ describe('AccountKeyBuilder', () => {
 
       expect(encoded1).not.toBe(encoded2);
     });
+
+    it('should throw when x coordinate is zero', () => {
+      const builder = new AccountKeyBuilder();
+      // x = 0, y = non-zero
+      const pubkey = '0x04' + '00'.repeat(32) + 'bb'.repeat(32);
+
+      expect(() => builder.getEncodedSecp256k1Key(pubkey)).toThrow(
+        'Invalid public key: x and y coordinates must be non-zero'
+      );
+    });
+
+    it('should throw when y coordinate is zero', () => {
+      const builder = new AccountKeyBuilder();
+      // x = non-zero, y = 0
+      const pubkey = '0x04' + 'aa'.repeat(32) + '00'.repeat(32);
+
+      expect(() => builder.getEncodedSecp256k1Key(pubkey)).toThrow(
+        'Invalid public key: x and y coordinates must be non-zero'
+      );
+    });
   });
 
   describe('getEncodedSecp256r1Key', () => {
@@ -222,6 +243,24 @@ describe('AccountKeyBuilder', () => {
       const encoded = builder.getEncodedSecp256r1Key(pubkey);
 
       expect(encoded).toMatch(/^0x/);
+    });
+
+    it('should throw when x coordinate is zero', () => {
+      const builder = new AccountKeyBuilder();
+      const pubkey = '0x04' + '00'.repeat(32) + 'ff'.repeat(32);
+
+      expect(() => builder.getEncodedSecp256r1Key(pubkey)).toThrow(
+        'Invalid public key: x and y coordinates must be non-zero'
+      );
+    });
+
+    it('should throw when y coordinate is zero', () => {
+      const builder = new AccountKeyBuilder();
+      const pubkey = '0x04' + 'ee'.repeat(32) + '00'.repeat(32);
+
+      expect(() => builder.getEncodedSecp256r1Key(pubkey)).toThrow(
+        'Invalid public key: x and y coordinates must be non-zero'
+      );
     });
   });
 
@@ -296,9 +335,9 @@ describe('AccountKeyBuilder', () => {
 
       const encoded = builder.getEncodedZkOAuthRS256KeyInitData(zkOAuthKeyData);
 
+      // raw abi.encode(bytes, address) — no function selector
       expect(encoded).toMatch(/^0x/);
-      // initialize(bytes,address) selector is 0xcce2df03
-      expect(encoded.slice(0, 10)).toBe('0xcce2df03');
+      expect(encoded.length).toBeGreaterThan(10);
     });
 
     it('should handle different n and k values', () => {
@@ -340,9 +379,44 @@ describe('AccountKeyBuilder', () => {
 
       const encoded = builder.getEncodedWebAuthnKeyInitData(webAuthnKeyData);
 
+      // raw abi.encode(bytes, bytes32, bytes, bool) — no function selector
       expect(encoded).toMatch(/^0x/);
-      // initialize(bytes,bytes32,bytes) selector is 0x5fca9cbd
-      expect(encoded.slice(0, 10)).toBe('0x5fca9cbd');
+      expect(encoded.length).toBeGreaterThan(10);
+    });
+
+    it('should encode WebAuthn key init data with requireUV=true', () => {
+      const builder = new AccountKeyBuilder();
+      const credentialPubkey = '0x' + 'aa'.repeat(77);
+
+      const webAuthnKeyData: WebAuthnKeyData = {
+        credentialPubkey,
+        credentialId: 'credential-id-123',
+        rpIdHash: '0x' + 'bb'.repeat(32),
+        origin: 'https://example.com',
+        requireUV: true,
+      };
+
+      const encoded = builder.getEncodedWebAuthnKeyInitData(webAuthnKeyData);
+      expect(encoded).toMatch(/^0x/);
+    });
+
+    it('should throw when public key is not EC2 in getEncodedWebAuthnKeyInitData', () => {
+      const { decodePartialCBOR } = require('@levischuck/tiny-cbor');
+      (decodePartialCBOR as jest.Mock).mockImplementationOnce((input: Uint8Array) => {
+        const mockMap = new Map();
+        mockMap.set(1, 1); // kty = OKP (not EC2)
+        return [mockMap, input.length];
+      });
+
+      const builder = new AccountKeyBuilder();
+      const webAuthnKeyData: WebAuthnKeyData = {
+        credentialPubkey: '0x' + 'aa'.repeat(77),
+        credentialId: 'credential-id',
+        rpIdHash: '0x' + 'bb'.repeat(32),
+        origin: 'https://example.com',
+      };
+
+      expect(() => builder.getEncodedWebAuthnKeyInitData(webAuthnKeyData)).toThrow('Not EC2');
     });
   });
 
@@ -361,6 +435,41 @@ describe('AccountKeyBuilder', () => {
       );
 
       expect(encoded).toMatch(/^0x/);
+    });
+
+    it('should encode WebAuthn key with requireUV=true', () => {
+      const builder = new AccountKeyBuilder();
+      const credentialPubkey = '0x' + 'cc'.repeat(77);
+
+      const encoded = builder.getEncodedWebAuthnKey(
+        credentialPubkey,
+        'credential-id',
+        '0x' + 'dd'.repeat(32),
+        'https://example.com',
+        true
+      );
+
+      expect(encoded).toMatch(/^0x/);
+    });
+
+    it('should throw when public key is not EC2 in getEncodedWebAuthnKey', () => {
+      const { decodePartialCBOR } = require('@levischuck/tiny-cbor');
+      (decodePartialCBOR as jest.Mock).mockImplementationOnce((input: Uint8Array) => {
+        const mockMap = new Map();
+        mockMap.set(1, 1); // kty = OKP (not EC2)
+        return [mockMap, input.length];
+      });
+
+      const builder = new AccountKeyBuilder();
+
+      expect(() =>
+        builder.getEncodedWebAuthnKey(
+          '0x' + 'cc'.repeat(77),
+          'credential-id',
+          '0x' + 'dd'.repeat(32),
+          'https://example.com'
+        )
+      ).toThrow('Not EC2');
     });
   });
 
@@ -536,115 +645,19 @@ describe('AccountKeyBuilder', () => {
       const builder = new AccountKeyBuilder();
       const keyInfoList: KeyInfo[] = [
         {
-          keyType: PrimitiveAccountKeyTypes.keyWebAuthn, // WebAuthn not supported in setEncodedInitData
+          keyType: PrimitiveAccountKeyTypes.keySecp256k1, // Secp256k1 not supported in setEncodedInitData
           logicContract: mockLogicContract,
           weight: 1,
-          keyData: {
-            credentialPubkey: '0x' + 'aa'.repeat(77),
-            credentialId: 'cred-id',
-            rpIdHash: '0x' + 'bb'.repeat(32),
-            origin: 'https://test.com',
-          } as WebAuthnKeyData,
+          keyData: {} as any,
         },
       ];
 
       expect(() => builder.setEncodedInitData(1, keyInfoList)).toThrow(
-        'Unsupported key type: 4'
+        'Unsupported key type: 2'
       );
     });
   });
 
-  describe('getDecodedKeyTypes', () => {
-    it('should decode address key type from encoded data', () => {
-      const builder = new AccountKeyBuilder();
-
-      // First encode some address keys
-      const keyInfoList: KeyInfo[] = [
-        {
-          keyType: PrimitiveAccountKeyTypes.keyAddress,
-          logicContract: mockLogicContract,
-          weight: 1,
-          keyData: { signerAddress: mockAddress } as AddressKeyData,
-        },
-      ];
-
-      const encoded = builder.setEncodedKeyData(1, keyInfoList);
-      const keyTypes = builder.getDecodedKeyTypes(encoded);
-
-      expect(keyTypes).toEqual([PrimitiveAccountKeyTypes.keyAddress]);
-    });
-
-    it('should decode multiple key types', () => {
-      const builder = new AccountKeyBuilder();
-
-      // Using Address and WebAuthn keys which have matching encode/decode selectors
-      const keyInfoList: KeyInfo[] = [
-        {
-          keyType: PrimitiveAccountKeyTypes.keyAddress,
-          logicContract: mockLogicContract,
-          weight: 1,
-          keyData: { signerAddress: mockAddress } as AddressKeyData,
-        },
-        {
-          keyType: PrimitiveAccountKeyTypes.keyWebAuthn,
-          logicContract: '0x' + '99'.repeat(20),
-          weight: 2,
-          keyData: {
-            credentialPubkey: '0x' + 'aa'.repeat(77),
-            credentialId: 'cred-id',
-            rpIdHash: '0x' + 'bb'.repeat(32),
-            origin: 'https://test.com',
-          } as WebAuthnKeyData,
-        },
-      ];
-
-      const encoded = builder.setEncodedKeyData(2, keyInfoList);
-      const keyTypes = builder.getDecodedKeyTypes(encoded);
-
-      expect(keyTypes).toEqual([
-        PrimitiveAccountKeyTypes.keyAddress,
-        PrimitiveAccountKeyTypes.keyWebAuthn,
-      ]);
-    });
-
-    it('should decode WebAuthn key type', () => {
-      const builder = new AccountKeyBuilder();
-
-      const keyInfoList: KeyInfo[] = [
-        {
-          keyType: PrimitiveAccountKeyTypes.keyWebAuthn,
-          logicContract: mockLogicContract,
-          weight: 1,
-          keyData: {
-            credentialPubkey: '0x' + 'aa'.repeat(77),
-            credentialId: 'cred-id',
-            rpIdHash: '0x' + 'bb'.repeat(32),
-            origin: 'https://test.com',
-          } as WebAuthnKeyData,
-        },
-      ];
-
-      const encoded = builder.setEncodedKeyData(1, keyInfoList);
-      const keyTypes = builder.getDecodedKeyTypes(encoded);
-
-      expect(keyTypes).toEqual([PrimitiveAccountKeyTypes.keyWebAuthn]);
-    });
-
-    it('should throw for unsupported selector', () => {
-      const builder = new AccountKeyBuilder();
-
-      // Create encoded data with an invalid selector
-      const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-      const invalidEncoded = abiCoder.encode(
-        ['uint8', 'address[]', 'bytes[]', 'uint8[]'],
-        [1, [mockLogicContract], ['0xdeadbeef' + '00'.repeat(28)], [1]]
-      );
-
-      expect(() => builder.getDecodedKeyTypes(invalidEncoded)).toThrow(
-        'Unsupported key type: 0xdeadbeef'
-      );
-    });
-  });
 
   describe('getEncodedKey', () => {
     it('should return empty string for uninitialized builder', () => {
@@ -689,9 +702,8 @@ describe('AccountKeyBuilder', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle zero threshold with no keys', () => {
-      const builder = new AccountKeyBuilder(0, []);
-      expect(builder.getEncodedKey()).not.toBe('');
+    it('should throw when threshold is zero', () => {
+      expect(() => new AccountKeyBuilder(0, [])).toThrow("Threshold must be greater than 0");
     });
 
     it('should handle large weight values', () => {
@@ -732,9 +744,6 @@ describe('AccountKeyBuilder', () => {
 
       const builder = new AccountKeyBuilder(2, keys);
       expect(builder.getEncodedKey()).not.toBe('');
-
-      const keyTypes = builder.getDecodedKeyTypes(builder.getEncodedKey());
-      expect(keyTypes.length).toBe(3);
     });
 
     it('should handle empty commitment in ZkOAuthRS256KeyData', () => {
