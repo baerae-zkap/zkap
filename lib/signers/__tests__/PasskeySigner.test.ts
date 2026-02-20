@@ -127,15 +127,11 @@ describe('PasskeySigner', () => {
     });
 
     it('should handle error and rethrow', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       const error = new Error('WebAuthn error');
       const failingMock = jest.fn().mockRejectedValue(error);
       const signer = new PasskeySigner(mockCredentialId, failingMock);
 
       await expect(signer.signUserOpHash(mockUserOpHash)).rejects.toThrow('WebAuthn error');
-      expect(consoleSpy).toHaveBeenCalledWith(error);
-
-      consoleSpy.mockRestore();
     });
   });
 

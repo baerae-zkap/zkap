@@ -26,10 +26,8 @@ describe('AddressKeySigner', () => {
       expect(signer.keyTypes).toEqual([PrimitiveAccountKeyTypes.keyAddress]);
     });
 
-    it('should accept empty private keys array', () => {
-      const signer = new AddressKeySigner([]);
-
-      expect(signer.keyTypes).toEqual([PrimitiveAccountKeyTypes.keyAddress]);
+    it('should throw for empty private keys array', () => {
+      expect(() => new AddressKeySigner([])).toThrow('privateKeys must be a non-empty array');
     });
   });
 
@@ -55,12 +53,8 @@ describe('AddressKeySigner', () => {
       expect(signatures[0]).not.toBe(signatures[1]); // Different keys produce different sigs
     });
 
-    it('should return empty array for empty private keys', async () => {
-      const signer = new AddressKeySigner([]);
-
-      const signatures = await signer.signUserOpHash(mockUserOpHash);
-
-      expect(signatures).toEqual([]);
+    it('should throw when constructed with empty private keys array', async () => {
+      expect(() => new AddressKeySigner([])).toThrow('privateKeys must be a non-empty array');
     });
 
     it('should produce consistent signatures for same input', async () => {
@@ -91,6 +85,24 @@ describe('AddressKeySigner', () => {
 
       // Ethereum signature is 65 bytes (r:32 + s:32 + v:1) = 130 hex chars + '0x'
       expect(signatures[0].length).toBe(132);
+    });
+  });
+
+  describe('destroy', () => {
+    const mockHash = '0x' + 'ab'.repeat(32);
+
+    it('should clear private keys after destroy', () => {
+      const signer = new AddressKeySigner([TEST_PRIVATE_KEY_1, TEST_PRIVATE_KEY_2]);
+      signer.destroy();
+
+      // 내부 privateKeys가 비어있어 서명 시 빈 배열 반환
+      return expect(signer.signUserOpHash(mockHash)).resolves.toEqual([]);
+    });
+
+    it('should be callable multiple times without error', () => {
+      const signer = new AddressKeySigner([TEST_PRIVATE_KEY_1]);
+      signer.destroy();
+      expect(() => signer.destroy()).not.toThrow();
     });
   });
 });
