@@ -95,6 +95,15 @@ describe('OneInchAggregator', () => {
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
       await expect(aggregator.checkAllowance('0xToken', '0xWallet')).rejects.toThrow('Network error');
     });
+
+    it('should throw timeout error when checkAllowance is aborted', async () => {
+      const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      await expect(aggregator.checkAllowance('0xToken', '0xWallet'))
+        .rejects.toThrow('Request timed out after 30000ms');
+    });
   });
 
   describe('getApprovalTxData', () => {
@@ -168,6 +177,29 @@ describe('OneInchAggregator', () => {
       const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
       await expect(aggregator.getApprovalTxData('0xToken', '100'))
         .rejects.toThrow('Invalid approval response: data is not valid hex');
+    });
+
+    it('should default value to "0" when approval response has no value field', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          to: '0x1111111111111111111111111111111111111111',
+          data: '0xabcd1234',
+        }),
+      });
+
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      const result = await aggregator.getApprovalTxData('0xToken', '100');
+      expect(result.value).toBe('0');
+    });
+
+    it('should throw timeout error when getApprovalTxData is aborted', async () => {
+      const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      await expect(aggregator.getApprovalTxData('0xToken', '100'))
+        .rejects.toThrow('Request timed out after 30000ms');
     });
   });
 
@@ -278,6 +310,31 @@ describe('OneInchAggregator', () => {
       const calledHeaders = mockFetch.mock.calls[0][1].headers;
       expect(calledHeaders.Authorization).toBe(`Bearer ${mockApiKey}`);
       expect(calledHeaders.accept).toBe('application/json');
+    });
+
+    it('should default value to "0" when swap response has no tx.value', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          tx: {
+            to: '0x3333333333333333333333333333333333333333',
+            data: '0xdead1234',
+          },
+        }),
+      });
+
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      const result = await aggregator.getSwapTxData(mockSwapParams);
+      expect(result.value).toBe('0');
+    });
+
+    it('should throw timeout error when getSwapTxData is aborted', async () => {
+      const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const aggregator = new OneInchAggregator(mockChainId, mockApiKey);
+      await expect(aggregator.getSwapTxData(mockSwapParams))
+        .rejects.toThrow('Request timed out after 30000ms');
     });
   });
 });

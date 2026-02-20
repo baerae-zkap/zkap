@@ -526,5 +526,33 @@ describe('PaymasterService', () => {
       expect(typeof body2.id).toBe('number');
       expect(body2.id).toBeGreaterThanOrEqual(0);
     });
+
+    it('should throw timeout error when fetch is aborted', async () => {
+      const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Paymaster request timed out after 30000ms');
+    });
+
+    it('should rethrow non-abort fetch errors', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Connection refused');
+    });
+
+    it('should stringify non-object API error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ error: 'unauthorized' }),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Paymaster data error: "unauthorized"');
+    });
   });
 });

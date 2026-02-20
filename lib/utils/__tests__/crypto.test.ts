@@ -422,6 +422,12 @@ describe('crypto', () => {
       expect(typeof result).toBe('string');
       expect(result.length % 64).toBe(0);
     });
+
+    it('should throw when keys array is empty', () => {
+      const jwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature';
+      expect(() => cryptoUtils.getOutOfCircuitHashSegment(jwt, []))
+        .toThrow('getOutOfCircuitHashSegment: keys must be a non-empty array');
+    });
   });
 
   describe('padAndStrToFieldsBN254 edge cases', () => {

@@ -491,6 +491,28 @@ describe('ZkapBuilder', () => {
       const userOp = builder.getUserOp();
       expect(userOp.verificationGasLimit).toBeDefined();
     });
+
+    it('should throw when signerKeyTypes is not set before autoFillUserOp', async () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      // No setSignerKeyTypes call
+
+      await expect(builder.autoFillUserOp())
+        .rejects.toThrow('signerKeyTypes is not set');
+    });
+
+    it('should skip temp verificationGasLimit if already pre-set', async () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([4]);
+      builder.setCallData('0x1234');
+      builder.setVerificationGasLimit('0x100000'); // Pre-set before autoFill
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(userOp.verificationGasLimit).toBeDefined();
+    });
   });
 
   describe('getUserOpHashForPaymaster', () => {
