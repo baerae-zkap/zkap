@@ -6,4 +6,11 @@ export interface SwapParams {
   slippage?: number; // Maximum acceptable slippage percentage
   disableEstimate?: boolean; // Whether to disable estimation
   allowPartialFill?: boolean; // Whether partial fill of the order is allowed
+  origin?: string; // Referral address passed to 1inch (e.g. bundler address)
+}
+
+export interface SwapTxData {
+  contractAddress: string;
+  value: string;
+  data: string;
 }

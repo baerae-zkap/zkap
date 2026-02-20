@@ -28,6 +28,7 @@ export type WebAuthnKeyData = {
   credentialId: string;
   rpIdHash: string;
   origin: string;
+  requireUV?: boolean;
 };
 
 export type OAuthRS256KeyData = {
@@ -83,6 +84,7 @@ export type WebAuthnKeyInfo = {
   credentialId: string;
   rpIdHash: string;
   origin: string;
+  requireUV?: boolean;
 };
 
 export type OAuthRS256KeyInfo = {

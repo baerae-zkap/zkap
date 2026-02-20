@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-02-20
+
+### BREAKING CHANGES
+
+- **IUserOpSigner**: `keyTypes` property is now optional (`keyTypes?: number[]`)
+  - **Impact**: None for consumers using built-in signers (PasskeySigner, ZkPasskeySigner, ZkOidcSigner, AddressKeySigner) — all still expose `keyTypes`
+  - **Impact**: External custom `IUserOpSigner` implementations no longer required to declare `keyTypes`
+  - **Migration**: If your code reads `signer.keyTypes`, add a fallback: `signer.keyTypes ?? []`
+
+- **BaseAccountBuilder**: Constructor now rejects `chainId <= 0`
+  - **Impact**: Code using `chainId = 0` as a placeholder will throw at runtime
+  - **Migration**: Use a valid EVM chain ID (e.g., `1` for Ethereum mainnet, `31337` for Hardhat local)
+
+- **OneInchAggregator**: `allowance` field type changed from `number | null` to `string | null`
+  - **Impact**: TypeScript consumers accessing `allowance` as a number will get type errors
+  - **Migration**: Parse with `BigInt(allowance)` instead of using numeric operations
+
+### Changed
+
+- **PaymasterService**: HTTPS enforcement — HTTP URLs now rejected except for `localhost` and `127.0.0.1`
+  - **Impact**: Staging environments using `http://` non-local URLs will throw
+  - **Migration**: Use HTTPS for remote paymaster URLs, or update to a localhost URL for local testing
+
+- **ZkPasskeySigner**: `proofServerUrl` HTTPS enforcement — same localhost exception applies
+
+### Refactored (non-breaking)
+
+- **ZkPasskeySigner**: `getSignatures()` 1/2/3-slot branching replaced with generic pad-to-3 loop (behavior unchanged)
+- **ZkPasskeySigner**: `BN254_FR` constant now imported from `utils/crypto` instead of re-declared inline
+- **ZkOidcSigner**: `validateBN254Field()` helper extracted; `sharedInputs` type + range checks combined into one pass
+- **ZkOidcSigner**: Error message for `sharedInputs` out-of-range standardized to "BN254 scalar field range"
+
 ## [0.0.25] - 2026-02-06
 
 ### BREAKING CHANGES
