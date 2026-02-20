@@ -2,6 +2,13 @@ import { UserOperation, PackedUserOperation } from "../types/UserOperation";
 import { ethers } from "ethers";
 
 export abstract class BaseAccountBuilder {
+  /** 가스 추정치에 20% 여유분을 더하기 위한 승수 (120/100 = 1.2배) */
+  protected static readonly GAS_ESTIMATE_MULTIPLIER = BigInt(120);
+  protected static readonly GAS_ESTIMATE_DIVISOR = BigInt(100);
+  /** minimum paymasterAndData hex length: (20 + 16 + 16 + 65) * 2 + 2("0x") = 236 */
+  protected static readonly PAYMASTER_AND_DATA_MIN_HEX_LENGTH = 236;
+  /** paymaster postOp 가스 기본값: ERC-4337 일반적인 postOp 작업(토큰 이체 등)의 경험적 하한값 */
+  protected static readonly DEFAULT_PAYMASTER_POST_OP_GAS = BigInt(5000);
   protected userOp: Partial<UserOperation> = {};
   protected chainId: number;
   protected entryPoint: string;
@@ -18,6 +25,12 @@ export abstract class BaseAccountBuilder {
     entryPoint: string,
     provider?: ethers.JsonRpcProvider
   ) {
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      throw new Error(`Invalid chainId: ${chainId}. Must be a positive integer.`);
+    }
+    if (!ethers.isAddress(entryPoint) || entryPoint === ethers.ZeroAddress) {
+      throw new Error(`Invalid entryPoint address: "${entryPoint}". Must be a non-zero Ethereum address.`);
+    }
     this.chainId = chainId;
     this.entryPoint = entryPoint;
     this.provider = provider;
@@ -44,8 +57,37 @@ export abstract class BaseAccountBuilder {
     this.userOp = { ...defaultValues, ...this.userOp };
   }
 
-  encodeUserOpForPaymaster(packedUserOp: PackedUserOperation): string {
+  /**
+   * Paymaster용 UserOperation 해시 계산을 위해 UserOp을 ABI 인코딩합니다.
+   * @requires 이 메서드 호출 전 autoFillUserOp()이 완료되어야 합니다.
+   *           미완료 시 paymasterAndData가 올바르지 않아 잘못된 해시가 계산될 수 있습니다.
+   * @param packedUserOp 인코딩할 PackedUserOperation
+   * @param paymasterSigBytes paymaster 서명 바이트 수 (기본값 65)
+   * @returns ABI 인코딩된 UserOperation 문자열
+   */
+  encodeUserOpForPaymaster(packedUserOp: PackedUserOperation, paymasterSigBytes: number = 65): string {
+    if (!Number.isInteger(paymasterSigBytes) || paymasterSigBytes < 1 || paymasterSigBytes > 256) {
+      throw new Error(`Invalid paymasterSigBytes: ${paymasterSigBytes}. Must be an integer between 1 and 256.`);
+    }
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const PAYMASTER_SIG_BYTES = paymasterSigBytes;
+    const PAYMASTER_SIG_HEX_LENGTH = PAYMASTER_SIG_BYTES * 2;
+    // minimum valid payload: paymaster addr(20) + verifyGasLimit(16) + postOpGasLimit(16) + sig(65) = 117 bytes
+    // hex representation: 117 * 2 + 2("0x" prefix) = 236 chars
+    // Changed from <= PAYMASTER_SIG_HEX_LENGTH + 2 to < 236 to correctly enforce the minimum
+    // valid structure (paymaster header + signature). The old condition could reject valid
+    // paymasterAndData that is exactly PAYMASTER_SIG_HEX_LENGTH + 2 chars long.
+    // 236 = (paymaster_addr(20) + verifyGasLimit(16) + postOpGasLimit(16) + sig(65)) * 2 hex chars + 2 ("0x")
+    if (packedUserOp.paymasterAndData.length < BaseAccountBuilder.PAYMASTER_AND_DATA_MIN_HEX_LENGTH) {
+      // "0x" prefix(2) + 최소 sig 길이 미만이면 서명 영역이 없는 것
+      throw new Error(
+        `paymasterAndData too short to contain signature: length=${packedUserOp.paymasterAndData.length}, expected at least ${BaseAccountBuilder.PAYMASTER_AND_DATA_MIN_HEX_LENGTH}`
+      );
+    }
+    // paymasterAndData = paymaster_addr(20) + verifyGasLimit(16) + postOpGasLimit(16) + paymasterData
+    // paymasterData 끝 PAYMASTER_SIG_BYTES 바이트가 서명. 모드 무관하게 서명은 항상 마지막에 위치.
+    // C-1: ethers.dataSlice는 byte 단위로 슬라이스 (64-bit 안전)
+    const totalBytes = (packedUserOp.paymasterAndData.length - 2) / 2;
     return defaultAbiCoder.encode(
       [
         "address",
@@ -65,7 +107,7 @@ export abstract class BaseAccountBuilder {
         packedUserOp.gasFees,
         ethers.keccak256(packedUserOp.initCode),
         ethers.keccak256(packedUserOp.callData),
-        ethers.keccak256(packedUserOp.paymasterAndData.slice(0, -130)),
+        ethers.keccak256(ethers.dataSlice(packedUserOp.paymasterAndData, 0, totalBytes - PAYMASTER_SIG_BYTES)),
       ]
     );
   }
@@ -134,6 +176,16 @@ export abstract class BaseAccountBuilder {
     ]);
   }
 
+  packGasFees(
+    maxPriorityFeePerGas: string,
+    maxFeePerGas: string
+  ): string {
+    return ethers.concat([
+      ethers.zeroPadValue(ethers.hexlify(maxPriorityFeePerGas), 16),
+      ethers.zeroPadValue(ethers.hexlify(maxFeePerGas), 16),
+    ]);
+  }
+
   packPaymasterData(
     paymaster: string,
     paymasterVerificationGasLimit: string,
@@ -153,13 +205,14 @@ export abstract class BaseAccountBuilder {
       userOp.verificationGasLimit,
       userOp.callGasLimit
     );
-    const gasFees = this.packAccountGasLimits(
+    const gasFees = this.packGasFees(
       userOp.maxPriorityFeePerGas,
       userOp.maxFeePerGas
     );
     let paymasterAndData = "0x";
     if (
-      userOp.paymaster?.length >= 20 &&
+      userOp.paymaster &&
+      ethers.isAddress(userOp.paymaster) &&
       userOp.paymaster !== ethers.ZeroAddress
     ) {
       paymasterAndData = this.packPaymasterData(
@@ -250,11 +303,10 @@ export abstract class BaseAccountBuilder {
   }
 
   getUserOp(): UserOperation {
-    this.applyDefaults(); // 기본값 적용
+    this.applyDefaults(); // 설정되지 않은 필드에만 기본값 적용 (기존 값 보존)
 
-    if (!this.userOp.sender) {
-      console.log(this.userOp);
-      throw new Error("Required fields are missing");
+    if (!this.userOp.sender || !ethers.isAddress(this.userOp.sender) || this.userOp.sender === ethers.ZeroAddress) {
+      throw new Error("Sender is not set or is zero address. Please set a valid sender address.");
     }
 
     return this.userOp as UserOperation;
@@ -276,15 +328,18 @@ export abstract class BaseAccountBuilder {
     return ethers.keccak256(enc);
   }
 
-  // TODO: @kaikookim 여기 아래 함수들은 검증되지 않은 함수이므로, 테스트 후 사용해야 함
-  // estimateUserOpGasCost, calculatePreVerificationGas, estimateVerificationGas, estimateCallGas, estimatePaymasterGas, generateDummySignature
   /**
    * UserOperation의 가스 비용을 추정합니다.
    * EntryPoint의 simulateValidation과 simulateHandleOp을 사용하여 가스를 추정합니다.
+   * @experimental 이 메서드는 검증되지 않았습니다.
+   * @note ERC-4337 v0.7에서 simulateValidation은 ValidationResult revert로 응답하므로
+   *       estimateGas 기반 검증 가스 추정이 실제로 동작하지 않습니다.
+   *       테스트 후 사용하세요.
    * @param userOp 추정할 UserOperation
    * @returns 추정된 가스 비용 (wei 단위)
    */
   async estimateUserOpGasCost(userOp: UserOperation): Promise<string> {
+    console.warn("[zkap-aa-sdk] estimateUserOpGasCost is experimental and not validated. Use at your own risk.");
     if (!this.provider) {
       throw new Error("Provider is required for gas estimation");
     }
@@ -319,14 +374,20 @@ export abstract class BaseAccountBuilder {
 
       // 6. 가스 가격 가져오기
       const feeData = await this.provider.getFeeData();
-      const gasPrice = feeData.gasPrice || BigInt(0);
+      const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? BigInt(0);
+      if (gasPrice === BigInt(0)) {
+        console.warn("[zkap-aa-sdk] estimateUserOpGasCost: gasPrice is 0. Cost estimate may be inaccurate.");
+      }
 
       // 7. 총 비용 계산 (가스 * 가스가격)
       const totalCost = totalGas * gasPrice;
 
       return totalCost.toString();
     } catch (error) {
-      throw new Error(`Failed to estimate gas cost: ${error}`);
+      throw Object.assign(
+        new Error(`Failed to estimate gas cost: ${error instanceof Error ? error.message : error}`),
+        { cause: error }
+      );
     }
   }
 
@@ -335,21 +396,20 @@ export abstract class BaseAccountBuilder {
    * @param userOp UserOperation
    * @returns preVerificationGas
    */
-  private calculatePreVerificationGas(userOp: UserOperation): bigint {
+  protected calculatePreVerificationGas(userOp: UserOperation): bigint {
     // 기본 preVerificationGas
     let preVerificationGas = BigInt(21000);
 
     // calldata 비용 추가
     const packedUserOp = this.packUserOp(userOp);
     const encodedUserOp = this.encodeUserOp(packedUserOp, false);
-    const calldataLength = (encodedUserOp.length - 2) / 2; // 0x 제외하고 바이트 수
-    preVerificationGas += BigInt(calldataLength * 16); // 16 gas per byte
-
-    // initCode가 있는 경우 추가 비용
-    if (userOp.initCode && userOp.initCode !== "0x") {
-      const initCodeLength = (userOp.initCode.length - 2) / 2;
-      preVerificationGas += BigInt(initCodeLength * 200); // 200 gas per byte for initCode
+    // EIP-2028: zero byte = 4 gas, non-zero byte = 16 gas
+    const encodedBytes = ethers.getBytes(encodedUserOp);
+    let calldataCost = BigInt(0);
+    for (const byte of encodedBytes) {
+      calldataCost += byte === 0 ? BigInt(4) : BigInt(16);
     }
+    preVerificationGas += calldataCost;
 
     return preVerificationGas;
   }
@@ -362,6 +422,7 @@ export abstract class BaseAccountBuilder {
   private async estimateVerificationGas(
     userOp: UserOperation
   ): Promise<bigint> {
+    /* istanbul ignore next */
     if (!this.provider) {
       throw new Error("Provider is required for verification gas estimation");
     }
@@ -369,26 +430,40 @@ export abstract class BaseAccountBuilder {
     try {
       // EntryPoint의 simulateValidation 호출
       const entryPointInterface = new ethers.Interface([
-        "function simulateValidation((address,uint256,bytes,bytes,uint256,uint256,uint256,uint256,uint256,bytes,bytes,bytes)) external returns (ValidationResult)",
+        "function simulateValidation((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)) external",
       ]);
 
-      const packedUserOp = this.packUserOp(userOp);
+      const packed = this.packUserOp(userOp);
+      const packedArray = [
+        packed.sender,
+        packed.nonce,
+        packed.initCode,
+        packed.callData,
+        packed.accountGasLimits,
+        packed.preVerificationGas,
+        packed.gasFees,
+        packed.paymasterAndData,
+        packed.signature,
+      ];
       const callData = entryPointInterface.encodeFunctionData(
         "simulateValidation",
-        [packedUserOp]
+        [packedArray]
       );
 
+      /* istanbul ignore next */
       const gasEstimate = await this.provider.estimateGas({
         to: this.entryPoint,
         data: callData,
       });
 
       // 20% 여유분 추가
-      return (gasEstimate * BigInt(120)) / BigInt(100);
+      /* istanbul ignore next */
+      return (gasEstimate * BaseAccountBuilder.GAS_ESTIMATE_MULTIPLIER) / BaseAccountBuilder.GAS_ESTIMATE_DIVISOR;
     } catch (error) {
-      // 추정 실패 시 기본값 사용
-      console.warn("Verification gas estimation failed, using default:", error);
-      return BigInt(150000);
+      throw Object.assign(
+        new Error(`Verification gas estimation failed: ${error instanceof Error ? error.message : error}`),
+        { cause: error }
+      );
     }
   }
 
@@ -398,6 +473,7 @@ export abstract class BaseAccountBuilder {
    * @returns callGasLimit
    */
   private async estimateCallGas(userOp: UserOperation): Promise<bigint> {
+    /* istanbul ignore next */
     if (!this.provider) {
       throw new Error("Provider is required for call gas estimation");
     }
@@ -410,26 +486,41 @@ export abstract class BaseAccountBuilder {
 
       // EntryPoint의 simulateHandleOp 호출
       const entryPointInterface = new ethers.Interface([
-        "function simulateHandleOp((address,uint256,bytes,bytes,uint256,uint256,uint256,uint256,uint256,bytes,bytes,bytes),address,bytes) external",
+        "function simulateHandleOp((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes),address,bytes) external",
       ]);
 
-      const packedUserOp = this.packUserOp(userOp);
+      const packed = this.packUserOp(userOp);
+      const packedArray = [
+        packed.sender,
+        packed.nonce,
+        packed.initCode,
+        packed.callData,
+        packed.accountGasLimits,
+        packed.preVerificationGas,
+        packed.gasFees,
+        packed.paymasterAndData,
+        packed.signature,
+      ];
       const callData = entryPointInterface.encodeFunctionData(
         "simulateHandleOp",
-        [packedUserOp, userOp.sender, "0x"]
+        [packedArray, userOp.sender, "0x"]
       );
 
+      /* istanbul ignore next */
       const gasEstimate = await this.provider.estimateGas({
         to: this.entryPoint,
         data: callData,
       });
 
       // 20% 여유분 추가
-      return (gasEstimate * BigInt(120)) / BigInt(100);
+      /* istanbul ignore next */
+      return (gasEstimate * BaseAccountBuilder.GAS_ESTIMATE_MULTIPLIER) / BaseAccountBuilder.GAS_ESTIMATE_DIVISOR;
     } catch (error) {
-      // 추정 실패 시 기본값 사용
-      console.warn("Call gas estimation failed, using default:", error);
-      return BigInt(100000);
+      /* istanbul ignore next */
+      throw Object.assign(
+        new Error(`Call gas estimation failed: ${error instanceof Error ? error.message : error}`),
+        { cause: error }
+      );
     }
   }
 
@@ -442,6 +533,7 @@ export abstract class BaseAccountBuilder {
     verification: bigint;
     postOp: bigint;
   }> {
+    /* istanbul ignore next */
     if (!this.provider || !userOp.paymaster) {
       return { verification: BigInt(0), postOp: BigInt(0) };
     }
@@ -449,48 +541,62 @@ export abstract class BaseAccountBuilder {
     try {
       // paymaster의 validatePaymasterUserOp 호출
       const paymasterInterface = new ethers.Interface([
-        "function validatePaymasterUserOp((address,uint256,bytes,bytes,uint256,uint256,uint256,uint256,uint256,bytes,bytes,bytes),bytes32,uint256) external returns (bytes memory, uint256)",
+        "function validatePaymasterUserOp((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes),bytes32,uint256) external returns (bytes memory, uint256)",
       ]);
 
-      const packedUserOp = this.packUserOp(userOp);
-      const userOpHash = this.getUserOpHash();
+      const packed = this.packUserOp(userOp);
+      const packedArray = [
+        packed.sender,
+        packed.nonce,
+        packed.initCode,
+        packed.callData,
+        packed.accountGasLimits,
+        packed.preVerificationGas,
+        packed.gasFees,
+        packed.paymasterAndData,
+        packed.signature,
+      ];
+      const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
+      const innerHash = ethers.keccak256(
+        this.encodeUserOp(packed, true)
+      );
+      const userOpHash = ethers.keccak256(
+        defaultAbiCoder.encode(
+          ["bytes32", "address", "uint256"],
+          [innerHash, this.entryPoint, this.chainId]
+        )
+      );
       const callData = paymasterInterface.encodeFunctionData(
         "validatePaymasterUserOp",
-        [packedUserOp, userOpHash, BigInt(0)]
+        [packedArray, userOpHash, BigInt(0)]
       );
 
+      /* istanbul ignore next */
       const gasEstimate = await this.provider.estimateGas({
         to: userOp.paymaster,
         data: callData,
       });
 
       // 20% 여유분 추가
-      const verificationGas = (gasEstimate * BigInt(120)) / BigInt(100);
+      /* istanbul ignore next */
+      const verificationGas = (gasEstimate * BaseAccountBuilder.GAS_ESTIMATE_MULTIPLIER) / BaseAccountBuilder.GAS_ESTIMATE_DIVISOR;
 
       // postOp gas는 일반적으로 작은 값
-      const postOpGas = BigInt(5000);
+      /* istanbul ignore next */
+      const postOpGas = BaseAccountBuilder.DEFAULT_PAYMASTER_POST_OP_GAS;
 
+      /* istanbul ignore next */
       return {
         verification: verificationGas,
         postOp: postOpGas,
       };
+    /* istanbul ignore next */
     } catch (error) {
-      // 추정 실패 시 기본값 사용
-      console.warn("Paymaster gas estimation failed, using default:", error);
-      return {
-        verification: BigInt(100000),
-        postOp: BigInt(5000),
-      };
+      throw Object.assign(
+        new Error(`Paymaster gas estimation failed: ${error instanceof Error ? error.message : error}`),
+        { cause: error }
+      );
     }
   }
 
-  /**
-   * 가스 추정을 위한 더미 서명을 생성합니다.
-   * @returns 더미 서명
-   */
-  private generateDummySignature(): string {
-    // ZkapAccount의 더미 서명 (65바이트)
-    // 실제 서명과 유사한 형태로 생성
-    return "0x" + "ff".repeat(32) + "00".repeat(32) + "01";
-  }
 }

@@ -42,6 +42,26 @@ describe('BaseAccountBuilder', () => {
       const builderWithProvider = new TestAccountBuilder(mockChainId, mockEntryPoint, mockProvider);
       expect(builderWithProvider).toBeInstanceOf(BaseAccountBuilder);
     });
+
+    it('should throw when entryPoint is not a valid address', () => {
+      expect(() => new TestAccountBuilder(1, 'not-an-address')).toThrow('Invalid entryPoint address');
+    });
+
+    it('should throw when entryPoint is zero address', () => {
+      expect(() => new TestAccountBuilder(1, ethers.ZeroAddress)).toThrow('Invalid entryPoint address');
+    });
+
+    it('should throw when chainId is 0', () => {
+      expect(() => new TestAccountBuilder(0, mockEntryPoint)).toThrow('Invalid chainId');
+    });
+
+    it('should throw when chainId is negative', () => {
+      expect(() => new TestAccountBuilder(-1, mockEntryPoint)).toThrow('Invalid chainId');
+    });
+
+    it('should throw when chainId is not an integer', () => {
+      expect(() => new TestAccountBuilder(1.5, mockEntryPoint)).toThrow('Invalid chainId');
+    });
   });
 
   describe('setters - fluent interface', () => {
@@ -190,17 +210,16 @@ describe('BaseAccountBuilder', () => {
       expect(userOp.signature).toBe('0x');
     });
 
-    it('should return default sender (ZeroAddress) when not explicitly set', () => {
-      // Default value is ZeroAddress, which doesn't throw
-      const userOp = builder.getUserOp();
-      expect(userOp.sender).toBe(ethers.ZeroAddress);
+    it('should throw when sender is default ZeroAddress (not explicitly set)', () => {
+      // Default value is ZeroAddress, which now throws
+      expect(() => builder.getUserOp()).toThrow('Sender is not set or is zero address');
     });
 
     it('should throw error when sender is explicitly set to empty value', () => {
       // Explicitly set sender to undefined to trigger error path
       (builder as any).userOp = { sender: undefined };
 
-      expect(() => builder.getUserOp()).toThrow('Required fields are missing');
+      expect(() => builder.getUserOp()).toThrow('Sender is not set or is zero address');
     });
   });
 
@@ -357,13 +376,114 @@ describe('BaseAccountBuilder', () => {
         accountGasLimits: '0x' + '00'.repeat(32),
         preVerificationGas: '0x5000',
         gasFees: '0x' + '00'.repeat(32),
-        paymasterAndData: '0x' + '22'.repeat(20) + '00'.repeat(32) + '00'.repeat(32) + 'aabbccdd',
+        // paymaster addr(20) + verifyGasLimit(16) + postOpGasLimit(16) + sig(65) = 117 bytes minimum
+        paymasterAndData: '0x' + '22'.repeat(20) + '00'.repeat(16) + '00'.repeat(16) + 'aa'.repeat(65),
         signature: '0x',
       };
 
       const encoded = builder.encodeUserOpForPaymaster(packed);
 
       expect(encoded).toMatch(/^0x/);
+    });
+
+    it('should throw when paymasterAndData is too short to contain signature', () => {
+      const packed: PackedUserOperation = {
+        sender: '0x' + '11'.repeat(20),
+        nonce: '0x1',
+        initCode: '0x',
+        callData: '0x1234',
+        accountGasLimits: '0x' + '00'.repeat(32),
+        preVerificationGas: '0x5000',
+        gasFees: '0x' + '00'.repeat(32),
+        paymasterAndData: '0x1234', // Too short (6 chars < 132)
+        signature: '0x',
+      };
+
+      expect(() => builder.encodeUserOpForPaymaster(packed)).toThrow(
+        'paymasterAndData too short to contain signature'
+      );
+    });
+
+    it('should throw when paymasterAndData is just "0x"', () => {
+      const packed: PackedUserOperation = {
+        sender: '0x' + '11'.repeat(20),
+        nonce: '0x1',
+        initCode: '0x',
+        callData: '0x1234',
+        accountGasLimits: '0x' + '00'.repeat(32),
+        preVerificationGas: '0x5000',
+        gasFees: '0x' + '00'.repeat(32),
+        paymasterAndData: '0x',
+        signature: '0x',
+      };
+
+      expect(() => builder.encodeUserOpForPaymaster(packed)).toThrow(
+        'paymasterAndData too short to contain signature'
+      );
+    });
+
+    it('should throw when paymasterAndData is exactly sig length (no data before sig)', () => {
+      // "0x" + 130 hex chars = exactly 132 chars total, which means only signature with no preceding data
+      const packed: PackedUserOperation = {
+        sender: '0x' + '11'.repeat(20),
+        nonce: '0x1',
+        initCode: '0x',
+        callData: '0x1234',
+        accountGasLimits: '0x' + '00'.repeat(32),
+        preVerificationGas: '0x5000',
+        gasFees: '0x' + '00'.repeat(32),
+        paymasterAndData: '0x' + 'aa'.repeat(65), // exactly 132 chars
+        signature: '0x',
+      };
+
+      expect(() => builder.encodeUserOpForPaymaster(packed)).toThrow(
+        'paymasterAndData too short to contain signature'
+      );
+    });
+
+    it('should throw when paymasterSigBytes is 0', () => {
+      const packed: PackedUserOperation = {
+        sender: '0x' + '11'.repeat(20),
+        nonce: '0x0',
+        initCode: '0x',
+        callData: '0x',
+        accountGasLimits: '0x' + '00'.repeat(32),
+        preVerificationGas: '0x0',
+        gasFees: '0x' + '00'.repeat(32),
+        paymasterAndData: '0x' + '11'.repeat(117),
+        signature: '0x',
+      };
+      expect(() => builder.encodeUserOpForPaymaster(packed, 0)).toThrow('Invalid paymasterSigBytes');
+    });
+
+    it('should throw when paymasterSigBytes is negative', () => {
+      const packed: PackedUserOperation = {
+        sender: '0x' + '11'.repeat(20),
+        nonce: '0x0',
+        initCode: '0x',
+        callData: '0x',
+        accountGasLimits: '0x' + '00'.repeat(32),
+        preVerificationGas: '0x0',
+        gasFees: '0x' + '00'.repeat(32),
+        paymasterAndData: '0x' + '11'.repeat(117),
+        signature: '0x',
+      };
+      expect(() => builder.encodeUserOpForPaymaster(packed, -1)).toThrow('Invalid paymasterSigBytes');
+    });
+
+    it('should throw when paymasterSigBytes exceeds 256', () => {
+      const packed: PackedUserOperation = {
+        sender: '0x' + '11'.repeat(20),
+        nonce: '0x0',
+        initCode: '0x',
+        callData: '0x',
+        accountGasLimits: '0x' + '00'.repeat(32),
+        preVerificationGas: '0x0',
+        gasFees: '0x' + '00'.repeat(32),
+        paymasterAndData: '0x' + '11'.repeat(117),
+        signature: '0x',
+      };
+      expect(() => builder.encodeUserOpForPaymaster(packed, 257)).toThrow('Invalid paymasterSigBytes');
     });
   });
 
@@ -535,14 +655,10 @@ describe('BaseAccountBuilder', () => {
       expect(BigInt(cost)).toBeGreaterThanOrEqual(BigInt(0));
     });
 
-    it('should handle gas estimation failure with fallback values', async () => {
-      // First call succeeds (verification), second fails (call gas), third gets fee data
-      mockProvider.estimateGas
-        .mockRejectedValueOnce(new Error('Estimation failed'))
-        .mockRejectedValueOnce(new Error('Estimation failed'));
+    it('should throw when gas estimation fails', async () => {
+      // Verification gas estimation fails → error propagates immediately (no fallback)
+      mockProvider.estimateGas.mockRejectedValueOnce(new Error('Estimation failed'));
       mockProvider.getFeeData.mockResolvedValue({ gasPrice: BigInt(1000000000) });
-
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
       const builderWithProvider = new TestAccountBuilder(
         mockChainId,
@@ -554,13 +670,11 @@ describe('BaseAccountBuilder', () => {
       builderWithProvider.setCallData('0x1234');
 
       const userOp = builderWithProvider.getUserOp();
-      const cost = await builderWithProvider.estimateUserOpGasCost(userOp);
 
-      // Should use fallback values and still return a cost
-      expect(BigInt(cost)).toBeGreaterThan(BigInt(0));
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
+      // Errors are now propagated instead of using fallback values
+      await expect(builderWithProvider.estimateUserOpGasCost(userOp)).rejects.toThrow(
+        'Failed to estimate gas cost'
+      );
     });
 
     it('should handle missing gas price', async () => {
@@ -648,6 +762,30 @@ describe('BaseAccountBuilder', () => {
 
       // Should not include paymaster gas when paymaster is ZeroAddress
       expect(BigInt(cost)).toBeGreaterThan(BigInt(0));
+    });
+
+    it('should throw when estimatePaymasterGas fails', async () => {
+      // All estimateGas calls fail → error propagates (no fallback)
+      mockProvider.estimateGas.mockRejectedValue(new Error('Estimation failed'));
+      mockProvider.getFeeData.mockResolvedValue({ gasPrice: BigInt(1000000000) });
+
+      const builderWithProvider = new TestAccountBuilder(
+        mockChainId,
+        mockEntryPoint,
+        mockProvider as unknown as ethers.JsonRpcProvider
+      );
+
+      builderWithProvider.setSender('0x' + '11'.repeat(20));
+      builderWithProvider.setCallData('0x1234');
+      // Set a non-zero paymaster so estimatePaymasterGas is invoked
+      builderWithProvider.setPaymaster('0x' + '33'.repeat(20));
+      builderWithProvider.setPaymasterData('0xabcd');
+
+      const userOp = builderWithProvider.getUserOp();
+
+      await expect(builderWithProvider.estimateUserOpGasCost(userOp)).rejects.toThrow(
+        'Failed to estimate gas cost'
+      );
     });
   });
 });
