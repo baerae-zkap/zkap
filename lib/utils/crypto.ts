@@ -1,11 +1,12 @@
 import { ethers } from "ethers";
 
-const BN254_FR =
+export const BN254_FR =
   21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 const MODULUS_BIT_SIZE = 254;
 const LIMB_WIDTH = Math.floor((MODULUS_BIT_SIZE - 1) / 8); // = 31
 
-function sha256Update(data: Uint8Array): number[] {
+// NOTE: This is a custom SHA-256 block compression for ZK circuit intermediate state computation, not a general-purpose hash. Cannot be replaced by ethers.sha256.
+function sha256BlockCompress(data: Uint8Array): number[] {
   if (data.length % 64 !== 0) {
     throw new Error("data length must be a multiple of 64 bytes");
   }
@@ -16,26 +17,27 @@ function sha256Update(data: Uint8Array): number[] {
   // 64바이트 단위로 데이터를 순회하면서 상태 업데이트
   for (let i = 0; i < data.length; i += 64) {
     const chunk = data.slice(i, i + 64);
-    state = sha256UpdateWithState(state, chunk);
+    state = sha256BlockCompressWithState(state, chunk);
   }
 
   return state;
 }
 
 function getOutOfCircuitHashSegment(jwt: string, keys: string[]): string {
+  if (keys.length === 0) {
+    throw new Error("getOutOfCircuitHashSegment: keys must be a non-empty array");
+  }
   const hashBlockSize = 64; // 512 bits
 
   // JWT를 '.' 구분자로 분리 (header, payload, signature)
   const parts = jwt.split(".");
-  if (parts.length < 3) {
+  if (parts.length !== 3) {
     throw new Error("Invalid JWT: must contain header, payload, and signature");
   }
   const [headerB64, payloadB64, _] = parts;
 
   // header의 길이에 1을 더한 값이 payOffsetB64
   const payOffsetB64 = headerB64.length + 1;
-  const payLenB64 = payloadB64.length; // 사용되지 않지만 필요시 활용 가능
-
   // URL-safe Base64 디코딩을 수행하여 payload 문자열 생성
   const payload = base64urlToUtf8(payloadB64);
 
@@ -57,13 +59,8 @@ function base64urlToUtf8(base64url: string): string {
     base64url.replace(/-/g, "+").replace(/_/g, "/") +
     "=".repeat((4 - (base64url.length % 4)) % 4);
 
-  // base64 decode → binary string
-  const binary = atob(base64);
-
-  // binary string → UTF-8 string
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  const decoder = new TextDecoder("utf-8");
-  return decoder.decode(bytes);
+  // base64 decode → UTF-8 string
+  return Buffer.from(base64, "base64").toString("utf8");
 }
 
 function Utf8ToUint8Array(utf8: string): Uint8Array {
@@ -76,7 +73,9 @@ function Utf8ToUint8Array(utf8: string): Uint8Array {
 const rotateRight = (x: number, n: number): number =>
   ((x >>> n) | (x << (32 - n))) >>> 0;
 
-function sha256UpdateWithState(state: number[], data: Uint8Array) {
+// NOTE: This is a custom SHA-256 block compression for ZK circuit intermediate state computation, not a general-purpose hash. Cannot be replaced by ethers.sha256.
+function sha256BlockCompressWithState(state: number[], data: Uint8Array) {
+  /* istanbul ignore next */
   if (data.length !== 64) {
     throw new Error("data length must be 64 bytes");
   }
@@ -150,8 +149,9 @@ function getValueOffsetFromKey(payload: string, key: string): number {
   // key에 해당하는 claim을 찾기 위한 정규식 패턴.
   // 패턴은 "key" 다음에 optional 공백, 콜론, optional 공백, 그리고
   // value를 (큰 따옴표가 있으면 그 따옴표까지 포함하여, 없으면 공백, 콤마, 또는 '}' 전까지) 캡처합니다.
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regexPattern = new RegExp(
-    `"${key}"\\s*:\\s*(?<value>"[^"]*"|[^\\s,\\}]+)`
+    `"${escapedKey}"\\s*:\\s*(?<value>"[^"]*"|[^\\s,\\}]+)`
   );
 
   const match = regexPattern.exec(payload);
@@ -159,20 +159,20 @@ function getValueOffsetFromKey(payload: string, key: string): number {
     throw new Error(`Claim with key "${key}" not found in payload`);
   }
 
-  // match[0]는 전체 매칭 문자열, match[1]는 첫 번째 캡처 그룹(값)입니다.
+  // match[0]는 전체 매칭 문자열, match.groups?.value는 named capture group(값)입니다.
   const fullMatch = match[0];
-  const valuePart = match[1];
-
-  // 전체 매칭 문자열 내에서 valuePart가 시작하는 인덱스를 계산합니다.
-  const indexInMatch = fullMatch.indexOf(valuePart);
-  if (indexInMatch === -1) {
+  const valuePart = match.groups?.value;
+  if (!valuePart) {
     throw new Error(
       `Value part not found in the matched string for key "${key}"`
     );
   }
 
+  // 전체 매칭 문자열 내에서 valuePart가 시작하는 인덱스를 계산합니다.
+  const indexInMatch = fullMatch.indexOf(valuePart);
+
   // 전체 payload에서의 offset은 매칭 시작 인덱스(match.index)와 valuePart의 내부 인덱스(indexInMatch)의 합입니다.
-  return (match.index ?? 0) + indexInMatch;
+  return (match.index /* istanbul ignore next */ ?? 0) + indexInMatch;
 }
 
 const INITIAL_HASH_VALUE = [
@@ -384,6 +384,7 @@ function beBytesToBigInt(bytes: Uint8Array): bigint {
 function strToFieldsBN254(s: string): bigint[] {
   const bytes = new TextEncoder().encode(s);
 
+  /* istanbul ignore next */
   if (bytes.length % LIMB_WIDTH !== 0) {
     throw new Error(
       `Input length (${bytes.length}) must be a multiple of ${LIMB_WIDTH}.`
@@ -412,7 +413,7 @@ export function padAndStrToFieldsBN254(
 }
 
 export default {
-  sha256Update,
+  sha256BlockCompress,
   getOutOfCircuitHashSegment,
   Utf8ToUint8Array,
   commonVkParser,

@@ -3,7 +3,7 @@
  *
  * 실제 함수 시그니처:
  * - base64URLencode(str: string): string
- * - base64URLdecode(str: string): string
+ * - base64URLdecode(str: string): Uint8Array
  * - StringToUint8Array(str: string): Uint8Array
  * - Uint8ArrayToString(uint8Array: Uint8Array): string
  * - toURLEncode(base64str: string): string
@@ -54,16 +54,18 @@ describe('base64url', () => {
   });
 
   describe('base64URLdecode', () => {
-    it('should decode base64url string', () => {
+    it('should decode base64url string to Uint8Array', () => {
       const encoded = 'SGVsbG8'; // "Hello" in base64url
       const result = base64URLdecode(encoded);
 
-      expect(result).toBe('Hello');
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(Array.from(result)).toEqual([72, 101, 108, 108, 111]); // "Hello" bytes
     });
 
     it('should handle empty string', () => {
       const result = base64URLdecode('');
-      expect(result).toBe('');
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result.length).toBe(0);
     });
 
     it('should handle base64url with - and _', () => {
@@ -72,7 +74,8 @@ describe('base64url', () => {
       const encoded = 'Pj4-'; // >>> in base64url (standard base64: Pj4+)
       const result = base64URLdecode(encoded);
 
-      expect(result).toBe('>>>');
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(Array.from(result)).toEqual([62, 62, 62]); // ">>>" bytes
     });
 
     it('should handle strings without padding', () => {
@@ -80,7 +83,8 @@ describe('base64url', () => {
       const encoded = 'YQ'; // "a" without padding (standard: YQ==)
       const result = base64URLdecode(encoded);
 
-      expect(result).toBe('a');
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(Array.from(result)).toEqual([97]); // "a" byte
     });
   });
 
@@ -137,12 +141,15 @@ describe('base64url', () => {
       expect(result[1]).toBe(64); // '@'
     });
 
-    it('should handle high byte values (0-255)', () => {
-      // charCodeAt은 0-65535 반환하지만, 이 함수는 단순히 charCode를 저장
+    it('should handle high byte values via UTF-8 encoding', () => {
+      // TextEncoder는 UTF-8로 인코딩: String.fromCharCode(255) = 'ÿ' (U+00FF)는
+      // UTF-8에서 2바이트 [0xC3, 0xBF] = [195, 191]로 인코딩됨
       const input = String.fromCharCode(255);
       const result = StringToUint8Array(input);
 
-      expect(result[0]).toBe(255);
+      expect(result.length).toBe(2);
+      expect(result[0]).toBe(0xC3); // 195
+      expect(result[1]).toBe(0xBF); // 191
     });
   });
 
@@ -159,14 +166,14 @@ describe('base64url', () => {
       expect(result).toBe('');
     });
 
-    it('should handle special byte values', () => {
-      const input = new Uint8Array([0, 255, 128]);
+    it('should handle valid UTF-8 byte sequences', () => {
+      // TextDecoder는 UTF-8 바이트를 디코딩합니다.
+      // [0xC3, 0xBF] = ÿ (U+00FF), [0xC2, 0x80] = U+0080 (control char)
+      const input = new Uint8Array([0xC3, 0xBF]);
       const result = Uint8ArrayToString(input);
 
-      expect(result.length).toBe(3);
-      expect(result.charCodeAt(0)).toBe(0);
-      expect(result.charCodeAt(1)).toBe(255);
-      expect(result.charCodeAt(2)).toBe(128);
+      expect(result).toBe('ÿ');
+      expect(result.charCodeAt(0)).toBe(255);
     });
   });
 
@@ -184,7 +191,9 @@ describe('base64url', () => {
       const encoded = base64URLencode(original);
       const decoded = base64URLdecode(encoded);
 
-      expect(decoded).toBe(original);
+      // base64URLdecode returns Uint8Array, convert back to string for comparison
+      const decodedStr = new TextDecoder().decode(decoded);
+      expect(decodedStr).toBe(original);
     });
   });
 });
