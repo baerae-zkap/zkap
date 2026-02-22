@@ -73,6 +73,11 @@ describe('BaseAccountBuilder', () => {
       expect(builder.getUserOp().sender).toBe(sender);
     });
 
+    it('should throw when sender is not a valid Ethereum address', () => {
+      expect(() => builder.setSender('not-an-address'))
+        .toThrow('setSender: invalid Ethereum address: "not-an-address"');
+    });
+
     it('should set nonce', () => {
       builder.setSender('0x' + '11'.repeat(20));
       builder.setNonce('0x5');
@@ -127,6 +132,13 @@ describe('BaseAccountBuilder', () => {
       builder.setPaymaster('0x' + '22'.repeat(20));
 
       expect(builder.getUserOp().paymaster).toBe('0x' + '22'.repeat(20));
+    });
+
+    it('should throw when paymaster is not a valid Ethereum address', () => {
+      builder.setSender('0x' + '11'.repeat(20));
+
+      expect(() => builder.setPaymaster('not-an-address'))
+        .toThrow('setPaymaster: invalid Ethereum address: "not-an-address"');
     });
 
     it('should set paymasterData', () => {

@@ -1,4 +1,5 @@
 import { UserOperation } from "../types/UserOperation";
+import { ethers } from "ethers";
 
 export enum PaymasterMode {
   // NONE = 0,
@@ -53,7 +54,18 @@ export class PaymasterService {
     if (url.protocol !== 'https:' && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
       throw new Error('PaymasterService serverUrl must use HTTPS. HTTP is only allowed for localhost.');
     }
-    this.config = config;
+    if (!ethers.isAddress(config.paymasterAddress)) {
+      throw new Error(`PaymasterService: paymasterAddress is not a valid Ethereum address: "${config.paymasterAddress}"`);
+    }
+    if (config.mode === PaymasterMode.ERC20) {
+      if (!config.tokenAddress) {
+        throw new Error('PaymasterService: tokenAddress is required for ERC20 mode');
+      }
+      if (!ethers.isAddress(config.tokenAddress)) {
+        throw new Error(`PaymasterService: tokenAddress is not a valid Ethereum address: "${config.tokenAddress}"`);
+      }
+    }
+    this.config = Object.freeze({ ...config });
   }
 
   private requestCounter = 0;

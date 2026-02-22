@@ -141,10 +141,13 @@ export class ZkPasskeySigner implements IUserOpSigner {
       );
     }
 
-    // Enforce HTTPS for proof server (except localhost)
+    // Enforce HTTPS for proof server (except localhost and private network addresses)
     const proofUrl = new URL(proofServerUrl);
-    if (proofUrl.protocol !== 'https:' && proofUrl.hostname !== 'localhost' && proofUrl.hostname !== '127.0.0.1') {
-      throw new Error('proofServerUrl must use HTTPS in production. HTTP is only allowed for localhost.');
+    if (proofUrl.protocol !== 'https:' && !ZkPasskeySigner._isLocalOrPrivateHost(proofUrl.hostname)) {
+      throw new Error(
+        'proofServerUrl must use HTTPS. HTTP is only allowed for localhost, 127.0.0.1, ' +
+        'RFC1918 private addresses (10.x.x.x, 172.16-31.x.x, 192.168.x.x), and .local domains.'
+      );
     }
 
     const validSocialServices = new Set(['google', 'kakao']);
@@ -316,7 +319,9 @@ export class ZkPasskeySigner implements IUserOpSigner {
       }
 
       if (!fetchResponse.ok) {
-        throw new Error(`Proof server error! status: ${fetchResponse.status}`);
+        let errorBody = '';
+        try { errorBody = await fetchResponse.text(); } catch { /* ignore */ }
+        throw new Error(`Proof server error! status: ${fetchResponse.status}${errorBody ? `: ${errorBody}` : ''}`);
       }
       proofAndPublicInput = await fetchResponse.json();
 
@@ -329,13 +334,19 @@ export class ZkPasskeySigner implements IUserOpSigner {
       }
       // BN254 scalar field 범위 검증 (ZkOidcSigner.setProofData와 동일한 검증)
       for (let i = 0; i < proofAndPublicInput.proof.length; i++) {
-        const val = BigInt(proofAndPublicInput.proof[i]);
+        let val: bigint;
+        try { val = BigInt(proofAndPublicInput.proof[i]); } catch {
+          throw new Error(`proof[${i}] is not a valid number: ${proofAndPublicInput.proof[i]}`);
+        }
         if (val < 0n || val >= BN254_FR) {
           throw new Error(`proof[${i}] is out of BN254 scalar field range`);
         }
       }
       for (let i = 0; i < proofAndPublicInput.publicInputs.length; i++) {
-        const val = BigInt(proofAndPublicInput.publicInputs[i]);
+        let val: bigint;
+        try { val = BigInt(proofAndPublicInput.publicInputs[i]); } catch {
+          throw new Error(`publicInputs[${i}] is not a valid number: ${proofAndPublicInput.publicInputs[i]}`);
+        }
         if (val < 0n || val >= BN254_FR) {
           throw new Error(`publicInputs[${i}] is out of BN254 scalar field range`);
         }
@@ -492,5 +503,35 @@ export class ZkPasskeySigner implements IUserOpSigner {
     this.idTokens = undefined;
     this.anchor = undefined;
     this.preparedUserOpHash = undefined;
+  }
+
+  private static _isLocalOrPrivateHost(hostname: string): boolean {
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+    // IPv6 loopback: ::1 or [::1] (URL-bracketed form used by new URL())
+    if (hostname === '::1' || hostname === '[::1]') return true;
+    // IPv4-mapped IPv6: [::ffff:x.x.x.x] (dotted) or [::ffff:xxxx:xxxx] (hex, as normalized by new URL())
+    const ipv4MappedMatch = hostname.match(/^\[::ffff:(.+)\]$/i);
+    if (ipv4MappedMatch) {
+      const mapped = ipv4MappedMatch[1];
+      // Hex form: xxxx:xxxx → convert to dotted IPv4
+      const hexMatch = mapped.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+      if (hexMatch) {
+        const hi = parseInt(hexMatch[1], 16);
+        const lo = parseInt(hexMatch[2], 16);
+        const ipv4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+        return ZkPasskeySigner._isLocalOrPrivateHost(ipv4);
+      }
+      // Dotted decimal form: x.x.x.x
+      return ZkPasskeySigner._isLocalOrPrivateHost(mapped);
+    }
+    if (hostname.endsWith('.local')) return true;
+    // RFC1918 private ranges: 10.x.x.x, 172.16-31.x.x, 192.168.x.x
+    const parts = hostname.split('.').map(Number);
+    if (parts.length === 4 && parts.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
+      if (parts[0] === 10) return true;
+      if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+      if (parts[0] === 192 && parts[1] === 168) return true;
+    }
+    return false;
   }
 }

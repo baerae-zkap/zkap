@@ -340,6 +340,83 @@ describe('AccountKeyBuilder', () => {
       expect(encoded.length).toBeGreaterThan(10);
     });
 
+    it('should throw when hAudList is missing', () => {
+      const builder = new AccountKeyBuilder();
+      const keyDataWithoutHAudList = {
+        n: 17,
+        k: 2,
+        commitment: ['0x1', '0x2'],
+        poseidonMerkleTreeDirectory: '0x' + '44'.repeat(20),
+      } as unknown as ZkOAuthRS256KeyData;
+
+      expect(() => builder.getEncodedZkOAuthRS256KeyInitData(keyDataWithoutHAudList))
+        .toThrow('ZkOAuthRS256KeyData.hAudList is required');
+    });
+
+    it('should throw when hAudList is empty string', () => {
+      const builder = new AccountKeyBuilder();
+      const keyDataEmptyHAudList: ZkOAuthRS256KeyData = {
+        n: 17,
+        k: 2,
+        hAudList: '',
+        commitment: ['0x1', '0x2'],
+        poseidonMerkleTreeDirectory: '0x' + '44'.repeat(20),
+      };
+
+      expect(() => builder.getEncodedZkOAuthRS256KeyInitData(keyDataEmptyHAudList))
+        .toThrow('ZkOAuthRS256KeyData.hAudList is required');
+    });
+
+    it('should throw when hAudList is bare "0x"', () => {
+      const builder = new AccountKeyBuilder();
+      const keyDataBareHex: ZkOAuthRS256KeyData = {
+        n: 17,
+        k: 2,
+        hAudList: '0x',
+        commitment: ['0x1', '0x2'],
+        poseidonMerkleTreeDirectory: '0x' + '44'.repeat(20),
+      };
+
+      expect(() => builder.getEncodedZkOAuthRS256KeyInitData(keyDataBareHex))
+        .toThrow('ZkOAuthRS256KeyData.hAudList is required');
+    });
+  });
+
+  describe('computeHAudList', () => {
+    it('should return a 32-byte hex hash from audience strings', () => {
+      const result = AccountKeyBuilder.computeHAudList(['https://example.com']);
+      expect(result).toMatch(/^0x[0-9a-fA-F]{64}$/);
+    });
+
+    it('should return different hashes for different audiences', () => {
+      const hash1 = AccountKeyBuilder.computeHAudList(['https://example.com']);
+      const hash2 = AccountKeyBuilder.computeHAudList(['https://other.com']);
+      expect(hash1).not.toBe(hash2);
+    });
+
+    it('should return consistent hash for same audiences', () => {
+      const hash1 = AccountKeyBuilder.computeHAudList(['https://example.com', 'https://other.com']);
+      const hash2 = AccountKeyBuilder.computeHAudList(['https://example.com', 'https://other.com']);
+      expect(hash1).toBe(hash2);
+    });
+
+    it('should throw when audiences is empty array', () => {
+      expect(() => AccountKeyBuilder.computeHAudList([]))
+        .toThrow('computeHAudList: audiences must be a non-empty array');
+    });
+
+    it('should produce a valid hAudList usable in getEncodedZkOAuthRS256KeyInitData', () => {
+      const hAudList = AccountKeyBuilder.computeHAudList(['https://example.com']);
+      const builder = new AccountKeyBuilder();
+      expect(() => builder.getEncodedZkOAuthRS256KeyInitData({
+        n: 17,
+        k: 2,
+        hAudList,
+        commitment: ['0x1', '0x2'],
+        poseidonMerkleTreeDirectory: '0x' + '44'.repeat(20),
+      })).not.toThrow();
+    });
+
     it('should handle different n and k values', () => {
       const builder = new AccountKeyBuilder();
 

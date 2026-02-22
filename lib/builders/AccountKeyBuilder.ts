@@ -138,6 +138,22 @@ export class AccountKeyBuilder {
     return this.encodedKey;
   }
 
+  /**
+   * OAuth audience 목록으로부터 hAudList 값을 계산합니다.
+   * ZkOAuthRS256KeyData.hAudList 필드에 전달할 값을 생성합니다.
+   *
+   * @param audiences - OAuth audience 문자열 배열 (e.g. ['https://example.com'])
+   * @returns ABI-encoded keccak256 해시 (uint256 hex string)
+   */
+  static computeHAudList(audiences: string[]): string {
+    if (!audiences || audiences.length === 0) {
+      throw new Error('computeHAudList: audiences must be a non-empty array');
+    }
+    return ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(['string[]'], [audiences])
+    );
+  }
+
   // Encodes ZkOAuthRS256 key data matching on-chain abi.decode(bytes,(uint256,uint256,uint256,uint256[]))
   private _encodeZkOAuthRS256Key(
     n: number,
@@ -158,6 +174,13 @@ export class AccountKeyBuilder {
   ): string {
     const { commitment, n, k, hAudList, poseidonMerkleTreeDirectory } =
       zkOAuthRS256KeyData;
+
+    if (!hAudList || hAudList.length === 0 || hAudList === '0x') {
+      throw new Error(
+        "ZkOAuthRS256KeyData.hAudList is required and must be a non-zero value. " +
+        "Use AccountKeyBuilder.computeHAudList(audiences) to generate the correct value."
+      );
+    }
 
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
     const encoded = this._encodeZkOAuthRS256Key(n, k, hAudList, commitment);

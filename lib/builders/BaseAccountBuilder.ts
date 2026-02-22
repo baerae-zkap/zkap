@@ -14,7 +14,7 @@ export abstract class BaseAccountBuilder {
   protected entryPoint: string;
   protected provider?: ethers.JsonRpcProvider;
 
-  abstract setInitCode(...initCodes: string[]): this;
+  abstract setInitCode(...args: unknown[]): this;
   abstract setSignature(
     keyIndexList: number[],
     keySignatureList: string[]
@@ -241,6 +241,9 @@ export abstract class BaseAccountBuilder {
   }
 
   setSender(sender: string): this {
+    if (!ethers.isAddress(sender)) {
+      throw new Error(`setSender: invalid Ethereum address: "${sender}"`);
+    }
     this.userOp.sender = sender;
     return this;
   }
@@ -281,6 +284,9 @@ export abstract class BaseAccountBuilder {
   }
 
   setPaymaster(paymaster: string): this {
+    if (!ethers.isAddress(paymaster)) {
+      throw new Error(`setPaymaster: invalid Ethereum address: "${paymaster}"`);
+    }
     this.userOp.paymaster = paymaster;
     return this;
   }

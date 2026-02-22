@@ -222,7 +222,27 @@ describe('ZkPasskeySigner', () => {
           1,
           1
         );
-      }).toThrow('proofServerUrl must use HTTPS in production. HTTP is only allowed for localhost.');
+      }).toThrow('proofServerUrl must use HTTPS');
+    });
+
+    it('should allow HTTP for RFC1918 private addresses', () => {
+      expect(() => new ZkPasskeySigner('http://10.0.2.2:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+      expect(() => new ZkPasskeySigner('http://192.168.1.10:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+      expect(() => new ZkPasskeySigner('http://172.16.0.1:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+    });
+
+    it('should allow HTTP for .local domains', () => {
+      expect(() => new ZkPasskeySigner('http://myserver.local:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+    });
+
+    it('should allow HTTP for IPv6 loopback addresses', () => {
+      // [::1] is the bracketed form used in URLs
+      expect(() => new ZkPasskeySigner('http://[::1]:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+    });
+
+    it('should allow HTTP for IPv4-mapped IPv6 loopback', () => {
+      // Node.js normalizes ::ffff:127.0.0.1 → ::ffff:7f00:1 in URL.hostname
+      expect(() => new ZkPasskeySigner('http://[::ffff:7f00:1]:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
     });
   });
 
@@ -943,6 +963,88 @@ describe('ZkPasskeySigner', () => {
       await expect(
         (signer as any).getSignatures(['jwt1'], ['pk1'], [0], [['path1']])
       ).rejects.toThrow('Invalid proof server response: proof must be an array of 8 elements');
+    });
+
+    it('should include server error body in error message', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: () => Promise.resolve('{"error":"invalid JWT signature"}'),
+      });
+
+      const signer = new ZkPasskeySigner(
+        mockProofServerUrl,
+        mockEnUrl,
+        mockZkapAddress,
+        ['google'],
+        [mockIdTokenGenerator],
+        mockPoseidonTreeAddress,
+        1,
+        1
+      );
+
+      await signer.init();
+      await expect(
+        (signer as any).getSignatures(['jwt1'], ['pk1'], [0], [['path1']])
+      ).rejects.toThrow('Proof server error! status: 400: {"error":"invalid JWT signature"}');
+    });
+
+    it('should throw when proof element is not a valid number', async () => {
+      const proofWithNonNumeric = Array(8).fill('0');
+      proofWithNonNumeric[2] = 'not-a-number';
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          proof: proofWithNonNumeric,
+          publicInputs: Array(8).fill('0'),
+        }),
+      });
+
+      const signer = new ZkPasskeySigner(
+        mockProofServerUrl,
+        mockEnUrl,
+        mockZkapAddress,
+        ['google'],
+        [mockIdTokenGenerator],
+        mockPoseidonTreeAddress,
+        1,
+        1
+      );
+
+      await signer.init();
+      await expect(
+        (signer as any).getSignatures(['jwt1'], ['pk1'], [0], [['path1']])
+      ).rejects.toThrow('proof[2] is not a valid number: not-a-number');
+    });
+
+    it('should throw when publicInputs element is not a valid number', async () => {
+      const publicInputsWithNonNumeric = Array(8).fill('0');
+      publicInputsWithNonNumeric[4] = null;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          proof: Array(8).fill('0'),
+          publicInputs: publicInputsWithNonNumeric,
+        }),
+      });
+
+      const signer = new ZkPasskeySigner(
+        mockProofServerUrl,
+        mockEnUrl,
+        mockZkapAddress,
+        ['google'],
+        [mockIdTokenGenerator],
+        mockPoseidonTreeAddress,
+        1,
+        1
+      );
+
+      await signer.init();
+      await expect(
+        (signer as any).getSignatures(['jwt1'], ['pk1'], [0], [['path1']])
+      ).rejects.toThrow('publicInputs[4] is not a valid number: null');
     });
   });
 

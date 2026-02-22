@@ -148,14 +148,52 @@ describe('signature', () => {
       expect(result.slice(38, 70)).toEqual(s);
     });
 
-    it('should produce correct total length', () => {
-      const r = new Uint8Array(32).fill(0xaa);
-      const s = new Uint8Array(32).fill(0xbb);
+    it('should produce correct total length when MSB is not set', () => {
+      // r[0] < 0x80 and s[0] < 0x80: no sign bytes needed
+      const r = new Uint8Array(32).fill(0x11);
+      const s = new Uint8Array(32).fill(0x22);
 
       const result = wrapSignature(r, s);
 
-      // 4 (header) + 32 (r) + 2 (s header) + 32 (s) = 70 bytes
+      // 2 (seq header) + (2+32) r-integer + (2+32) s-integer = 70 bytes
       expect(result.length).toBe(70);
+    });
+
+    it('should add DER sign byte when r MSB is set', () => {
+      // r[0] >= 0x80: needs 0x00 prefix in DER INTEGER
+      const r = new Uint8Array(32).fill(0xaa);
+      const s = new Uint8Array(32).fill(0x22); // s[0] < 0x80
+
+      const result = wrapSignature(r, s);
+
+      // r needs sign byte → rIntLen=33, sIntLen=32, seqLen=4+33+32=69
+      expect(result[0]).toBe(0x30); // SEQUENCE
+      expect(result[1]).toBe(0x45); // sequence length = 69
+      expect(result[2]).toBe(0x02); // INTEGER tag for r
+      expect(result[3]).toBe(0x21); // r length = 33 (with sign byte)
+      expect(result[4]).toBe(0x00); // sign byte
+      expect(Array.from(result.slice(5, 37))).toEqual(Array.from(r)); // r value
+      expect(result[37]).toBe(0x02); // INTEGER tag for s
+      expect(result[38]).toBe(0x20); // s length = 32
+      expect(Array.from(result.slice(39, 71))).toEqual(Array.from(s)); // s value
+      expect(result.length).toBe(71);
+    });
+
+    it('should add DER sign bytes when both r and s MSB are set', () => {
+      const r = new Uint8Array(32).fill(0xaa); // MSB set
+      const s = new Uint8Array(32).fill(0xbb); // MSB set
+
+      const result = wrapSignature(r, s);
+
+      // Both need sign bytes → rIntLen=33, sIntLen=33, seqLen=4+33+33=70
+      expect(result[1]).toBe(0x46); // sequence length = 70
+      expect(result[3]).toBe(0x21); // r length = 33
+      expect(result[4]).toBe(0x00); // r sign byte
+      // s starts at 5+32=37, then tag(1)+len(1)+sign(1)=39
+      expect(result[37]).toBe(0x02); // INTEGER tag for s
+      expect(result[38]).toBe(0x21); // s length = 33
+      expect(result[39]).toBe(0x00); // s sign byte
+      expect(result.length).toBe(72);
     });
 
     it('should pad r when shorter than 32 bytes', () => {

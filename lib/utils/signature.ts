@@ -56,8 +56,11 @@ export function flipSecp256r1Signature(
   if (bigS > halfN) {
     // console.log("flipping s")
     bigS = N - bigS;
-    // console.log("flipped s", bigS.toString())
-    s = Buffer.from(ethers.toBeArray(bigS));
+    // Normalize to exactly 32 bytes (left-pad with zeros) to maintain consistent size
+    const sBytes = ethers.toBeArray(bigS);
+    const sNormalized = new Uint8Array(32);
+    sNormalized.set(sBytes, 32 - sBytes.length);
+    s = sNormalized;
   }
   return [r, s];
 }
@@ -70,10 +73,19 @@ export function wrapSignature(r: Uint8Array, s: Uint8Array): Uint8Array {
   const sPadded = s.length < 32
     ? new Uint8Array([...new Uint8Array(32 - s.length), ...s])
     : s;
+  // DER INTEGER requires a 0x00 prefix byte when the MSB is set,
+  // to distinguish a positive integer from a negative one (two's complement).
+  const rNeedsSign = rPadded[0] >= 0x80;
+  const sNeedsSign = sPadded[0] >= 0x80;
+  const rIntLen = 32 + (rNeedsSign ? 1 : 0);
+  const sIntLen = 32 + (sNeedsSign ? 1 : 0);
+  const seqLen = 2 + rIntLen + 2 + sIntLen;
   return Buffer.concat([
-    new Uint8Array([0x30, 0x44, 0x02, 0x20]),
+    new Uint8Array([0x30, seqLen, 0x02, rIntLen]),
+    rNeedsSign ? new Uint8Array([0x00]) : new Uint8Array([]),
     rPadded,
-    new Uint8Array([0x02, 0x20]),
+    new Uint8Array([0x02, sIntLen]),
+    sNeedsSign ? new Uint8Array([0x00]) : new Uint8Array([]),
     sPadded,
   ]);
 }

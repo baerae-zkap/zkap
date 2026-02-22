@@ -1,5 +1,6 @@
 import { SwapParams, SwapTxData } from "../types/Swap";
 import { OneInchAggregator } from "./aggregators/OneInchAggregator";
+import { ethers } from "ethers";
 
 interface ISwapAggregator {
   checkAllowance(tokenAddress: string, walletAddress: string): Promise<string | null>;
@@ -24,6 +25,15 @@ export class SwapBuilder {
     apiKey: string,
     bundlerAddress: string
   ) {
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      throw new Error(`SwapBuilder: chainId must be a positive integer, got ${chainId}`);
+    }
+    if (!apiKey || apiKey.trim().length === 0) {
+      throw new Error('SwapBuilder: apiKey must be a non-empty string');
+    }
+    if (!ethers.isAddress(bundlerAddress)) {
+      throw new Error(`SwapBuilder: bundlerAddress is not a valid Ethereum address: "${bundlerAddress}"`);
+    }
     this.bundlerAddress = bundlerAddress;
 
     switch (aggregatorName) {
@@ -46,6 +56,15 @@ export class SwapBuilder {
     disableEstimate = false,
     allowPartialFill = true,
   }: SwapParams): Promise<SwapTxData> {
+    if (!ethers.isAddress(src)) {
+      throw new Error(`SwapBuilder: src is not a valid Ethereum address: "${src}"`);
+    }
+    if (!ethers.isAddress(dst)) {
+      throw new Error(`SwapBuilder: dst is not a valid Ethereum address: "${dst}"`);
+    }
+    if (!ethers.isAddress(from)) {
+      throw new Error(`SwapBuilder: from is not a valid Ethereum address: "${from}"`);
+    }
     const swapData = await this.aggregator.getSwapTxData({
       src: src,
       dst: dst,

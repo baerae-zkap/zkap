@@ -428,9 +428,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
   setInitCode(
     zkapFactory: string,
     salt: ethers.BigNumberish,
-    encodedMasterKey: string,
-    encodedTxKey: string
+    keys: { encodedMasterKey: string; encodedTxKey: string }
   ): this {
+    const { encodedMasterKey, encodedTxKey } = keys;
     const callDataBuilder = new CallDataBuilder(ZkapAccountFactoryABI);
 
     const callData = callDataBuilder.encode("createAccount", [
@@ -508,7 +508,8 @@ export class ZkapBuilder extends BaseAccountBuilder {
    *          이전에 setSignerKeyTypes()로 설정한 값은 무효화됩니다.
    *          키 업데이트 트랜잭션은 항상 ZK-OAuth RS256 서명이 필요합니다.
    */
-  setUpdateKeysCallData(encodedMasterKey: string, encodedTxKey: string): this {
+  setUpdateKeysCallData(keys: { encodedMasterKey: string; encodedTxKey: string }): this {
+    const { encodedMasterKey, encodedTxKey } = keys;
     if (!this.userOp.sender) {
       throw new Error("Sender is not set");
     }
@@ -588,7 +589,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     if (!Array.isArray(keyTypes) || keyTypes.length === 0) {
       throw new Error("keyTypes must be a non-empty array");
     }
-    const validKeyTypes = new Set([
+    const validKeyTypes = new Set<number>([
       PrimitiveAccountKeyTypes.keyAddress,
       PrimitiveAccountKeyTypes.keySecp256k1,
       PrimitiveAccountKeyTypes.keySecp256r1,

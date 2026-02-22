@@ -5,11 +5,11 @@ export const PrimitiveAccountKeyTypes = {
   keyWebAuthn: 4,
   keyOAuthRS256: 5,
   keyZkOAuthRS256: 6,
-};
+} as const;
 
 export const CompositeAccountKeyTypes = {
   keyMultisig: 1,
-};
+} as const;
 
 export type AddressKeyData = {
   signerAddress: string;

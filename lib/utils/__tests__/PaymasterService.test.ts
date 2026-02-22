@@ -98,6 +98,34 @@ describe('PaymasterService', () => {
         mode: PaymasterMode.VERIFYING,
       })).toThrow('PaymasterService serverUrl must use HTTPS. HTTP is only allowed for localhost.');
     });
+
+    it('should throw when paymasterAddress is not a valid Ethereum address', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'http://localhost:3000',
+        paymasterAddress: 'not-an-address',
+        chainId: 1,
+        mode: PaymasterMode.VERIFYING,
+      })).toThrow('PaymasterService: paymasterAddress is not a valid Ethereum address: "not-an-address"');
+    });
+
+    it('should throw when ERC20 mode is used without tokenAddress', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'http://localhost:3000',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.ERC20,
+      })).toThrow('PaymasterService: tokenAddress is required for ERC20 mode');
+    });
+
+    it('should throw when ERC20 tokenAddress is not a valid Ethereum address', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'http://localhost:3000',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.ERC20,
+        tokenAddress: 'not-an-address',
+      })).toThrow('PaymasterService: tokenAddress is not a valid Ethereum address: "not-an-address"');
+    });
   });
 
   describe('getPaymasterData', () => {
@@ -334,7 +362,7 @@ describe('PaymasterService', () => {
       });
 
       const config = createMockConfig(PaymasterMode.ERC20);
-      config.tokenAddress = '0xCustomTokenAddress';
+      config.tokenAddress = '0x' + 'cd'.repeat(20);
       const service = new PaymasterService(config);
       await service.getPaymasterData(mockUserOp);
 
@@ -343,21 +371,17 @@ describe('PaymasterService', () => {
 
       // ERC20 mode includes token address as 4th param
       expect(body.params.length).toBe(4);
-      expect(body.params[3]).toBe('0xCustomTokenAddress');
+      expect(body.params[3]).toBe('0x' + 'cd'.repeat(20));
     });
 
-    it('should throw when tokenAddress is not set for ERC20 mode', async () => {
-      const config: PaymasterServiceConfig = {
+    it('should throw when tokenAddress is not set for ERC20 mode', () => {
+      expect(() => new PaymasterService({
         serverUrl: 'http://localhost:3000',
         paymasterAddress: '0x' + '33'.repeat(20),
         chainId: 1,
         mode: PaymasterMode.ERC20,
         // no tokenAddress
-      };
-      const service = new PaymasterService(config);
-
-      await expect(service.getPaymasterData(mockUserOp))
-        .rejects.toThrow('tokenAddress is required for ERC20 paymaster mode');
+      })).toThrow('PaymasterService: tokenAddress is required for ERC20 mode');
     });
 
     it('should throw on HTTP error', async () => {
@@ -454,14 +478,14 @@ describe('PaymasterService', () => {
     it('should return the config object', () => {
       const config = createMockConfig(PaymasterMode.ERC20);
       config.serverUrl = 'https://custom.server.com';
-      config.paymasterAddress = '0xCustomPaymaster';
+      config.paymasterAddress = '0x' + 'ab'.repeat(20);
       config.chainId = 137;
 
       const service = new PaymasterService(config);
       const returnedConfig = service.getConfig();
 
       expect(returnedConfig.serverUrl).toBe('https://custom.server.com');
-      expect(returnedConfig.paymasterAddress).toBe('0xCustomPaymaster');
+      expect(returnedConfig.paymasterAddress).toBe('0x' + 'ab'.repeat(20));
       expect(returnedConfig.chainId).toBe(137);
       expect(returnedConfig.mode).toBe(PaymasterMode.ERC20);
     });

@@ -123,6 +123,23 @@ describe('ZkapCreator', () => {
       expect(userOp.sender).toBe(expectedAddress);
     });
 
+    it('should only call calcAccountAddress once on concurrent calls', async () => {
+      const expectedAddress = '0x' + 'ee'.repeat(20);
+      mockCalcAccountAddress.mockResolvedValueOnce(expectedAddress);
+
+      const creator = new ZkapCreator(mockCreatorInfo);
+      const [addr1, addr2, addr3] = await Promise.all([
+        creator.deriveZkapAddress(),
+        creator.deriveZkapAddress(),
+        creator.deriveZkapAddress(),
+      ]);
+
+      expect(addr1).toBe(expectedAddress);
+      expect(addr2).toBe(expectedAddress);
+      expect(addr3).toBe(expectedAddress);
+      expect(mockCalcAccountAddress).toHaveBeenCalledTimes(1);
+    });
+
     it('should use different addresses for different salts', async () => {
       const address1 = '0x' + 'aa'.repeat(20);
       const address2 = '0x' + 'bb'.repeat(20);

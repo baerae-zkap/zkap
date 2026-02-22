@@ -147,7 +147,7 @@ describe('ZkapBuilder', () => {
       const encodedMasterKey = '0x' + 'aa'.repeat(64);
       const encodedTxKey = '0x' + 'bb'.repeat(64);
 
-      builder.setInitCode(zkapFactory, salt, encodedMasterKey, encodedTxKey);
+      builder.setInitCode(zkapFactory, salt, { encodedMasterKey, encodedTxKey });
 
       const userOp = builder.setSender('0x' + '11'.repeat(20)).getUserOp();
       expect(userOp.initCode).toBeDefined();
@@ -271,7 +271,7 @@ describe('ZkapBuilder', () => {
 
       const encodedMasterKey = '0x' + 'ee'.repeat(64);
       const encodedTxKey = '0x' + 'ff'.repeat(64);
-      builder.setUpdateKeysCallData(encodedMasterKey, encodedTxKey);
+      builder.setUpdateKeysCallData({ encodedMasterKey, encodedTxKey });
 
       const userOp = builder.getUserOp();
       expect(userOp.callData).toBeDefined();
@@ -282,7 +282,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
 
       expect(() =>
-        builder.setUpdateKeysCallData('0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64))
+        builder.setUpdateKeysCallData({ encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) })
       ).toThrow('Sender is not set');
     });
 
@@ -292,7 +292,7 @@ describe('ZkapBuilder', () => {
 
       const encodedMasterKey = '0x' + 'ee'.repeat(64);
       const encodedTxKey = '0x' + 'ff'.repeat(64);
-      builder.setUpdateKeysCallData(encodedMasterKey, encodedTxKey);
+      builder.setUpdateKeysCallData({ encodedMasterKey, encodedTxKey });
 
       // After setUpdateKeysCallData, setCallData should work (keyTypes set)
       expect(() => builder.setCallData('0x9999')).not.toThrow();
@@ -302,7 +302,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '11'.repeat(20));
 
-      const result = builder.setUpdateKeysCallData('0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      const result = builder.setUpdateKeysCallData({ encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
 
       expect(result).toBe(builder);
     });
@@ -481,8 +481,7 @@ describe('ZkapBuilder', () => {
       builder.setInitCode(
         '0x' + '22'.repeat(20),
         '0x1',
-        '0x' + 'aa'.repeat(64),
-        '0x' + 'bb'.repeat(64)
+        { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) }
       );
       builder.setSignerKeyTypes([4]); // keyWebAuthn
 
@@ -572,8 +571,7 @@ describe('ZkapBuilder', () => {
       builder.setInitCode(
         '0x' + '22'.repeat(20),
         '0x1',
-        '0x' + 'aa'.repeat(64),
-        '0x' + 'bb'.repeat(64)
+        { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) }
       );
       builder.setSignerKeyTypes([4]); // keyWebAuthn
       // No callData set - should return minimal gas
@@ -685,7 +683,7 @@ describe('ZkapBuilder', () => {
       builder.setSender('0x' + '33'.repeat(20));
       builder.setSignerKeyTypes([4]);
       // Must set initCode for non-deployed wallet
-      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
 
       // Mock parseTransaction to throw error AFTER builder setup
       mockParseTransaction.mockImplementation(() => {
@@ -704,7 +702,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '33'.repeat(20));
       builder.setSignerKeyTypes([4]);
-      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
       builder.setCallData('0xSomeCallData');
 
       await builder.autoFillUserOp();
@@ -727,7 +725,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '33'.repeat(20));
       builder.setSignerKeyTypes([4]);
-      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
       builder.setCallData('0xSomeCallData');
 
       await builder.autoFillUserOp();
@@ -751,7 +749,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '33'.repeat(20));
       builder.setSignerKeyTypes([4]);
-      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
       builder.setCallData('0xSomeCallData');
 
       await builder.autoFillUserOp();
@@ -770,7 +768,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '33'.repeat(20));
       builder.setSignerKeyTypes([4]);
-      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
       builder.setCallData('0xSomeCallData');
 
       await builder.autoFillUserOp();
@@ -790,7 +788,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '33'.repeat(20));
       builder.setSignerKeyTypes([4]);
-      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
       builder.setCallData('0xSomeCallData');
 
       await expect(builder.autoFillUserOp()).rejects.toThrow(
@@ -804,7 +802,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '33'.repeat(20));
       builder.setSignerKeyTypes([4]);
-      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
       builder.setCallData('0xSomeCallData');
 
       await expect(builder.autoFillUserOp()).rejects.toThrow(
@@ -819,7 +817,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '33'.repeat(20));
       builder.setSignerKeyTypes([4]);
-      builder.setInitCode('0x' + '44'.repeat(20), '0x1', '0x' + 'aa'.repeat(64), '0x' + 'bb'.repeat(64));
+      builder.setInitCode('0x' + '44'.repeat(20), '0x1', { encodedMasterKey: '0x' + 'aa'.repeat(64), encodedTxKey: '0x' + 'bb'.repeat(64) });
       builder.setCallData('0xSomeCallData');
 
       await expect(builder.autoFillUserOp()).rejects.toThrow(

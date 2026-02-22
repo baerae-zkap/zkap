@@ -6,6 +6,9 @@ export class ZkapFactoryBuilder {
   private accountFactory: ethers.Contract;
 
   constructor(address: string, enUrl: string) {
+    if (!ethers.isAddress(address)) {
+      throw new Error(`ZkapFactoryBuilder: invalid contract address: "${address}"`);
+    }
     try {
       new URL(enUrl);
     } catch {
