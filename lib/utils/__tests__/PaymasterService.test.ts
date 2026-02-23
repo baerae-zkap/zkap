@@ -90,6 +90,15 @@ describe('PaymasterService', () => {
       expect(service.getConfig().mode).toBe(PaymasterMode.ERC20);
     });
 
+    it('should throw when serverUrl is not a valid URL', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'not-a-valid-url',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.VERIFYING,
+      })).toThrow('PaymasterService: serverUrl is not a valid URL: "not-a-valid-url"');
+    });
+
     it('should throw when serverUrl uses HTTP with non-localhost hostname', () => {
       expect(() => new PaymasterService({
         serverUrl: 'http://remoteserver.com:3000',
@@ -293,6 +302,18 @@ describe('PaymasterService', () => {
 
       await expect(service.getPaymasterData(mockUserOp))
         .rejects.toThrow('Invalid paymasterData format: expected 0x-prefixed even-length hex string, got number');
+    });
+
+    it('should throw when response body is not valid JSON', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.reject(new Error('Unexpected token < in JSON')),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Paymaster data error: invalid JSON response');
     });
 
     it('should include all userOp fields in request', async () => {

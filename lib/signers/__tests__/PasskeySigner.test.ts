@@ -135,6 +135,32 @@ describe('PasskeySigner', () => {
       await expect(signer.signUserOpHash(mockUserOpHash)).rejects.toThrow('WebAuthn error');
     });
 
+    it('should throw when clientDataJSON is missing origin field', async () => {
+      mockVerifyWithPasskey.mockResolvedValueOnce({
+        response: {
+          signature: createMockDerSignature(),
+          authenticatorData: base64URLencode('authdata123'),
+          clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"mockchallenge"}'),
+        },
+      });
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+      await expect(signer.signUserOpHash(mockUserOpHash))
+        .rejects.toThrow('clientDataJSON missing "origin" field');
+    });
+
+    it('should throw when clientDataJSON origin value is not terminated', async () => {
+      mockVerifyWithPasskey.mockResolvedValueOnce({
+        response: {
+          signature: createMockDerSignature(),
+          authenticatorData: base64URLencode('authdata123'),
+          clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"mockchallenge","origin":"https://example.com'),
+        },
+      });
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+      await expect(signer.signUserOpHash(mockUserOpHash))
+        .rejects.toThrow('clientDataJSON "origin" value not terminated');
+    });
+
     it('should encode byte offsets even when clientDataJSON contains non-ASCII bytes', async () => {
       const clientJson =
         '{"emoji":"😀","type":"webauthn.get","challenge":"mockchallenge","origin":"https://example.com"}';

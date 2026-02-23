@@ -81,6 +81,15 @@ describe('ZkapAccount', () => {
         'not-an-entrypoint'
       )).toThrow('Invalid entryPointAddress');
     });
+
+    it('should throw when enUrl is not a valid URL', () => {
+      expect(() => new ZkapAccount(
+        mockAddress,
+        mockSigner,
+        'not-a-valid-url',
+        mockEntryPointAddress
+      )).toThrow('Invalid enUrl');
+    });
   });
 
   describe('signUserOpHash', () => {
@@ -148,6 +157,19 @@ describe('ZkapAccount', () => {
 
       expect(nonce1).toBe(BigInt(1));
       expect(nonce2).toBe(BigInt(10));
+    });
+
+    it('should include string (non-Error) in thrown message', async () => {
+      mockGetNonce.mockRejectedValueOnce('string-nonce-error');
+
+      const account = new ZkapAccount(
+        mockAddress,
+        mockSigner,
+        mockEnUrl,
+        mockEntryPointAddress
+      );
+
+      await expect(account.getNonce()).rejects.toThrow('string-nonce-error');
     });
   });
 
