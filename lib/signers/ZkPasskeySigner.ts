@@ -352,10 +352,25 @@ export class ZkPasskeySigner implements IUserOpSigner {
         }
       }
 
+      // publicInputs[8] layout (matches Groth16 verifyInputs in AccountKeyZkOAuthRS256Verifier):
+      // [0]=hanchor, [1]=h_ctx, [2]=root, [3]=h_sign_userop,
+      // [4]=jwt_exp, [5]=partial_rhs, [6]=lhs, [7]=h_aud_list
+      const sharedInputs = [
+        proofAndPublicInput.publicInputs[0], // hanchor
+        proofAndPublicInput.publicInputs[1], // h_ctx
+        proofAndPublicInput.publicInputs[2], // root
+        proofAndPublicInput.publicInputs[3], // h_sign_userop
+        proofAndPublicInput.publicInputs[6], // lhs
+        proofAndPublicInput.publicInputs[7], // h_aud_list
+      ];
+      const jwtExpList = [proofAndPublicInput.publicInputs[4]];
+      const partialRhsList = [proofAndPublicInput.publicInputs[5]];
+      const proofs = [proofAndPublicInput.proof];
+
       const abiCoder = ethers.AbiCoder.defaultAbiCoder();
       const encoded = abiCoder.encode(
-        ["uint256[8]", "uint256[8]"],
-        [proofAndPublicInput.publicInputs, proofAndPublicInput.proof]
+        ["uint256[6]", "uint256[]", "uint256[]", "uint256[8][]"],
+        [sharedInputs, jwtExpList, partialRhsList, proofs]
       );
       signatures.push(encoded);
     }

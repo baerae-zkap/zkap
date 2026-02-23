@@ -29,7 +29,7 @@ function createMockAuthResponse(signature?: string) {
     response: {
       signature: signature || createMockDerSignature(),
       authenticatorData: base64URLencode('mock-auth-data-bytes'),
-      clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"mockchallenge"}'),
+      clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"mockchallenge","origin":"https://example.com","crossOrigin":false}'),
     },
   };
 }
@@ -141,7 +141,7 @@ describe('PasskeySigner', () => {
         response: {
           signature: createMockDerSignature(),
           authenticatorData: base64URLencode('authdata123'),
-          clientDataJSON: base64URLencode('clientdata456'),
+          clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"testchallenge","origin":"https://example.com"}'),
         },
       };
       mockVerifyWithPasskey.mockResolvedValue(mockResponse);

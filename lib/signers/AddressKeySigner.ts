@@ -24,7 +24,7 @@ export class AddressKeySigner implements IUserOpSigner {
     const signatures: string[] = [];
     for (const privateKey of this.privateKeys) {
       const wallet = new ethers.Wallet(privateKey);
-      const sig = await wallet.signMessage(ethers.getBytes(userOpHash));
+      const sig = wallet.signingKey.sign(ethers.getBytes(userOpHash)).serialized;
       signatures.push(sig);
     }
     return signatures;
