@@ -13,29 +13,31 @@ function validateBN254Field(value: string, label: string): void {
 export class ZkOidcSigner implements IUserOpSigner {
   public readonly keyTypes: number[] = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
   private sharedInputs: string[] | undefined;
+  private jwtExpList: string[] | undefined;
   private partialRhsList: string[] | undefined;
   private proofs: string[][] | undefined;
 
   /**
    * ZK proof 데이터 설정
-   * @param data.sharedInputs - 7개 요소 배열
+   * @param data.sharedInputs - 6개 요소 배열
    *   - [0] hanchor: Anchor 해시
    *   - [1] h_ctx: Context 해시
    *   - [2] root: Merkle root
    *   - [3] h_sign_userop: UserOp 해시 (mod SNARK_SCALAR_FIELD)
-   *   - [4] block_timestamp: 증명 생성 시점
-   *   - [5] lhs: Left-hand side 합계
-   *   - [6] h_aud_list: Audience 리스트 해시
+   *   - [4] lhs: Left-hand side 합계
+   *   - [5] h_aud_list: Audience 리스트 해시
+   * @param data.jwtExpList - K개 요소: 각 proof의 jwt_exp (Unix timestamp)
    * @param data.partialRhsList - K개 요소: 각 proof의 partial_rhs
    * @param data.proofs - K x 8 배열: K개의 Groth16 증명
    */
   setProofData(data: {
     sharedInputs: string[];
+    jwtExpList: string[];
     partialRhsList: string[];
     proofs: string[][];
   }): void {
-    if (!Array.isArray(data.sharedInputs) || data.sharedInputs.length !== 7) {
-      throw new Error(`setProofData: sharedInputs must be an array of 7 elements, got ${data.sharedInputs?.length}`);
+    if (!Array.isArray(data.sharedInputs) || data.sharedInputs.length !== 6) {
+      throw new Error(`setProofData: sharedInputs must be an array of 6 elements, got ${data.sharedInputs?.length}`);
     }
     for (let i = 0; i < data.sharedInputs.length; i++) {
       if (typeof data.sharedInputs[i] !== 'string' || !/^\d+$/.test(data.sharedInputs[i])) {
@@ -43,11 +45,17 @@ export class ZkOidcSigner implements IUserOpSigner {
       }
       validateBN254Field(data.sharedInputs[i], `sharedInputs[${i}]`);
     }
+    if (!Array.isArray(data.jwtExpList)) {
+      throw new Error("setProofData: jwtExpList must be an array");
+    }
     if (!Array.isArray(data.partialRhsList)) {
       throw new Error("setProofData: partialRhsList must be an array");
     }
     if (!Array.isArray(data.proofs) || data.proofs.length === 0) {
       throw new Error("setProofData: proofs must be a non-empty array");
+    }
+    if (data.jwtExpList.length !== data.proofs.length) {
+      throw new Error(`setProofData: jwtExpList.length (${data.jwtExpList.length}) must equal proofs.length (${data.proofs.length})`);
     }
     if (data.partialRhsList.length !== data.proofs.length) {
       throw new Error(`setProofData: partialRhsList.length (${data.partialRhsList.length}) must equal proofs.length (${data.proofs.length})`);
@@ -58,6 +66,9 @@ export class ZkOidcSigner implements IUserOpSigner {
       }
     }
     // BN254 scalar field 범위 검증
+    for (let i = 0; i < data.jwtExpList.length; i++) {
+      validateBN254Field(data.jwtExpList[i], `jwtExpList[${i}]`);
+    }
     for (let i = 0; i < data.partialRhsList.length; i++) {
       validateBN254Field(data.partialRhsList[i], `partialRhsList[${i}]`);
     }
@@ -67,13 +78,14 @@ export class ZkOidcSigner implements IUserOpSigner {
       }
     }
     this.sharedInputs = data.sharedInputs;
+    this.jwtExpList = data.jwtExpList;
     this.partialRhsList = data.partialRhsList;
     this.proofs = data.proofs;
   }
 
   async signUserOpHash(userOpHash: string): Promise<string[]> {
-    if (!this.sharedInputs || !this.partialRhsList || !this.proofs) {
-      throw new Error("sharedInputs, partialRhsList, and proofs must be set before signing");
+    if (!this.sharedInputs || !this.jwtExpList || !this.partialRhsList || !this.proofs) {
+      throw new Error("sharedInputs, jwtExpList, partialRhsList, and proofs must be set before signing");
     }
 
     if (typeof userOpHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(userOpHash)) {
@@ -91,8 +103,8 @@ export class ZkOidcSigner implements IUserOpSigner {
 
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
     const encoded = abiCoder.encode(
-      ["uint256[7]", "uint256[]", "uint256[8][]"],
-      [this.sharedInputs, this.partialRhsList, this.proofs]
+      ["uint256[6]", "uint256[]", "uint256[]", "uint256[8][]"],
+      [this.sharedInputs, this.jwtExpList, this.partialRhsList, this.proofs]
     );
 
     return [encoded];
@@ -104,6 +116,7 @@ export class ZkOidcSigner implements IUserOpSigner {
    */
   destroy(): void {
     this.sharedInputs = undefined;
+    this.jwtExpList = undefined;
     this.partialRhsList = undefined;
     this.proofs = undefined;
   }
