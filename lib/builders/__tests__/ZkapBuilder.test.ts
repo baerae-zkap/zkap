@@ -153,6 +153,26 @@ describe('ZkapBuilder', () => {
       expect(userOp.initCode).toBeDefined();
       expect(userOp.initCode).not.toBe('0x');
     });
+
+    it('should throw for invalid factory address', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      expect(() =>
+        builder.setInitCode('not-an-address', '0x1', {
+          encodedMasterKey: '0x' + 'aa'.repeat(64),
+          encodedTxKey: '0x' + 'bb'.repeat(64),
+        })
+      ).toThrow('setInitCode: invalid factory address');
+    });
+
+    it('should throw for too-short hex factory address', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      expect(() =>
+        builder.setInitCode('0x1234', '0x1', {
+          encodedMasterKey: '0x' + 'aa'.repeat(64),
+          encodedTxKey: '0x' + 'bb'.repeat(64),
+        })
+      ).toThrow('setInitCode: invalid factory address');
+    });
   });
 
   describe('setRawInitCode', () => {

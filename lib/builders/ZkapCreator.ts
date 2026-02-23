@@ -55,7 +55,10 @@ export class ZkapCreator extends ZkapBuilder {
         this.address = zkapAddress;
         this.setSender(zkapAddress);
         return zkapAddress;
-      })();
+      })().catch((err) => {
+        this._derivePromise = null; // 실패 시 재시도 가능하게 초기화
+        throw err;
+      });
     }
     return this._derivePromise;
   }

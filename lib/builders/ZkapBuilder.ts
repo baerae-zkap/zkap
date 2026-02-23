@@ -430,6 +430,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
     salt: ethers.BigNumberish,
     keys: { encodedMasterKey: string; encodedTxKey: string }
   ): this {
+    if (!ethers.isAddress(zkapFactory)) {
+      throw new Error(`setInitCode: invalid factory address: "${zkapFactory}"`);
+    }
     const { encodedMasterKey, encodedTxKey } = keys;
     const callDataBuilder = new CallDataBuilder(ZkapAccountFactoryABI);
 

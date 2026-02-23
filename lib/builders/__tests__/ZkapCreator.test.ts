@@ -140,6 +140,23 @@ describe('ZkapCreator', () => {
       expect(mockCalcAccountAddress).toHaveBeenCalledTimes(1);
     });
 
+    it('should allow retry after failure', async () => {
+      const expectedAddress = '0x' + 'ff'.repeat(20);
+      mockCalcAccountAddress
+        .mockRejectedValueOnce(new Error('network error'))
+        .mockResolvedValueOnce(expectedAddress);
+
+      const creator = new ZkapCreator(mockCreatorInfo);
+
+      // First call fails
+      await expect(creator.deriveZkapAddress()).rejects.toThrow('network error');
+
+      // Second call should retry (not return cached rejected promise)
+      const address = await creator.deriveZkapAddress();
+      expect(address).toBe(expectedAddress);
+      expect(mockCalcAccountAddress).toHaveBeenCalledTimes(2);
+    });
+
     it('should use different addresses for different salts', async () => {
       const address1 = '0x' + 'aa'.repeat(20);
       const address2 = '0x' + 'bb'.repeat(20);
