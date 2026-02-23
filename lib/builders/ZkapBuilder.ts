@@ -268,8 +268,15 @@ export class ZkapBuilder extends BaseAccountBuilder {
     if (!this.provider) {
       throw new Error("Provider is not set. Please provide a valid RPC URL.");
     }
-    if (!this.userOp.sender) {
-      throw new Error("Sender is not set. Please set a valid sender.");
+    if (
+      !this.userOp.sender ||
+      !ethers.isAddress(this.userOp.sender) ||
+      this.userOp.sender === ethers.ZeroAddress
+    ) {
+      throw new Error("Sender is not set or invalid. Please set a non-zero Ethereum address.");
+    }
+    if (!ethers.isAddress(this.entryPoint) || this.entryPoint === ethers.ZeroAddress) {
+      throw new Error("EntryPoint is invalid. Please provide a valid non-zero EntryPoint address.");
     }
     if (!this.signerKeyTypes || this.signerKeyTypes.length === 0) {
       throw new Error("signerKeyTypes is not set. Call setSignerKeyTypes() before autoFillUserOp()");

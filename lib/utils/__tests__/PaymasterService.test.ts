@@ -164,10 +164,8 @@ describe('PaymasterService', () => {
     it('should throw for invalid mode', async () => {
       const config = createMockConfig();
       (config as any).mode = 999; // Invalid mode
-      const service = new PaymasterService(config);
-
-      await expect(service.getPaymasterData(createMockUserOp()))
-        .rejects.toThrow('Invalid paymaster mode');
+      expect(() => new PaymasterService(config))
+        .toThrow('PaymasterService: unsupported mode: 999');
     });
   });
 
@@ -442,10 +440,8 @@ describe('PaymasterService', () => {
     it('should throw for invalid mode', () => {
       const config = createMockConfig();
       (config as any).mode = 999;
-      const service = new PaymasterService(config);
-
-      expect(() => service.estimatePaymasterVerificationGasLimit())
-        .toThrow('Invalid paymaster mode');
+      expect(() => new PaymasterService(config))
+        .toThrow('PaymasterService: unsupported mode: 999');
     });
   });
 
@@ -467,10 +463,8 @@ describe('PaymasterService', () => {
     it('should throw for invalid mode', () => {
       const config = createMockConfig();
       (config as any).mode = 999;
-      const service = new PaymasterService(config);
-
-      expect(() => service.estimatePaymasterPostOpGasLimit())
-        .toThrow('Invalid paymaster mode');
+      expect(() => new PaymasterService(config))
+        .toThrow('PaymasterService: unsupported mode: 999');
     });
   });
 

@@ -9,6 +9,29 @@ import { ethers } from "ethers";
 import cryptoUtils from "../utils/crypto";
 import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
 
+function findSubarray(haystack: Uint8Array, needle: Uint8Array): number {
+  if (needle.length === 0 || haystack.length < needle.length) return -1;
+  const maxStart = haystack.length - needle.length;
+  for (let i = 0; i <= maxStart; i++) {
+    let matched = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return i;
+  }
+  return -1;
+}
+
+function findByte(bytes: Uint8Array, value: number, fromIndex: number): number {
+  for (let i = fromIndex; i < bytes.length; i++) {
+    if (bytes[i] === value) return i;
+  }
+  return -1;
+}
+
 export class PasskeySigner implements IUserOpSigner {
   public readonly keyTypes: number[] = [PrimitiveAccountKeyTypes.keyWebAuthn];
   private credentialId: string;
@@ -54,23 +77,23 @@ export class PasskeySigner implements IUserOpSigner {
     const newSig = wrapSignature(newR, newS);
 
     const clientJsonBytes = base64URLdecode(authResp.response.clientDataJSON);
-    const clientJsonStr = new TextDecoder().decode(clientJsonBytes);
+    const encoder = new TextEncoder();
 
-    const typeKey = '"type":"';
-    const typeKeyOffset = clientJsonStr.indexOf(typeKey);
+    const typeKey = encoder.encode('"type":"');
+    const typeKeyOffset = findSubarray(clientJsonBytes, typeKey);
     if (typeKeyOffset < 0) throw new Error('signUserOpHash: clientDataJSON missing "type" field');
-    const typeIndex = typeKeyOffset + typeKey.length;
+    const typeIndex = typeKeyOffset + typeKey.byteLength;
 
-    const challengeKey = '"challenge":"';
-    const challengeKeyOffset = clientJsonStr.indexOf(challengeKey);
+    const challengeKey = encoder.encode('"challenge":"');
+    const challengeKeyOffset = findSubarray(clientJsonBytes, challengeKey);
     if (challengeKeyOffset < 0) throw new Error('signUserOpHash: clientDataJSON missing "challenge" field');
-    const challengeIndex = challengeKeyOffset + challengeKey.length;
+    const challengeIndex = challengeKeyOffset + challengeKey.byteLength;
 
-    const originKey = '"origin":"';
-    const originKeyOffset = clientJsonStr.indexOf(originKey);
+    const originKey = encoder.encode('"origin":"');
+    const originKeyOffset = findSubarray(clientJsonBytes, originKey);
     if (originKeyOffset < 0) throw new Error('signUserOpHash: clientDataJSON missing "origin" field');
-    const originIndex = originKeyOffset + originKey.length;
-    const originEnd = clientJsonStr.indexOf('"', originIndex);
+    const originIndex = originKeyOffset + originKey.byteLength;
+    const originEnd = findByte(clientJsonBytes, 0x22, originIndex); // 0x22 = '"'
     if (originEnd < 0) throw new Error('signUserOpHash: clientDataJSON "origin" value not terminated');
     const originLength = originEnd - originIndex;
 

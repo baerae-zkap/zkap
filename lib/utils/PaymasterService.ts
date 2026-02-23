@@ -49,13 +49,25 @@ const ERC20_PAYMASTER_POST_OP_GAS = 100000n;
 export class PaymasterService {
   private static readonly FETCH_TIMEOUT_MS = 30_000;
   private config: PaymasterServiceConfig;
+  private static isValidMode(mode: number): mode is PaymasterMode {
+    return mode === PaymasterMode.VERIFYING || mode === PaymasterMode.ERC20;
+  }
+
   constructor(config: PaymasterServiceConfig) {
-    const url = new URL(config.serverUrl);
+    let url: URL;
+    try {
+      url = new URL(config.serverUrl);
+    } catch {
+      throw new Error(`PaymasterService: serverUrl is not a valid URL: "${config.serverUrl}"`);
+    }
     if (url.protocol !== 'https:' && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
       throw new Error('PaymasterService serverUrl must use HTTPS. HTTP is only allowed for localhost.');
     }
     if (!ethers.isAddress(config.paymasterAddress)) {
       throw new Error(`PaymasterService: paymasterAddress is not a valid Ethereum address: "${config.paymasterAddress}"`);
+    }
+    if (!PaymasterService.isValidMode(config.mode)) {
+      throw new Error(`PaymasterService: unsupported mode: ${config.mode}`);
     }
     if (config.mode === PaymasterMode.ERC20) {
       if (!config.tokenAddress) {
@@ -117,12 +129,24 @@ export class PaymasterService {
       clearTimeout(timeoutId);
     }
     if (!response.ok) {
+      let responseText = "";
+      try {
+        responseText = await response.text();
+      } catch {
+        // ignore body read failures
+      }
       throw new Error(
-        `Paymaster data request failed: ${response.status} ${response.statusText}`
+        `Paymaster data request failed: ${response.status} ${response.statusText}${responseText ? `: ${responseText}` : ""}`
       );
     }
-    const data: { result?: PaymasterDataResponse; error?: any } =
-      await response.json();
+    let data: { result?: PaymasterDataResponse; error?: unknown };
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      throw new Error(
+        `Paymaster data error: invalid JSON response (${jsonError instanceof Error ? jsonError.message : String(jsonError)})`
+      );
+    }
     if (data.error) {
       const errMsg = (typeof data.error === 'object' && data.error !== null && 'message' in data.error)
         ? (data.error as { message: string }).message
@@ -132,7 +156,7 @@ export class PaymasterService {
     if (!data.result) {
       throw new Error("Paymaster data error: result is not found");
     }
-    if (!data.result.userOp) {
+    if (!data.result.userOp || typeof data.result.userOp !== "object") {
       throw new Error("Paymaster data error: result.userOp is not found");
     }
     const paymasterData = data.result.userOp.paymasterData;

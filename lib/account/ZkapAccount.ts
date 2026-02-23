@@ -16,6 +16,9 @@ export class ZkapAccount extends BaseAccount {
     entryPointAddress: string
   ) {
     super(address);
+    if (!ethers.isAddress(entryPointAddress) || entryPointAddress === ethers.ZeroAddress) {
+      throw new Error(`Invalid entryPointAddress: "${entryPointAddress}". Must be a non-zero Ethereum address.`);
+    }
     this.signer = signer;
     try {
       new URL(enUrl);
@@ -35,8 +38,18 @@ export class ZkapAccount extends BaseAccount {
   }
 
   async getNonce(nonceKey: bigint = 0n): Promise<bigint> {
-    const nonce = await this.entryPoint.getNonce(this.address, nonceKey);
-    return nonce;
+    try {
+      const nonce = await this.entryPoint.getNonce(this.address, nonceKey);
+      return nonce;
+    } catch (error) {
+      throw Object.assign(
+        new Error(
+          `Failed to fetch nonce from entryPoint for account ${this.address} (nonceKey=${nonceKey.toString()}): ` +
+          `${error instanceof Error ? error.message : String(error)}`
+        ),
+        { cause: error }
+      );
+    }
   }
 
   /**

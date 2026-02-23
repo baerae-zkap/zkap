@@ -179,20 +179,17 @@ describe('ZkPasskeySigner', () => {
       expect(signer.keyTypes).toEqual([PrimitiveAccountKeyTypes.keyZkOAuthRS256]);
     });
 
-    it('should initialize selector array based on zkapK and zkapN', () => {
-      const signer = new ZkPasskeySigner(
+    it('should throw when zkapK > 1 (single-proof signer limitation)', () => {
+      expect(() => new ZkPasskeySigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
         ['google', 'kakao', 'google'],
         [mockIdTokenGenerator, mockIdTokenGenerator, mockIdTokenGenerator],
         mockPoseidonTreeAddress,
-        2, // zkapK = 2 true values
-        3  // zkapN = 3 total (1 false value)
-      );
-
-      // selector is private, but we can verify via behavior
-      expect(signer.keyTypes).toBeDefined();
+        2,
+        3
+      )).toThrow('ZkPasskeySigner currently supports only zkapK=1');
     });
 
     it('should throw when socialServices.length !== zkapN (H-1)', () => {
@@ -325,6 +322,25 @@ describe('ZkPasskeySigner', () => {
       expect(mockIdTokenGenerator).toHaveBeenCalledTimes(1);
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(1);
+    });
+
+    it('should pass raw userOpHash (not EIP-191 hash) to idTokenGenerator', async () => {
+      const signer = new ZkPasskeySigner(
+        mockProofServerUrl,
+        mockEnUrl,
+        mockZkapAddress,
+        ['google'],
+        [mockIdTokenGenerator],
+        mockPoseidonTreeAddress,
+        1,
+        1
+      );
+
+      const rawUserOpHash = '0x' + 'ab'.repeat(32);
+      await signer.prepareIdToken(rawUserOpHash, 0);
+
+      // Generator must receive raw userOpHash, NOT the EIP-191 prefixed hash
+      expect(mockIdTokenGenerator).toHaveBeenCalledWith(rawUserOpHash);
     });
 
     it('should throw when index is out of range', async () => {
@@ -733,7 +749,7 @@ describe('ZkPasskeySigner', () => {
         ['google', 'kakao', 'google'],
         [mockIdTokenGenerator, mockIdTokenGenerator, mockIdTokenGenerator],
         mockPoseidonTreeAddress,
-        2,
+        1,
         3
       );
 
@@ -1471,26 +1487,10 @@ describe('ZkPasskeySigner', () => {
       expect(signatures[0]).toMatch(/^0x/);
     });
 
-    it('should complete full signing flow with multiple services', async () => {
-      // zkapK=2, zkapN=2: selector=[true,true,false] → both slots active, both JWKS fetched
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve(createGoogleJwksResponse('google-kid')),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve(createKakaoJwksResponse('kakao-kid')),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve(createProofResponse()),
-        });
-
+    it('should reject full signing flow setup when zkapK > 1', () => {
       const googleGenerator = jest.fn().mockResolvedValue(createMockJwt('google-kid'));
       const kakaoGenerator = jest.fn().mockResolvedValue(createMockJwt('kakao-kid'));
-
-      const signer = new ZkPasskeySigner(
+      expect(() => new ZkPasskeySigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1499,18 +1499,7 @@ describe('ZkPasskeySigner', () => {
         mockPoseidonTreeAddress,
         2,
         2
-      );
-
-      const userOpHash = '0x' + 'ab'.repeat(32);
-
-      // Prepare both idTokens
-      await signer.prepareIdToken(userOpHash, 0);
-      await signer.prepareIdToken(userOpHash, 1);
-
-      // Sign
-      const signatures = await signer.signUserOpHash(userOpHash);
-
-      expect(signatures.length).toBe(1);
+      )).toThrow('ZkPasskeySigner currently supports only zkapK=1');
     });
 
     it('should skip merkle path lookup for selector=false slots and return dummy values', async () => {
@@ -1569,19 +1558,17 @@ describe('ZkPasskeySigner', () => {
       )).toThrow('zkapK must be between 1 and zkapN');
     });
 
-    it('should handle zkapK = zkapN', () => {
-      const signer = new ZkPasskeySigner(
+    it('should throw when zkapK = zkapN > 1', () => {
+      expect(() => new ZkPasskeySigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
         ['google', 'kakao', 'google'],
         [mockIdTokenGenerator, mockIdTokenGenerator, mockIdTokenGenerator],
         mockPoseidonTreeAddress,
-        3, // zkapK = zkapN
+        3,
         3
-      );
-
-      expect(signer.keyTypes).toBeDefined();
+      )).toThrow('ZkPasskeySigner currently supports only zkapK=1');
     });
   });
 
@@ -1763,6 +1750,59 @@ describe('ZkPasskeySigner', () => {
 
       await expect(signer.signUserOpHash('0x' + 'ab'.repeat(32)))
         .rejects.toThrow('Unsupported JWT algorithm: ES256. Only RS256 is supported.');
+    });
+  });
+
+  describe('destroy', () => {
+    it('should clear all sensitive state fields', async () => {
+      const signer = new ZkPasskeySigner(
+        mockProofServerUrl,
+        mockEnUrl,
+        mockZkapAddress,
+        ['google'],
+        [mockIdTokenGenerator],
+        mockPoseidonTreeAddress,
+        1,
+        1
+      );
+
+      await signer.init();
+      const hash = '0x' + 'ab'.repeat(32);
+      await signer.prepareIdToken(hash, 0);
+
+      signer.destroy();
+
+      expect((signer as any).idTokens).toBeUndefined();
+      expect((signer as any).anchor).toBeUndefined();
+      expect((signer as any).preparedUserOpHash).toBeUndefined();
+      expect((signer as any).idTokenGenerators).toEqual([]);
+      expect((signer as any).isInitialized).toBe(false);
+      expect((signer as any).initPromise).toBeUndefined();
+      expect((signer as any).masterKeyId).toBeUndefined();
+      expect((signer as any).zkapAccount).toBeUndefined();
+      expect((signer as any).zkOAuthRS256Verifier).toBeUndefined();
+      expect((signer as any).poseidonMerkleTreeDirectory).toBeUndefined();
+    });
+
+    it('should prevent further signing after destroy', async () => {
+      const signer = new ZkPasskeySigner(
+        mockProofServerUrl,
+        mockEnUrl,
+        mockZkapAddress,
+        ['google'],
+        [mockIdTokenGenerator],
+        mockPoseidonTreeAddress,
+        1,
+        1
+      );
+
+      const hash = '0x' + 'ab'.repeat(32);
+      await signer.prepareIdToken(hash, 0);
+      signer.destroy();
+
+      // After destroy, idTokens is cleared → initialization check fails
+      await expect(signer.prepareIdToken(hash, 0))
+        .rejects.toThrow('idTokens is not initialized');
     });
   });
 

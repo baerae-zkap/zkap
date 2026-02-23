@@ -10,6 +10,7 @@ const mockGetAddress = jest.fn();
 const mockProviderSend = jest.fn();
 jest.mock('ethers', () => ({
   ethers: {
+    ZeroAddress: '0x0000000000000000000000000000000000000000',
     isAddress: jest.fn().mockReturnValue(true),
     JsonRpcProvider: jest.fn().mockImplementation(() => ({
       send: mockProviderSend,
@@ -66,6 +67,19 @@ describe('ZkapAccount', () => {
         mockEnUrl,
         mockEntryPointAddress
       )).toThrow('Invalid account address');
+    });
+
+    it('should throw when entryPointAddress is invalid', () => {
+      const mockEthers = require('ethers');
+      mockEthers.ethers.isAddress
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false);
+      expect(() => new ZkapAccount(
+        mockAddress,
+        mockSigner,
+        mockEnUrl,
+        'not-an-entrypoint'
+      )).toThrow('Invalid entryPointAddress');
     });
   });
 

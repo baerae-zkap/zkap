@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
-import cryptoUtils, { BN254_FR } from "../utils/crypto";
+import { BN254_FR } from "../utils/crypto";
 import zkapAccountJson from "../types/abi/ZkapAccount.json";
 import AccountKeyZkOAuthRS256VerifierJson from "../types/abi/AccountKeyZkOAuthRS256Verifier.json";
 import poseidonMerkleTreeDirectoryJson from "../types/abi/PoseidonMerkleTreeDirectory.json";
@@ -134,6 +134,12 @@ export class ZkPasskeySigner implements IUserOpSigner {
     }
     if (zkapK < 1 || zkapK > zkapN) {
       throw new Error(`zkapK must be between 1 and zkapN (got zkapK=${zkapK}, zkapN=${zkapN})`);
+    }
+    if (zkapK !== 1) {
+      throw new Error(
+        `ZkPasskeySigner currently supports only zkapK=1 (got zkapK=${zkapK}). ` +
+        "For k>1 threshold proofs, use a signer path that provides multi-proof payloads."
+      );
     }
     if (socialServices.length !== zkapN) {
       throw new Error(
@@ -393,7 +399,6 @@ export class ZkPasskeySigner implements IUserOpSigner {
     }
     this._prepareInProgress = true;
     try {
-      /* istanbul ignore next */
       if (!this.idTokens) throw new Error("idTokens is not initialized");
       if (!Number.isInteger(index) || index < 0 || index >= this.idTokens.length)
         throw new Error(`index is out of range: must be a non-negative integer less than ${this.idTokens.length}, got ${index}`);
@@ -404,10 +409,9 @@ export class ZkPasskeySigner implements IUserOpSigner {
         throw new Error("[zkap-aa-sdk] prepareIdToken: userOpHash changed. Previous idTokens may be stale.");
       }
       this.preparedUserOpHash = userOpHash;
-      const signedUserOpHash = cryptoUtils.getSignedMessageHash(userOpHash);
       if (!this.idTokenGenerators[index])
         throw new Error("idTokenGenerator undefined");
-      const idToken = await this.idTokenGenerators[index](signedUserOpHash);
+      const idToken = await this.idTokenGenerators[index](userOpHash);
       if (!idToken) throw new Error("idToken is undefined");
 
       this.idTokens[index] = idToken;
@@ -518,6 +522,13 @@ export class ZkPasskeySigner implements IUserOpSigner {
     this.idTokens = undefined;
     this.anchor = undefined;
     this.preparedUserOpHash = undefined;
+    this.idTokenGenerators = [];
+    this.isInitialized = false;
+    this.initPromise = undefined;
+    this.masterKeyId = undefined;
+    this.zkapAccount = undefined;
+    this.zkOAuthRS256Verifier = undefined;
+    this.poseidonMerkleTreeDirectory = undefined;
   }
 
   private static _isLocalOrPrivateHost(hostname: string): boolean {

@@ -22,8 +22,12 @@ export { OneInchAggregator } from "./builders/aggregators/OneInchAggregator";
 // Signer 관련 클래스
 export { AddressKeySigner } from "./signers/AddressKeySigner";
 export { PasskeySigner } from "./signers/PasskeySigner";
-export { ZkPasskeySigner } from "./signers/ZkPasskeySigner";
+export { ZkPasskeySigner, clearJwksCache } from "./signers/ZkPasskeySigner";
 export { ZkOidcSigner } from "./signers/ZkOidcSigner";
+
+// Paymaster 서비스
+export { PaymasterService, PaymasterMode } from "./utils/PaymasterService";
+export type { PaymasterServiceConfig, PaymasterDataResponse } from "./utils/PaymasterService";
 
 // 유틸리티 함수 및 인터페이스
 export * from "./utils/crypto";
