@@ -132,7 +132,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
         data: this.userOp.callData,
         value: ethers.parseEther("0"),
       });
-      return ethers.toBeHex(callGasLimit);
+      return ethers.toBeHex(callGasLimit + ZkapBuilder.GAS_BUFFER);
     } else {
       // 지갑이 생성되어 있지 않고 initCode가 없으면 잘못된 시나리오
       if (!this.userOp.initCode || this.userOp.initCode === "0x") {

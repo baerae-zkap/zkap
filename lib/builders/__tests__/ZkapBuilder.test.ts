@@ -583,6 +583,20 @@ describe('ZkapBuilder', () => {
   });
 
   describe('estimateCallGasLimit (via autoFillUserOp)', () => {
+    it('should add GAS_BUFFER to estimateGas result for deployed wallet', async () => {
+      // Default beforeEach: mockGetCode returns '0x1234' (deployed), mockEstimateGas returns 21000
+      // Expected: 21000 (estimateGas) + 25000 (GAS_BUFFER) = 46000 = 0xb3b0
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([4]); // keyWebAuthn
+      builder.setCallData('0xSomeCallData');
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBe('0xb3b0'); // 21000 + 25000 (GAS_BUFFER) = 46000
+    });
+
     it('should return minimal gas when only initCode is set without callData', async () => {
       mockGetCode.mockResolvedValueOnce('0x'); // Not deployed
 
