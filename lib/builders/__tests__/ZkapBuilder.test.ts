@@ -921,7 +921,8 @@ describe('ZkapBuilder', () => {
       // Set required fields
       builder.setSender("0x" + "12".repeat(20));
       builder.setNonce("0x0");
-      builder.setInitCode("0x" + "44".repeat(20), "0x1", "0x" + "aa".repeat(64), "0x" + "bb".repeat(64));
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
       builder.setCallData("0x" + "cc".repeat(100));
 
       // Execute
@@ -947,7 +948,8 @@ describe('ZkapBuilder', () => {
 
       builder.setSender("0x" + "12".repeat(20));
       builder.setNonce("0x0");
-      builder.setInitCode("0x" + "44".repeat(20), "0x1", "0x" + "aa".repeat(64), "0x" + "bb".repeat(64));
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
       builder.setCallData("0x" + "cc".repeat(100));
 
       await builder.autoFillUserOp();
@@ -972,7 +974,8 @@ describe('ZkapBuilder', () => {
 
       builder.setSender("0x" + "12".repeat(20));
       builder.setNonce("0x0");
-      builder.setInitCode("0x" + "44".repeat(20), "0x1", "0x" + "aa".repeat(64), "0x" + "bb".repeat(64));
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
       builder.setCallData("0x" + "cc".repeat(100));
 
       await builder.autoFillUserOp();
@@ -1002,7 +1005,8 @@ describe('ZkapBuilder', () => {
 
       builder.setSender("0x" + "12".repeat(20));
       builder.setNonce("0x0");
-      builder.setInitCode("0x" + "44".repeat(20), "0x1", "0x" + "aa".repeat(64), "0x" + "bb".repeat(64));
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
       builder.setCallData("0x" + "cc".repeat(100));
 
       await builder.autoFillUserOp();
@@ -1017,11 +1021,12 @@ describe('ZkapBuilder', () => {
       mockGetCode.mockResolvedValue("0x");
       mockParseTransaction.mockReturnValue({
         name: "executeBatch",
-        args: {
-          dest: ["0x" + "11".repeat(20), "0x" + "22".repeat(20)],
-          value: [BigInt(0), BigInt(0)],
-          func: ["0x1234", "0x5678"]
-        }
+        args: [
+          ["0x" + "11".repeat(20), "0x" + "22".repeat(20)],
+          [BigInt(0), BigInt(0)],
+          ["0x1234", "0x5678"],
+        ],
+        fragment: { inputs: [{}, {}, {}] },
       });
       mockEstimateGas
         .mockResolvedValueOnce(BigInt(100000)) // For factory call
@@ -1035,7 +1040,8 @@ describe('ZkapBuilder', () => {
 
       builder.setSender("0x" + "12".repeat(20));
       builder.setNonce("0x0");
-      builder.setInitCode("0x" + "44".repeat(20), "0x1", "0x" + "aa".repeat(64), "0x" + "bb".repeat(64));
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
       builder.setCallData("0x" + "cc".repeat(100));
 
       await builder.autoFillUserOp();
@@ -1061,12 +1067,13 @@ describe('ZkapBuilder', () => {
 
       builder.setSender("0x" + "12".repeat(20));
       builder.setNonce("0x0");
-      builder.setInitCode("0x" + "44".repeat(20), "0x1", "0x" + "aa".repeat(64), "0x" + "bb".repeat(64));
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
       builder.setCallData("0x" + "cc".repeat(100));
 
-      // Should throw error (caught and re-thrown as parse error)
+      // Should throw error for unsupported function
       await expect(builder.autoFillUserOp()).rejects.toThrow(
-        "callData could not be parsed. Manual callGasLimit required."
+        "Unsupported function for gas estimation: unsupportedFunction"
       );
     });
   });

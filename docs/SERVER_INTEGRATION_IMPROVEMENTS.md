@@ -4,7 +4,7 @@
 
 ## Overview
 
-While integrating `@baerae-zkap/zkap-aa-sdk` with the ZKAP Global Server, several areas were identified where the SDK could be enhanced to provide better server-side support. Currently, the SDK is primarily designed for client-side usage, and these improvements would make it more versatile for backend services.
+While integrating `@baerae-zkap/zkap-aa` with the ZKAP Global Server, several areas were identified where the SDK could be enhanced to provide better server-side support. Currently, the SDK is primarily designed for client-side usage, and these improvements would make it more versatile for backend services.
 
 ---
 
@@ -107,7 +107,7 @@ export function encodePaymasterAndData(
 ### Usage Example (Server)
 
 ```typescript
-import { signPaymasterData, encodePaymasterAndData } from '@baerae-zkap/zkap-aa-sdk';
+import { signPaymasterData, encodePaymasterAndData } from '@baerae-zkap/zkap-aa';
 
 const paymasterData = await signPaymasterData({
   userOp,
@@ -188,7 +188,7 @@ export function computeUserOpHash(
 ### Usage Example (Server)
 
 ```typescript
-import { computeUserOpHash } from '@baerae-zkap/zkap-aa-sdk';
+import { computeUserOpHash } from '@baerae-zkap/zkap-aa';
 
 // No contract call needed - fast validation
 const hash = computeUserOpHash(userOp, entryPointAddress, chainId);
@@ -273,7 +273,7 @@ export function validateAnchor(
 ### Usage Example (Server)
 
 ```typescript
-import { computeAnchor, validateAnchor } from '@baerae-zkap/zkap-aa-sdk';
+import { computeAnchor, validateAnchor } from '@baerae-zkap/zkap-aa';
 
 // When creating a new wallet
 const anchor = computeAnchor({
@@ -352,7 +352,7 @@ import {
   ZkapPaymasterABIstring,
   PoseidonMerkleTreeDirectoryABIstring,
   ZkOAuthVerifierABIstring,
-} from '@baerae-zkap/zkap-aa-sdk';
+} from '@baerae-zkap/zkap-aa';
 
 // Paymaster balance management
 const paymaster = new ethers.Contract(

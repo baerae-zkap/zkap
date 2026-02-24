@@ -72,7 +72,7 @@ GitHub에서 branch protection rules를 설정하여 CI 통과를 필수로 만�
 ### 방법 2: GitHub CLI
 
 ```bash
-gh api repos/baerae-zkap/zkap-aa-sdk/branches/main/protection \
+gh api repos/baerae-zkap/zkap-aa/branches/main/protection \
   -X PUT \
   -H "Accept: application/vnd.github+json" \
   -f required_status_checks='{"strict":true,"contexts":["test"]}' \

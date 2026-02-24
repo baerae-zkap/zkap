@@ -1,5 +1,5 @@
 {
-  "name": "@baerae-zkap/zkap-aa-sdk",
+  "name": "@baerae-zkap/zkap-aa",
   "version": "0.0.29",
   "description": "A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.",
   "scripts": {
@@ -23,9 +23,9 @@
     "registry": "https://asia-northeast3-npm.pkg.dev/zkap-dev/zkap-npm-packages/"
   },
   "bugs": {
-    "url": "https://github.com/baerae-zkap/zkap-aa-sdk/issues"
+    "url": "https://github.com/baerae-zkap/zkap-aa/issues"
   },
-  "homepage": "https://github.com/baerae-zkap/zkap-aa-sdk#readme",
+  "homepage": "https://github.com/baerae-zkap/zkap-aa#readme",
   "files": [
     "dist/lib/",
     "README.md",
