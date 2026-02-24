@@ -37,14 +37,37 @@ describe('SwapBuilder', () => {
       expect(OneInchAggregator).toHaveBeenCalledWith(mockChainId, mockApiKey);
     });
 
-    it('should not create aggregator for unsupported aggregator name', () => {
+    it('should throw for unsupported aggregator name', () => {
       // Clear mock calls
-      (OneInchAggregator as jest.Mock).mockClear();
+      (OneInchAggregator as unknown as jest.Mock).mockClear();
 
-      const builder = new SwapBuilder('unsupported', mockChainId, mockApiKey, mockBundlerAddress);
+      expect(() => new SwapBuilder('unsupported', mockChainId, mockApiKey, mockBundlerAddress))
+        .toThrow('Unsupported aggregator: "unsupported"');
+    });
 
-      // Unsupported aggregators don't create an instance
-      expect(builder).toBeInstanceOf(SwapBuilder);
+    it('should throw when chainId is zero', () => {
+      expect(() => new SwapBuilder('1inch', 0, mockApiKey, mockBundlerAddress))
+        .toThrow('SwapBuilder: chainId must be a positive integer, got 0');
+    });
+
+    it('should throw when chainId is negative', () => {
+      expect(() => new SwapBuilder('1inch', -1, mockApiKey, mockBundlerAddress))
+        .toThrow('SwapBuilder: chainId must be a positive integer, got -1');
+    });
+
+    it('should throw when apiKey is empty', () => {
+      expect(() => new SwapBuilder('1inch', mockChainId, '', mockBundlerAddress))
+        .toThrow('SwapBuilder: apiKey must be a non-empty string');
+    });
+
+    it('should throw when apiKey is whitespace only', () => {
+      expect(() => new SwapBuilder('1inch', mockChainId, '   ', mockBundlerAddress))
+        .toThrow('SwapBuilder: apiKey must be a non-empty string');
+    });
+
+    it('should throw when bundlerAddress is not a valid Ethereum address', () => {
+      expect(() => new SwapBuilder('1inch', mockChainId, mockApiKey, 'not-an-address'))
+        .toThrow('SwapBuilder: bundlerAddress is not a valid Ethereum address: "not-an-address"');
     });
   });
 
@@ -74,11 +97,14 @@ describe('SwapBuilder', () => {
 
       const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
 
+      const src = '0x' + 'aa'.repeat(20);
+      const dst = '0x' + 'bb'.repeat(20);
+      const from = '0x' + 'cc'.repeat(20);
       const params = {
-        src: '0xTokenA',
-        dst: '0xTokenB',
+        src,
+        dst,
         amount: '1000000',
-        from: '0xSender',
+        from,
         slippage: 0.05,
         disableEstimate: true,
         allowPartialFill: false,
@@ -87,10 +113,10 @@ describe('SwapBuilder', () => {
       await builder.getSwapTxData(params);
 
       expect(mockGetSwapTxData).toHaveBeenCalledWith({
-        src: '0xTokenA',
-        dst: '0xTokenB',
+        src,
+        dst,
         amount: '1000000',
-        from: '0xSender',
+        from,
         origin: mockBundlerAddress,
         slippage: 0.05,
         disableEstimate: true,
@@ -103,22 +129,20 @@ describe('SwapBuilder', () => {
 
       const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
 
-      await builder.getSwapTxData({
-        src: '0xSrc',
-        dst: '0xDst',
-        amount: '100',
-        from: '0xFrom',
-      });
+      const src = '0x' + 'dd'.repeat(20);
+      const dst = '0x' + 'ee'.repeat(20);
+      const from = '0x' + 'ff'.repeat(20);
+      await builder.getSwapTxData({ src, dst, amount: '100', from });
 
       expect(mockGetSwapTxData).toHaveBeenCalledWith({
-        src: '0xSrc',
-        dst: '0xDst',
+        src,
+        dst,
         amount: '100',
-        from: '0xFrom',
+        from,
         origin: mockBundlerAddress,
-        slippage: 0.01, // default
-        disableEstimate: false, // default
-        allowPartialFill: true, // default
+        slippage: 0.01,
+        disableEstimate: false,
+        allowPartialFill: true,
       });
     });
 
@@ -130,12 +154,33 @@ describe('SwapBuilder', () => {
 
       await expect(
         builder.getSwapTxData({
-          src: '0x1',
-          dst: '0x2',
+          src: '0x' + '11'.repeat(20),
+          dst: '0x' + '22'.repeat(20),
           amount: '100',
-          from: '0x3',
+          from: '0x' + '33'.repeat(20),
         })
       ).rejects.toThrow('API rate limit exceeded');
+    });
+
+    it('should throw when src is not a valid Ethereum address', async () => {
+      const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
+      await expect(
+        builder.getSwapTxData({ src: 'not-an-address', dst: '0x' + '22'.repeat(20), amount: '100', from: '0x' + '33'.repeat(20) })
+      ).rejects.toThrow('SwapBuilder: src is not a valid Ethereum address: "not-an-address"');
+    });
+
+    it('should throw when dst is not a valid Ethereum address', async () => {
+      const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
+      await expect(
+        builder.getSwapTxData({ src: '0x' + '11'.repeat(20), dst: 'bad-dst', amount: '100', from: '0x' + '33'.repeat(20) })
+      ).rejects.toThrow('SwapBuilder: dst is not a valid Ethereum address: "bad-dst"');
+    });
+
+    it('should throw when from is not a valid Ethereum address', async () => {
+      const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
+      await expect(
+        builder.getSwapTxData({ src: '0x' + '11'.repeat(20), dst: '0x' + '22'.repeat(20), amount: '100', from: 'bad-from' })
+      ).rejects.toThrow('SwapBuilder: from is not a valid Ethereum address: "bad-from"');
     });
   });
 
@@ -151,7 +196,6 @@ describe('SwapBuilder', () => {
       const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
 
       const result = await builder.getApprovalTxData(
-        '0xSender',
         '0xToken',
         '1000000000000000000'
       );
@@ -163,13 +207,12 @@ describe('SwapBuilder', () => {
       mockGetApprovalTxData.mockResolvedValueOnce({});
 
       const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
-      const sender = '0x' + '11'.repeat(20);
       const token = '0x' + '22'.repeat(20);
       const amount = '999999999';
 
-      await builder.getApprovalTxData(sender, token, amount);
+      await builder.getApprovalTxData(token, amount);
 
-      expect(mockGetApprovalTxData).toHaveBeenCalledWith(token, amount, sender);
+      expect(mockGetApprovalTxData).toHaveBeenCalledWith(token, amount);
     });
 
     it('should propagate aggregator errors', async () => {
@@ -179,7 +222,7 @@ describe('SwapBuilder', () => {
       const builder = new SwapBuilder('1inch', mockChainId, mockApiKey, mockBundlerAddress);
 
       await expect(
-        builder.getApprovalTxData('0xSender', '0xToken', '100')
+        builder.getApprovalTxData('0xToken', '100')
       ).rejects.toThrow('Token not found');
     });
   });
@@ -189,7 +232,7 @@ describe('SwapBuilder', () => {
       new SwapBuilder('1inch', 137, mockApiKey, mockBundlerAddress);
       expect(OneInchAggregator).toHaveBeenCalledWith(137, mockApiKey);
 
-      (OneInchAggregator as jest.Mock).mockClear();
+      (OneInchAggregator as unknown as jest.Mock).mockClear();
 
       new SwapBuilder('1inch', 8453, mockApiKey, mockBundlerAddress);
       expect(OneInchAggregator).toHaveBeenCalledWith(8453, mockApiKey);

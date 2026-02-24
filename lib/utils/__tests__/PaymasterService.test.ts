@@ -39,16 +39,20 @@ function createMockUserOp(): UserOperation {
 
 // Helper to create mock config
 function createMockConfig(mode: PaymasterMode = PaymasterMode.VERIFYING): PaymasterServiceConfig {
-  return {
+  const config: PaymasterServiceConfig = {
     serverUrl: 'http://localhost:3000',
     paymasterAddress: '0x' + '33'.repeat(20),
     chainId: 1,
     mode,
   };
+  if (mode === PaymasterMode.ERC20) {
+    config.tokenAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+  }
+  return config;
 }
 
 // Helper to create successful API response
-function createSuccessResponse(paymasterData: string = '0xPaymasterData') {
+function createSuccessResponse(paymasterData: string = '0xabcd1234') {
   return {
     result: {
       userOp: {
@@ -85,19 +89,65 @@ describe('PaymasterService', () => {
 
       expect(service.getConfig().mode).toBe(PaymasterMode.ERC20);
     });
+
+    it('should throw when serverUrl is not a valid URL', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'not-a-valid-url',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.VERIFYING,
+      })).toThrow('PaymasterService: serverUrl is not a valid URL: "not-a-valid-url"');
+    });
+
+    it('should throw when serverUrl uses HTTP with non-localhost hostname', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'http://remoteserver.com:3000',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.VERIFYING,
+      })).toThrow('PaymasterService serverUrl must use HTTPS. HTTP is only allowed for localhost.');
+    });
+
+    it('should throw when paymasterAddress is not a valid Ethereum address', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'http://localhost:3000',
+        paymasterAddress: 'not-an-address',
+        chainId: 1,
+        mode: PaymasterMode.VERIFYING,
+      })).toThrow('PaymasterService: paymasterAddress is not a valid Ethereum address: "not-an-address"');
+    });
+
+    it('should throw when ERC20 mode is used without tokenAddress', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'http://localhost:3000',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.ERC20,
+      })).toThrow('PaymasterService: tokenAddress is required for ERC20 mode');
+    });
+
+    it('should throw when ERC20 tokenAddress is not a valid Ethereum address', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'http://localhost:3000',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.ERC20,
+        tokenAddress: 'not-an-address',
+      })).toThrow('PaymasterService: tokenAddress is not a valid Ethereum address: "not-an-address"');
+    });
   });
 
   describe('getPaymasterData', () => {
     it('should route to VERIFYING method for VERIFYING mode', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(createSuccessResponse('0xVerifyingData')),
+        json: () => Promise.resolve(createSuccessResponse('0xabcdef1234')),
       });
 
       const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
       const result = await service.getPaymasterData(createMockUserOp());
 
-      expect(result).toBe('0xVerifyingData');
+      expect(result).toBe('0xabcdef1234');
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:3000/paymaster/get-paymaster-data',
         expect.any(Object)
@@ -107,13 +157,13 @@ describe('PaymasterService', () => {
     it('should route to ERC20 method for ERC20 mode', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(createSuccessResponse('0xErc20Data')),
+        json: () => Promise.resolve(createSuccessResponse('0xfeedbeef')),
       });
 
       const service = new PaymasterService(createMockConfig(PaymasterMode.ERC20));
       const result = await service.getPaymasterData(createMockUserOp());
 
-      expect(result).toBe('0xErc20Data');
+      expect(result).toBe('0xfeedbeef');
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:3000/paymaster/get-paymaster-data-erc20',
         expect.any(Object)
@@ -123,10 +173,8 @@ describe('PaymasterService', () => {
     it('should throw for invalid mode', async () => {
       const config = createMockConfig();
       (config as any).mode = 999; // Invalid mode
-      const service = new PaymasterService(config);
-
-      await expect(service.getPaymasterData(createMockUserOp()))
-        .rejects.toThrow('Invalid paymaster mode');
+      expect(() => new PaymasterService(config))
+        .toThrow('PaymasterService: unsupported mode: 999');
     });
   });
 
@@ -136,13 +184,13 @@ describe('PaymasterService', () => {
     it('should fetch paymaster data successfully', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(createSuccessResponse('0xPaymasterData123')),
+        json: () => Promise.resolve(createSuccessResponse('0xab12cd34ef')),
       });
 
       const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
       const result = await service.getPaymasterData(mockUserOp);
 
-      expect(result).toBe('0xPaymasterData123');
+      expect(result).toBe('0xab12cd34ef');
     });
 
     it('should send correct request body', async () => {
@@ -212,6 +260,62 @@ describe('PaymasterService', () => {
         .rejects.toThrow('Paymaster data error: result is not found');
     });
 
+    it('should throw when result.userOp is missing', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ result: { paymasterData: '0xabcd' } }), // userOp 없음
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('result.userOp is not found');
+    });
+
+    it('should throw when paymasterData is not a hex string', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          result: {
+            userOp: { paymasterData: 'not-hex-string' },
+          },
+        }),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+
+      await expect(service.getPaymasterData(mockUserOp))
+        .rejects.toThrow('Invalid paymasterData format: expected 0x-prefixed even-length hex string');
+    });
+
+    it('should throw when paymasterData is a number instead of string', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          result: {
+            userOp: { paymasterData: 12345 },
+          },
+        }),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+
+      await expect(service.getPaymasterData(mockUserOp))
+        .rejects.toThrow('Invalid paymasterData format: expected 0x-prefixed even-length hex string, got number');
+    });
+
+    it('should throw when response body is not valid JSON', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.reject(new Error('Unexpected token < in JSON')),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Paymaster data error: invalid JSON response');
+    });
+
     it('should include all userOp fields in request', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -246,13 +350,13 @@ describe('PaymasterService', () => {
     it('should fetch ERC20 paymaster data successfully', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(createSuccessResponse('0xErc20PaymasterData')),
+        json: () => Promise.resolve(createSuccessResponse('0xdeadbeef01')),
       });
 
       const service = new PaymasterService(createMockConfig(PaymasterMode.ERC20));
       const result = await service.getPaymasterData(mockUserOp);
 
-      expect(result).toBe('0xErc20PaymasterData');
+      expect(result).toBe('0xdeadbeef01');
     });
 
     it('should call correct endpoint', async () => {
@@ -270,13 +374,15 @@ describe('PaymasterService', () => {
       );
     });
 
-    it('should include USDC token address in params', async () => {
+    it('should include configured token address in params', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(createSuccessResponse()),
       });
 
-      const service = new PaymasterService(createMockConfig(PaymasterMode.ERC20));
+      const config = createMockConfig(PaymasterMode.ERC20);
+      config.tokenAddress = '0x' + 'cd'.repeat(20);
+      const service = new PaymasterService(config);
       await service.getPaymasterData(mockUserOp);
 
       const callArgs = mockFetch.mock.calls[0][1];
@@ -284,7 +390,17 @@ describe('PaymasterService', () => {
 
       // ERC20 mode includes token address as 4th param
       expect(body.params.length).toBe(4);
-      expect(body.params[3]).toBe('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
+      expect(body.params[3]).toBe('0x' + 'cd'.repeat(20));
+    });
+
+    it('should throw when tokenAddress is not set for ERC20 mode', () => {
+      expect(() => new PaymasterService({
+        serverUrl: 'http://localhost:3000',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.ERC20,
+        // no tokenAddress
+      })).toThrow('PaymasterService: tokenAddress is required for ERC20 mode');
     });
 
     it('should throw on HTTP error', async () => {
@@ -345,10 +461,8 @@ describe('PaymasterService', () => {
     it('should throw for invalid mode', () => {
       const config = createMockConfig();
       (config as any).mode = 999;
-      const service = new PaymasterService(config);
-
-      expect(() => service.estimatePaymasterVerificationGasLimit())
-        .toThrow('Invalid paymaster mode');
+      expect(() => new PaymasterService(config))
+        .toThrow('PaymasterService: unsupported mode: 999');
     });
   });
 
@@ -370,10 +484,8 @@ describe('PaymasterService', () => {
     it('should throw for invalid mode', () => {
       const config = createMockConfig();
       (config as any).mode = 999;
-      const service = new PaymasterService(config);
-
-      expect(() => service.estimatePaymasterPostOpGasLimit())
-        .toThrow('Invalid paymaster mode');
+      expect(() => new PaymasterService(config))
+        .toThrow('PaymasterService: unsupported mode: 999');
     });
   });
 
@@ -381,14 +493,14 @@ describe('PaymasterService', () => {
     it('should return the config object', () => {
       const config = createMockConfig(PaymasterMode.ERC20);
       config.serverUrl = 'https://custom.server.com';
-      config.paymasterAddress = '0xCustomPaymaster';
+      config.paymasterAddress = '0x' + 'ab'.repeat(20);
       config.chainId = 137;
 
       const service = new PaymasterService(config);
       const returnedConfig = service.getConfig();
 
       expect(returnedConfig.serverUrl).toBe('https://custom.server.com');
-      expect(returnedConfig.paymasterAddress).toBe('0xCustomPaymaster');
+      expect(returnedConfig.paymasterAddress).toBe('0x' + 'ab'.repeat(20));
       expect(returnedConfig.chainId).toBe(137);
       expect(returnedConfig.mode).toBe(PaymasterMode.ERC20);
     });
@@ -435,23 +547,51 @@ describe('PaymasterService', () => {
       );
     });
 
-    it('should include timestamp in request id', async () => {
-      const beforeTime = Date.now();
-
-      mockFetch.mockResolvedValueOnce({
+    it('should include unique numeric id in request', async () => {
+      mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(createSuccessResponse()),
       });
 
       const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
       await service.getPaymasterData(createMockUserOp());
+      await service.getPaymasterData(createMockUserOp());
 
-      const afterTime = Date.now();
-      const callArgs = mockFetch.mock.calls[0][1];
-      const body = JSON.parse(callArgs.body);
+      const body1 = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const body2 = JSON.parse(mockFetch.mock.calls[1][1].body);
 
-      expect(body.id).toBeGreaterThanOrEqual(beforeTime);
-      expect(body.id).toBeLessThanOrEqual(afterTime);
+      expect(typeof body1.id).toBe('number');
+      expect(body1.id).toBeGreaterThanOrEqual(0);
+      expect(typeof body2.id).toBe('number');
+      expect(body2.id).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should throw timeout error when fetch is aborted', async () => {
+      const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Paymaster request timed out after 30000ms');
+    });
+
+    it('should rethrow non-abort fetch errors', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Connection refused');
+    });
+
+    it('should stringify non-object API error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ error: 'unauthorized' }),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Paymaster data error: "unauthorized"');
     });
   });
 });

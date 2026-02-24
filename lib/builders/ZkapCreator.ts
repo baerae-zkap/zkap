@@ -19,6 +19,7 @@ export class ZkapCreator extends ZkapBuilder {
   private encodedMasterKey: string;
   private encodedTxKey: string;
   private address: string = ethers.ZeroAddress;
+  private _derivePromise: Promise<string> | null = null;
   constructor({
     chainId,
     entryPoint,
@@ -33,7 +34,7 @@ export class ZkapCreator extends ZkapBuilder {
       entryPoint,
       enUrl,
     });
-    this.setInitCode(zkapFactory, salt, encodedMasterKey, encodedTxKey);
+    this.setInitCode(zkapFactory, salt, { encodedMasterKey, encodedTxKey });
     this.zkapFactory = zkapFactory;
     this.salt = salt;
     this.encodedMasterKey = encodedMasterKey;
@@ -42,21 +43,24 @@ export class ZkapCreator extends ZkapBuilder {
   }
 
   async deriveZkapAddress(): Promise<string> {
-    if (this.address != ethers.ZeroAddress) return this.address;
-    const zkapFactory = new ZkapFactoryBuilder(this.zkapFactory, this.enUrl);
-    const zkapAddress = await zkapFactory.calcAccountAddress(
-      this.salt,
-      this.encodedMasterKey,
-      this.encodedTxKey
-    );
-    this.address = zkapAddress;
-    this.setSender(zkapAddress);
-    return zkapAddress;
+    if (this.address !== ethers.ZeroAddress) return this.address;
+    if (!this._derivePromise) {
+      this._derivePromise = (async () => {
+        const zkapFactory = new ZkapFactoryBuilder(this.zkapFactory, this.enUrl);
+        const zkapAddress = await zkapFactory.calcAccountAddress(
+          this.salt,
+          this.encodedMasterKey,
+          this.encodedTxKey
+        );
+        this.address = zkapAddress;
+        this.setSender(zkapAddress);
+        return zkapAddress;
+      })().catch((err) => {
+        this._derivePromise = null; // 실패 시 재시도 가능하게 초기화
+        throw err;
+      });
+    }
+    return this._derivePromise;
   }
 
-  // async completeUserOp(): Promise<this> {
-  //   await this.deriveZkapAddress();
-  //   await super.completeUserOp();
-  //   return this;
-  // }
 }

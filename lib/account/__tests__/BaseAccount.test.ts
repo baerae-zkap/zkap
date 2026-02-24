@@ -16,8 +16,8 @@ class TestAccount extends BaseAccount {
     return '0xtxhash';
   }
 
-  async getNonce(): Promise<number> {
-    return 42;
+  async getNonce(): Promise<bigint> {
+    return BigInt(42);
   }
 }
 
@@ -61,7 +61,7 @@ describe('BaseAccount', () => {
     it('should implement getNonce', async () => {
       const account = new TestAccount(mockAddress);
       const result = await account.getNonce();
-      expect(result).toBe(42);
+      expect(result).toBe(BigInt(42));
     });
   });
 });

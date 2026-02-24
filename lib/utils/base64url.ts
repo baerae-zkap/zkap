@@ -1,13 +1,16 @@
 import { ethers } from 'ethers';
 
-export function base64URLdecode(str: string): string {
+/**
+ * Base64URL 문자열을 Uint8Array로 디코딩합니다.
+ * @note Node.js Buffer에 의존하므로 브라우저 환경에서는 폴리필이 필요합니다.
+ *       브라우저 호환이 필요한 경우 atob()와 Uint8Array를 사용하는 방식으로 교체하세요.
+ */
+export function base64URLdecode(str: string): Uint8Array {
   const base64Encoded = str.replace(/-/g, '+').replace(/_/g, '/');
   const padding = str.length % 4 === 0 ? '' : '='.repeat(4 - (str.length % 4));
   const base64WithPadding = base64Encoded + padding;
-  return atob(base64WithPadding)
-    .split('')
-    .map((char) => String.fromCharCode(char.charCodeAt(0)))
-    .join('');
+  const buf = Buffer.from(base64WithPadding, "base64");
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 }
 
 export function base64URLencode(str: string): string {
@@ -20,16 +23,9 @@ export function toURLEncode(base64str: string): string {
 }
 
 export function StringToUint8Array(str: string): Uint8Array {
-  let r = new Uint8Array(str.length);
-  for (let i = 0; i < str.length; i++) {
-    r[i] = str.charCodeAt(i);
-  }
-
-  return r;
+  return new TextEncoder().encode(str);
 }
 
 export function Uint8ArrayToString(uint8Array: Uint8Array): string {
-  let string = '';
-  uint8Array.forEach((byte) => (string = string + String.fromCharCode(byte)));
-  return string;
+  return new TextDecoder().decode(uint8Array);
 }

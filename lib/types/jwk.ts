@@ -10,5 +10,5 @@ export interface JwkKey {
 export interface JwtHeader {
   alg: string;
   kid: string;
-  typ: string;
+  typ?: string;
 }

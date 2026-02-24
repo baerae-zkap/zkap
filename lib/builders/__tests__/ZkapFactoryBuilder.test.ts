@@ -8,6 +8,7 @@
 const mockCalcAccountAddress = jest.fn();
 jest.mock('ethers', () => ({
   ethers: {
+    isAddress: jest.fn().mockReturnValue(true),
     JsonRpcProvider: jest.fn().mockImplementation(() => ({})),
     Contract: jest.fn().mockImplementation(() => ({
       calcAccountAddress: mockCalcAccountAddress,
@@ -15,10 +16,6 @@ jest.mock('ethers', () => ({
   },
 }));
 
-// Mock ABI
-jest.mock('../../resources/abis', () => ({
-  ZkapAccountFactoryABIstring: '[]',
-}));
 
 import { ZkapFactoryBuilder } from '../ZkapFactoryBuilder';
 
@@ -34,6 +31,14 @@ describe('ZkapFactoryBuilder', () => {
     it('should create instance with factory address and enUrl', () => {
       const builder = new ZkapFactoryBuilder(mockFactoryAddress, mockEnUrl);
       expect(builder).toBeInstanceOf(ZkapFactoryBuilder);
+    });
+
+    it('should throw when address is not a valid Ethereum address', () => {
+      const { ethers: mockEthers } = jest.requireMock('ethers');
+      mockEthers.isAddress.mockReturnValueOnce(false);
+      expect(() => new ZkapFactoryBuilder('not-an-address', mockEnUrl)).toThrow(
+        'ZkapFactoryBuilder: invalid contract address: "not-an-address"'
+      );
     });
   });
 

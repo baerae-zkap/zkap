@@ -148,14 +148,87 @@ describe('signature', () => {
       expect(result.slice(38, 70)).toEqual(s);
     });
 
-    it('should produce correct total length', () => {
-      const r = new Uint8Array(32).fill(0xaa);
-      const s = new Uint8Array(32).fill(0xbb);
+    it('should produce correct total length when MSB is not set', () => {
+      // r[0] < 0x80 and s[0] < 0x80: no sign bytes needed
+      const r = new Uint8Array(32).fill(0x11);
+      const s = new Uint8Array(32).fill(0x22);
 
       const result = wrapSignature(r, s);
 
-      // 4 (header) + 32 (r) + 2 (s header) + 32 (s) = 70 bytes
+      // 2 (seq header) + (2+32) r-integer + (2+32) s-integer = 70 bytes
       expect(result.length).toBe(70);
+    });
+
+    it('should add DER sign byte when r MSB is set', () => {
+      // r[0] >= 0x80: needs 0x00 prefix in DER INTEGER
+      const r = new Uint8Array(32).fill(0xaa);
+      const s = new Uint8Array(32).fill(0x22); // s[0] < 0x80
+
+      const result = wrapSignature(r, s);
+
+      // r needs sign byte → rIntLen=33, sIntLen=32, seqLen=4+33+32=69
+      expect(result[0]).toBe(0x30); // SEQUENCE
+      expect(result[1]).toBe(0x45); // sequence length = 69
+      expect(result[2]).toBe(0x02); // INTEGER tag for r
+      expect(result[3]).toBe(0x21); // r length = 33 (with sign byte)
+      expect(result[4]).toBe(0x00); // sign byte
+      expect(Array.from(result.slice(5, 37))).toEqual(Array.from(r)); // r value
+      expect(result[37]).toBe(0x02); // INTEGER tag for s
+      expect(result[38]).toBe(0x20); // s length = 32
+      expect(Array.from(result.slice(39, 71))).toEqual(Array.from(s)); // s value
+      expect(result.length).toBe(71);
+    });
+
+    it('should add DER sign bytes when both r and s MSB are set', () => {
+      const r = new Uint8Array(32).fill(0xaa); // MSB set
+      const s = new Uint8Array(32).fill(0xbb); // MSB set
+
+      const result = wrapSignature(r, s);
+
+      // Both need sign bytes → rIntLen=33, sIntLen=33, seqLen=4+33+33=70
+      expect(result[1]).toBe(0x46); // sequence length = 70
+      expect(result[3]).toBe(0x21); // r length = 33
+      expect(result[4]).toBe(0x00); // r sign byte
+      // s starts at 5+32=37, then tag(1)+len(1)+sign(1)=39
+      expect(result[37]).toBe(0x02); // INTEGER tag for s
+      expect(result[38]).toBe(0x21); // s length = 33
+      expect(result[39]).toBe(0x00); // s sign byte
+      expect(result.length).toBe(72);
+    });
+
+    it('should pad r when shorter than 32 bytes', () => {
+      const r = new Uint8Array(16).fill(0x11); // shorter than 32
+      const s = new Uint8Array(32).fill(0x22);
+
+      const result = wrapSignature(r, s);
+
+      // r should be padded to 32 bytes at index 4-35
+      expect(result.length).toBe(70);
+      // First 16 bytes of r slot should be zero (padding)
+      for (let i = 4; i < 20; i++) {
+        expect(result[i]).toBe(0x00);
+      }
+      // Last 16 bytes of r slot should be 0x11
+      for (let i = 20; i < 36; i++) {
+        expect(result[i]).toBe(0x11);
+      }
+    });
+
+    it('should pad s when shorter than 32 bytes', () => {
+      const r = new Uint8Array(32).fill(0x33);
+      const s = new Uint8Array(16).fill(0x44); // shorter than 32
+
+      const result = wrapSignature(r, s);
+
+      expect(result.length).toBe(70);
+      // s slot starts at index 38; first 16 bytes should be zero padding
+      for (let i = 38; i < 54; i++) {
+        expect(result[i]).toBe(0x00);
+      }
+      // Last 16 bytes should be 0x44
+      for (let i = 54; i < 70; i++) {
+        expect(result[i]).toBe(0x44);
+      }
     });
   });
 
@@ -206,6 +279,68 @@ describe('signature', () => {
 
       expect(Array.from(extractedR)).toEqual(Array.from(r));
       expect(Array.from(extractedS)).toEqual(Array.from(s));
+    });
+
+    it('should throw when buffer is too short (< 8 bytes)', () => {
+      expect(() => unwrapSignature(new Uint8Array([0x30, 0x06, 0x02]))).toThrow('DER signature too short');
+    });
+
+    it('should throw when first byte is not 0x30 (SEQUENCE tag)', () => {
+      const buf = new Uint8Array(10).fill(0);
+      buf[0] = 0x31; // wrong tag
+      buf[2] = 0x02;
+      expect(() => unwrapSignature(buf)).toThrow('Expected DER SEQUENCE tag (0x30)');
+    });
+
+    it('should throw when r INTEGER tag is not 0x02', () => {
+      const buf = new Uint8Array(10).fill(0);
+      buf[0] = 0x30;
+      buf[2] = 0x03; // wrong INTEGER tag
+      buf[3] = 2;
+      expect(() => unwrapSignature(buf)).toThrow('Expected DER INTEGER tag (0x02) for r');
+    });
+
+    it('should throw when r length exceeds buffer', () => {
+      const buf = new Uint8Array(10).fill(0);
+      buf[0] = 0x30;
+      buf[2] = 0x02;
+      buf[3] = 100; // rLength > sigBuffer.length - 4
+      expect(() => unwrapSignature(buf)).toThrow('Invalid r length in DER signature');
+    });
+
+    it('should throw when buffer too short for s component', () => {
+      // sTagOffset = 4 + rLength. Make sTagOffset + 1 >= sigBuffer.length
+      const rLength = 4;
+      const buf = new Uint8Array(4 + rLength + 1).fill(0); // barely too short for s
+      buf[0] = 0x30;
+      buf[2] = 0x02;
+      buf[3] = rLength;
+      // sTagOffset = 4 + 4 = 8, buf.length = 9, sTagOffset + 1 = 9 >= 9 → throw
+      expect(() => unwrapSignature(buf)).toThrow('DER signature too short for s component');
+    });
+
+    it('should throw when s INTEGER tag is not 0x02', () => {
+      const rLength = 2;
+      const buf = new Uint8Array(4 + rLength + 4).fill(0);
+      buf[0] = 0x30;
+      buf[2] = 0x02;
+      buf[3] = rLength;
+      // sTagOffset = 4 + 2 = 6
+      buf[6] = 0x03; // wrong s tag
+      buf[7] = 2;
+      expect(() => unwrapSignature(buf)).toThrow('Expected DER INTEGER tag (0x02) for s');
+    });
+
+    it('should throw when s length exceeds buffer', () => {
+      const rLength = 2;
+      const buf = new Uint8Array(4 + rLength + 4).fill(0);
+      buf[0] = 0x30;
+      buf[2] = 0x02;
+      buf[3] = rLength;
+      // sTagOffset = 6
+      buf[6] = 0x02;
+      buf[7] = 100; // sLength too large
+      expect(() => unwrapSignature(buf)).toThrow('Invalid s length in DER signature');
     });
   });
 

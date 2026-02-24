@@ -9,6 +9,7 @@ import { PasskeySigner } from '../PasskeySigner';
 import { PrimitiveAccountKeyTypes } from '../../types/AccountKey';
 import { base64URLencode } from '../../utils/base64url';
 import { wrapSignature, toHex } from '../../utils/signature';
+import { ethers } from 'ethers';
 
 // DER 인코딩된 secp256r1 서명 생성 헬퍼
 function createMockDerSignature(): string {
@@ -29,7 +30,7 @@ function createMockAuthResponse(signature?: string) {
     response: {
       signature: signature || createMockDerSignature(),
       authenticatorData: base64URLencode('mock-auth-data-bytes'),
-      clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"mockchallenge"}'),
+      clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"mockchallenge","origin":"https://example.com","crossOrigin":false}'),
     },
   };
 }
@@ -127,15 +128,67 @@ describe('PasskeySigner', () => {
     });
 
     it('should handle error and rethrow', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       const error = new Error('WebAuthn error');
       const failingMock = jest.fn().mockRejectedValue(error);
       const signer = new PasskeySigner(mockCredentialId, failingMock);
 
       await expect(signer.signUserOpHash(mockUserOpHash)).rejects.toThrow('WebAuthn error');
-      expect(consoleSpy).toHaveBeenCalledWith(error);
+    });
 
-      consoleSpy.mockRestore();
+    it('should throw when clientDataJSON is missing origin field', async () => {
+      mockVerifyWithPasskey.mockResolvedValueOnce({
+        response: {
+          signature: createMockDerSignature(),
+          authenticatorData: base64URLencode('authdata123'),
+          clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"mockchallenge"}'),
+        },
+      });
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+      await expect(signer.signUserOpHash(mockUserOpHash))
+        .rejects.toThrow('clientDataJSON missing "origin" field');
+    });
+
+    it('should throw when clientDataJSON origin value is not terminated', async () => {
+      mockVerifyWithPasskey.mockResolvedValueOnce({
+        response: {
+          signature: createMockDerSignature(),
+          authenticatorData: base64URLencode('authdata123'),
+          clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"mockchallenge","origin":"https://example.com'),
+        },
+      });
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+      await expect(signer.signUserOpHash(mockUserOpHash))
+        .rejects.toThrow('clientDataJSON "origin" value not terminated');
+    });
+
+    it('should encode byte offsets even when clientDataJSON contains non-ASCII bytes', async () => {
+      const clientJson =
+        '{"emoji":"😀","type":"webauthn.get","challenge":"mockchallenge","origin":"https://example.com"}';
+      mockVerifyWithPasskey.mockResolvedValueOnce({
+        response: {
+          signature: createMockDerSignature(),
+          authenticatorData: base64URLencode('authdata123'),
+          clientDataJSON: base64URLencode(clientJson),
+        },
+      });
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+      const signatures = await signer.signUserOpHash(mockUserOpHash);
+      const decoded = ethers.AbiCoder.defaultAbiCoder().decode(
+        ["bytes", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256"],
+        signatures[0]
+      );
+
+      const clientDataBytes = Buffer.from(ethers.getBytes(decoded[1]));
+      const typePattern = Buffer.from('"type":"');
+      const challengePattern = Buffer.from('"challenge":"');
+      const originPattern = Buffer.from('"origin":"');
+      const expectedTypeIndex = clientDataBytes.indexOf(typePattern) + typePattern.length;
+      const expectedChallengeIndex = clientDataBytes.indexOf(challengePattern) + challengePattern.length;
+      const expectedOriginIndex = clientDataBytes.indexOf(originPattern) + originPattern.length;
+
+      expect(decoded[3]).toBe(BigInt(expectedTypeIndex));
+      expect(decoded[4]).toBe(BigInt(expectedChallengeIndex));
+      expect(decoded[5]).toBe(BigInt(expectedOriginIndex));
     });
   });
 
@@ -145,7 +198,7 @@ describe('PasskeySigner', () => {
         response: {
           signature: createMockDerSignature(),
           authenticatorData: base64URLencode('authdata123'),
-          clientDataJSON: base64URLencode('clientdata456'),
+          clientDataJSON: base64URLencode('{"type":"webauthn.get","challenge":"testchallenge","origin":"https://example.com"}'),
         },
       };
       mockVerifyWithPasskey.mockResolvedValue(mockResponse);

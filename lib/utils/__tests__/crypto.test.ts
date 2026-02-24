@@ -8,7 +8,7 @@
  * - padAndStrToFieldsBN254: 패딩 후 BN254 필드 변환
  *
  * Default export (cryptoUtils):
- * - sha256Update: SHA256 부분 업데이트
+ * - sha256BlockCompress: SHA256 부분 업데이트 (ZK 회로용 블록 압축)
  * - getOutOfCircuitHashSegment: JWT에서 해시 세그먼트 추출
  * - Utf8ToUint8Array: UTF8 → Uint8Array
  * - commonVkParser: 공통 VK 파서
@@ -230,10 +230,10 @@ describe('crypto', () => {
     });
   });
 
-  describe('cryptoUtils.sha256Update', () => {
+  describe('cryptoUtils.sha256BlockCompress', () => {
     it('should process 64-byte data block', () => {
       const data = new Uint8Array(64).fill(0x61); // 'a' repeated
-      const result = cryptoUtils.sha256Update(data);
+      const result = cryptoUtils.sha256BlockCompress(data);
 
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(8); // SHA256 state is 8 32-bit words
@@ -241,7 +241,7 @@ describe('crypto', () => {
 
     it('should process multiple 64-byte blocks', () => {
       const data = new Uint8Array(128).fill(0x00);
-      const result = cryptoUtils.sha256Update(data);
+      const result = cryptoUtils.sha256BlockCompress(data);
 
       expect(result.length).toBe(8);
     });
@@ -249,15 +249,15 @@ describe('crypto', () => {
     it('should throw for non-64-byte-multiple data', () => {
       const data = new Uint8Array(63);
 
-      expect(() => cryptoUtils.sha256Update(data)).toThrow('data length must be a multiple of 64 bytes');
+      expect(() => cryptoUtils.sha256BlockCompress(data)).toThrow('data length must be a multiple of 64 bytes');
     });
 
     it('should produce consistent results', () => {
       const data = new Uint8Array(64);
       for (let i = 0; i < 64; i++) data[i] = i;
 
-      const result1 = cryptoUtils.sha256Update(data);
-      const result2 = cryptoUtils.sha256Update(data);
+      const result1 = cryptoUtils.sha256BlockCompress(data);
+      const result2 = cryptoUtils.sha256BlockCompress(data);
 
       expect(result1).toEqual(result2);
     });
@@ -422,6 +422,12 @@ describe('crypto', () => {
       expect(typeof result).toBe('string');
       expect(result.length % 64).toBe(0);
     });
+
+    it('should throw when keys array is empty', () => {
+      const jwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature';
+      expect(() => cryptoUtils.getOutOfCircuitHashSegment(jwt, []))
+        .toThrow('getOutOfCircuitHashSegment: keys must be a non-empty array');
+    });
   });
 
   describe('padAndStrToFieldsBN254 edge cases', () => {
@@ -446,11 +452,11 @@ describe('crypto', () => {
     });
   });
 
-  describe('sha256Update error cases', () => {
+  describe('sha256BlockCompress error cases', () => {
     it('should throw when data length is not a multiple of 64 bytes', () => {
       const invalidData = new Uint8Array(32); // Not multiple of 64
 
-      expect(() => cryptoUtils.sha256Update(invalidData)).toThrow(
+      expect(() => cryptoUtils.sha256BlockCompress(invalidData)).toThrow(
         'data length must be a multiple of 64 bytes'
       );
     });
@@ -458,13 +464,13 @@ describe('crypto', () => {
     it('should accept data length that is multiple of 64', () => {
       const validData = new Uint8Array(64);
 
-      expect(() => cryptoUtils.sha256Update(validData)).not.toThrow();
+      expect(() => cryptoUtils.sha256BlockCompress(validData)).not.toThrow();
     });
 
     it('should accept data length of 128 (2 * 64)', () => {
       const validData = new Uint8Array(128);
 
-      expect(() => cryptoUtils.sha256Update(validData)).not.toThrow();
+      expect(() => cryptoUtils.sha256BlockCompress(validData)).not.toThrow();
     });
   });
 });
