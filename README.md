@@ -1,7 +1,7 @@
-# zkap-aa-sdk
+# zkap-aa
 
-![CI](https://github.com/baerae-zkap/zkap-aa-sdk/workflows/CI/badge.svg)
-[![codecov](https://img.shields.io/badge/coverage-95%25-brightgreen)](https://github.com/baerae-zkap/zkap-aa-sdk)
+![CI](https://github.com/baerae-zkap/zkap-aa/workflows/CI/badge.svg)
+[![codecov](https://img.shields.io/badge/coverage-95%25-brightgreen)](https://github.com/baerae-zkap/zkap-aa)
 
 A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.
 
@@ -50,7 +50,7 @@ npm run pub
 ## 패키지 설치 방법
 
 ```bash
-npm install @baerae-zkap/zkap-aa-sdk@<version>
+npm install @baerae-zkap/zkap-aa@<version>
 ```
 
 ## npmrc 파일 작성 방법

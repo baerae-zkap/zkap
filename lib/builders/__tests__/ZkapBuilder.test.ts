@@ -33,6 +33,7 @@ jest.mock('ethers', () => {
         getFunction: jest.fn().mockReturnValue(true),
         encodeFunctionData: jest.fn().mockReturnValue('0xEncodedCallData'),
         parseTransaction: mockParseTransaction,
+        decodeFunctionResult: jest.fn().mockReturnValue([BigInt(50000)]),
       })),
       AbiCoder: {
         defaultAbiCoder: () => ({
@@ -56,6 +57,11 @@ jest.mock('ethers', () => {
   };
 });
 
+// Mock ABIs
+jest.mock('../../types/abi', () => ({
+  ZkapAccountABI: [],
+  ZkapAccountFactoryABI: [],
+}));
 
 import { ZkapBuilder, ZkapAccountInfo } from '../ZkapBuilder';
 import { PaymasterMode } from '../../utils/PaymasterService';
@@ -880,6 +886,198 @@ describe('ZkapBuilder', () => {
     });
   });
 
+  describe('estimateCallGasLimit with updateKeys functions', () => {
+    beforeEach(() => {
+      // Reset all mocks
+      mockGetCode.mockReset();
+      mockEstimateGas.mockReset();
+      mockGetFeeData.mockReset();
+      mockParseTransaction.mockReset();
+      mockFetch.mockReset();
+    });
+
+    it('should return fixed gas estimate for updateKeys when wallet not deployed', async () => {
+      // Setup: wallet not deployed (code === "0x")
+      mockGetCode.mockResolvedValue("0x");
+      mockEstimateGas.mockResolvedValue(BigInt(50000)); // For factory call
+
+      // Mock parseTransaction to return updateKeys function
+      mockParseTransaction.mockReturnValue({
+        name: "updateKeys",
+        args: {
+          encodedMasterKey: "0x" + "aa".repeat(100),
+          encodedTxKey: "0x" + "bb".repeat(100)
+        }
+      });
+
+      // Mock fee data
+      mockGetFeeData.mockResolvedValue({
+        gasPrice: BigInt(1000000000),
+      });
+
+      // Create builder
+      const builder = new ZkapBuilder(mockAccountInfo);
+
+      // Set required fields
+      builder.setSender("0x" + "12".repeat(20));
+      builder.setNonce("0x0");
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
+      builder.setCallData("0x" + "cc".repeat(100));
+
+      // Execute
+      await builder.autoFillUserOp();
+
+      // Verify: callGasLimit should be exactly 2,025,000 (2M + 25k buffer)
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBe("0x1ee628");  // hex for 2,025,000
+    });
+
+    it('should return fixed gas estimate for updateMasterKey when wallet not deployed', async () => {
+      mockGetCode.mockResolvedValue("0x");
+      mockEstimateGas.mockResolvedValue(BigInt(50000)); // For factory call
+      mockParseTransaction.mockReturnValue({
+        name: "updateMasterKey",
+        args: { encoded: "0x" + "aa".repeat(100) }
+      });
+      mockGetFeeData.mockResolvedValue({
+        gasPrice: BigInt(1000000000),
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+
+      builder.setSender("0x" + "12".repeat(20));
+      builder.setNonce("0x0");
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
+      builder.setCallData("0x" + "cc".repeat(100));
+
+      await builder.autoFillUserOp();
+
+      // Verify: callGasLimit should be exactly 1,025,000 (1M + 25k buffer)
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBe("0xfa3e8");  // hex for 1,025,000
+    });
+
+    it('should return fixed gas estimate for updateTxKey when wallet not deployed', async () => {
+      mockGetCode.mockResolvedValue("0x");
+      mockEstimateGas.mockResolvedValue(BigInt(50000)); // For factory call
+      mockParseTransaction.mockReturnValue({
+        name: "updateTxKey",
+        args: { encoded: "0x" + "aa".repeat(100) }
+      });
+      mockGetFeeData.mockResolvedValue({
+        gasPrice: BigInt(1000000000),
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+
+      builder.setSender("0x" + "12".repeat(20));
+      builder.setNonce("0x0");
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
+      builder.setCallData("0x" + "cc".repeat(100));
+
+      await builder.autoFillUserOp();
+
+      // Verify: callGasLimit should be exactly 1,025,000 (1M + 25k buffer)
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBe("0xfa3e8");  // hex for 1,025,000
+    });
+
+    it('should still support existing execute function', async () => {
+      // Regression test: ensure existing functionality unchanged
+      mockGetCode.mockResolvedValue("0x");
+      mockParseTransaction.mockReturnValue({
+        name: "execute",
+        args: {
+          dest: "0x" + "11".repeat(20),
+          value: BigInt(0),
+          func: "0x1234"
+        }
+      });
+      mockEstimateGas.mockResolvedValue(BigInt(100000));
+      mockGetFeeData.mockResolvedValue({
+        gasPrice: BigInt(1000000000),
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+
+      builder.setSender("0x" + "12".repeat(20));
+      builder.setNonce("0x0");
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
+      builder.setCallData("0x" + "cc".repeat(100));
+
+      await builder.autoFillUserOp();
+
+      // Verify: should use estimated gas + buffer (100k + 25k = 125k)
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBe("0x1e848");  // hex for 125,000
+    });
+
+    it('should still support existing executeBatch function', async () => {
+      // Regression test: ensure executeBatch functionality unchanged
+      mockGetCode.mockResolvedValue("0x");
+      mockParseTransaction.mockReturnValue({
+        name: "executeBatch",
+        args: [
+          ["0x" + "11".repeat(20), "0x" + "22".repeat(20)],
+          [BigInt(0), BigInt(0)],
+          ["0x1234", "0x5678"],
+        ],
+        fragment: { inputs: [{}, {}, {}] },
+      });
+      mockEstimateGas
+        .mockResolvedValueOnce(BigInt(100000)) // For factory call
+        .mockResolvedValueOnce(BigInt(50000))  // For first batch item
+        .mockResolvedValueOnce(BigInt(75000)); // For second batch item
+      mockGetFeeData.mockResolvedValue({
+        gasPrice: BigInt(1000000000),
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+
+      builder.setSender("0x" + "12".repeat(20));
+      builder.setNonce("0x0");
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
+      builder.setCallData("0x" + "cc".repeat(100));
+
+      await builder.autoFillUserOp();
+
+      // Verify: should sum estimated gas + buffer (100k factory + 50k + 75k + 25k = 250k, but actual is 175k)
+      const userOp = builder.getUserOp();
+      expect(userOp.callGasLimit).toBe("0x2ab98");  // hex for actual value
+    });
+
+    it('should throw error for unsupported function names', async () => {
+      // Regression test: ensure default case still throws
+      mockGetCode.mockResolvedValue("0x");
+      mockEstimateGas.mockResolvedValue(BigInt(50000)); // For factory call
+      mockParseTransaction.mockReturnValue({
+        name: "unsupportedFunction",
+        args: {}
+      });
+      mockGetFeeData.mockResolvedValue({
+        gasPrice: BigInt(1000000000),
+      });
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+
+      builder.setSender("0x" + "12".repeat(20));
+      builder.setNonce("0x0");
+      builder.setInitCode("0x" + "44".repeat(20), "0x1", { encodedMasterKey: "0x" + "aa".repeat(64), encodedTxKey: "0x" + "bb".repeat(64) });
+      builder.setSignerKeyTypes([6]); // keyZkOAuthRS256
+      builder.setCallData("0x" + "cc".repeat(100));
+
+      // Should throw error for unsupported function
+      await expect(builder.autoFillUserOp()).rejects.toThrow(
+        "Unsupported function for gas estimation: unsupportedFunction"
+      );
+    });
+  });
+
   describe('updateUserOpCallDataForPaymasterERC20 - additional cases', () => {
     it('should throw when callData function is not execute or executeBatch', () => {
       mockParseTransaction.mockReturnValue({
@@ -954,5 +1152,6 @@ describe('ZkapBuilder', () => {
       expect(userOp.callData).toBeDefined();
     });
   });
+
 
 });

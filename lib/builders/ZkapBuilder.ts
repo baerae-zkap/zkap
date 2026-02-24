@@ -191,6 +191,27 @@ export class ZkapBuilder extends BaseAccountBuilder {
             return ethers.toBeHex(totalGas + ZkapBuilder.GAS_BUFFER);
           }
 
+          case "updateKeys": {
+            // updateKeys(bytes encodedMasterKey, bytes encodedTxKey)
+            // Called with initCode during wallet creation - wallet not yet deployed
+            // Cannot use on-chain estimateGas, use fixed value
+            const UPDATE_KEYS_GAS = BigInt(2000000);
+            return ethers.toBeHex((UPDATE_KEYS_GAS + ZkapBuilder.GAS_BUFFER).toString());
+          }
+
+          case "updateMasterKey": {
+            // updateMasterKey(bytes encoded)
+            // Fallback for cases with initCode (already deployed wallets handled above)
+            const UPDATE_MASTER_KEY_GAS = BigInt(1000000);
+            return ethers.toBeHex((UPDATE_MASTER_KEY_GAS + ZkapBuilder.GAS_BUFFER).toString());
+          }
+
+          case "updateTxKey": {
+            // updateTxKey(bytes encoded)
+            const UPDATE_TX_KEY_GAS = BigInt(1000000);
+            return ethers.toBeHex((UPDATE_TX_KEY_GAS + ZkapBuilder.GAS_BUFFER).toString());
+          }
+
           default:
             // 지원하지 않는 함수일 경우, 에러를 던져 수동 처리를 유도합니다.
             throw new Error(
