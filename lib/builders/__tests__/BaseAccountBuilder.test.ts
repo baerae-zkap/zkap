@@ -544,6 +544,86 @@ describe('BaseAccountBuilder', () => {
 
       expect(hash1).not.toBe(hash2);
     });
+
+    it('should produce different hash when sender changes (EIP-712 struct field)', () => {
+      const builder1 = new TestAccountBuilder(1, mockEntryPoint);
+      const builder2 = new TestAccountBuilder(1, mockEntryPoint);
+
+      builder1.setSender('0x' + '11'.repeat(20));
+      builder2.setSender('0x' + '22'.repeat(20));
+
+      expect(builder1.getUserOpHash()).not.toBe(builder2.getUserOpHash());
+    });
+
+    it('should produce different hash when callData changes (EIP-712 struct field)', () => {
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setCallData('0xaabbcc');
+      const hash1 = builder.getUserOpHash();
+
+      builder.setCallData('0xddeeff');
+      const hash2 = builder.getUserOpHash();
+
+      expect(hash1).not.toBe(hash2);
+    });
+
+    it('should produce different hash when nonce changes (EIP-712 struct field)', () => {
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setNonce('0x1');
+      const hash1 = builder.getUserOpHash();
+
+      builder.setNonce('0x2');
+      const hash2 = builder.getUserOpHash();
+
+      expect(hash1).not.toBe(hash2);
+    });
+
+    it('should produce different hash when initCode changes (EIP-712 struct field)', () => {
+      builder.setSender('0x' + '11'.repeat(20));
+      const hash1 = builder.getUserOpHash();
+
+      // Pass a single valid hex string to avoid double-0x concatenation in TestAccountBuilder
+      builder.setInitCode('0x' + 'aa'.repeat(40));
+      const hash2 = builder.getUserOpHash();
+
+      expect(hash1).not.toBe(hash2);
+    });
+  });
+
+  describe('calculatePreVerificationGas — 30000 base + 30% buffer', () => {
+    class PvgTestBuilder extends TestAccountBuilder {
+      public calcPvg(userOp: UserOperation): bigint {
+        return this.calculatePreVerificationGas(userOp);
+      }
+    }
+
+    let pvgBuilder: PvgTestBuilder;
+
+    beforeEach(() => {
+      pvgBuilder = new PvgTestBuilder(mockChainId, mockEntryPoint);
+      pvgBuilder.setSender('0x' + '11'.repeat(20));
+      pvgBuilder.setPreVerificationGas('0x0');
+      pvgBuilder.setSignature([], ['0x']);
+    });
+
+    it('should use 30000 as minimum base overhead', () => {
+      pvgBuilder.setCallData('0x');
+      const pvg = pvgBuilder.calcPvg(pvgBuilder.getUserOp() as UserOperation);
+
+      // base 30000 + calldata cost >= 30000
+      expect(pvg).toBeGreaterThanOrEqual(BigInt(30000));
+    });
+
+    it('should apply 30% buffer to calldata cost', () => {
+      pvgBuilder.setCallData('0x');
+      const pvgEmpty = pvgBuilder.calcPvg(pvgBuilder.getUserOp() as UserOperation);
+
+      // 100 non-zero bytes: 16 gas/byte * 1.3 buffer = 2080 extra
+      pvgBuilder.setCallData('0x' + 'ff'.repeat(100));
+      const pvgLarge = pvgBuilder.calcPvg(pvgBuilder.getUserOp() as UserOperation);
+
+      expect(pvgLarge).toBeGreaterThan(pvgEmpty);
+      expect(pvgLarge - pvgEmpty).toBeGreaterThanOrEqual(BigInt(2080));
+    });
   });
 
   describe('setInitCode (abstract implementation)', () => {
