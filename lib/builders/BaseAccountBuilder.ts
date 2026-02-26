@@ -324,14 +324,59 @@ export abstract class BaseAccountBuilder {
 
   getUserOpHash(): string {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
-    const userOpHash = ethers.keccak256(
-      this.encodeUserOp(this.getPackedUserOp(), true)
+    const packed = this.getPackedUserOp();
+
+    // 1. PACKED_USEROP_TYPEHASH (EntryPoint v0.9)
+    const PACKED_USEROP_TYPEHASH = ethers.keccak256(
+      ethers.toUtf8Bytes(
+        "PackedUserOperation(address sender,uint256 nonce,bytes initCode,bytes callData,bytes32 accountGasLimits,uint256 preVerificationGas,bytes32 gasFees,bytes paymasterAndData)"
+      )
     );
-    const enc = defaultAbiCoder.encode(
-      ["bytes32", "address", "uint256"],
-      [userOpHash, this.entryPoint, this.chainId]
+
+    // 2. Struct hash (includes TypeHash as first param)
+    const structHash = ethers.keccak256(
+      defaultAbiCoder.encode(
+        ["bytes32", "address", "uint256", "bytes32", "bytes32", "bytes32", "uint256", "bytes32", "bytes32"],
+        [
+          PACKED_USEROP_TYPEHASH,
+          packed.sender,
+          packed.nonce,
+          ethers.keccak256(packed.initCode),
+          ethers.keccak256(packed.callData),
+          packed.accountGasLimits,
+          packed.preVerificationGas,
+          packed.gasFees,
+          ethers.keccak256(packed.paymasterAndData),
+        ]
+      )
     );
-    return ethers.keccak256(enc);
+
+    // 3. EIP-712 Domain Separator (name="ERC4337", version="1")
+    const EIP712_DOMAIN_TYPEHASH = ethers.keccak256(
+      ethers.toUtf8Bytes(
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+      )
+    );
+    const domainSeparator = ethers.keccak256(
+      defaultAbiCoder.encode(
+        ["bytes32", "bytes32", "bytes32", "uint256", "address"],
+        [
+          EIP712_DOMAIN_TYPEHASH,
+          ethers.keccak256(ethers.toUtf8Bytes("ERC4337")),
+          ethers.keccak256(ethers.toUtf8Bytes("1")),
+          this.chainId,
+          this.entryPoint,
+        ]
+      )
+    );
+
+    // 4. EIP-712 final hash
+    return ethers.keccak256(
+      ethers.solidityPacked(
+        ["bytes1", "bytes1", "bytes32", "bytes32"],
+        ["0x19", "0x01", domainSeparator, structHash]
+      )
+    );
   }
 
   /**
@@ -403,8 +448,8 @@ export abstract class BaseAccountBuilder {
    * @returns preVerificationGas
    */
   protected calculatePreVerificationGas(userOp: UserOperation): bigint {
-    // 기본 preVerificationGas
-    let preVerificationGas = BigInt(21000);
+    // 기본 preVerificationGas (ZK proof signature overhead 반영)
+    let preVerificationGas = BigInt(30000);
 
     // calldata 비용 추가
     const packedUserOp = this.packUserOp(userOp);
@@ -415,6 +460,7 @@ export abstract class BaseAccountBuilder {
     for (const byte of encodedBytes) {
       calldataCost += byte === 0 ? BigInt(4) : BigInt(16);
     }
+    calldataCost = calldataCost * BigInt(130) / BigInt(100); // 30% buffer for ZK proof calldata
     preVerificationGas += calldataCost;
 
     return preVerificationGas;

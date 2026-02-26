@@ -267,6 +267,35 @@ describe('ZkapBuilder', () => {
         'Sender is not set'
       );
     });
+
+    it('should set callData to non-empty value', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      builder.setUpdateTxKeyCallData('0x' + 'cc'.repeat(64));
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callData).not.toBe('0x');
+    });
+
+    it('should set signer key types to keyZkOAuthRS256', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      builder.setUpdateTxKeyCallData('0x' + 'cc'.repeat(64));
+
+      // signerKeyTypes가 설정되면 setCallData가 throw하지 않음
+      expect(() => builder.setCallData('0x9999')).not.toThrow();
+    });
+
+    it('should return builder instance for method chaining', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      const result = builder.setUpdateTxKeyCallData('0x' + 'cc'.repeat(64));
+
+      expect(result).toBe(builder);
+    });
   });
 
   describe('setUpdateMasterKeyCallData', () => {
@@ -287,6 +316,35 @@ describe('ZkapBuilder', () => {
       expect(() => builder.setUpdateMasterKeyCallData('0x1234')).toThrow(
         'Sender is not set'
       );
+    });
+
+    it('should set callData to non-empty value', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      builder.setUpdateMasterKeyCallData('0x' + 'dd'.repeat(64));
+
+      const userOp = builder.getUserOp();
+      expect(userOp.callData).not.toBe('0x');
+    });
+
+    it('should set signer key types to keyZkOAuthRS256', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      builder.setUpdateMasterKeyCallData('0x' + 'dd'.repeat(64));
+
+      // signerKeyTypes가 설정되면 setCallData가 throw하지 않음
+      expect(() => builder.setCallData('0x9999')).not.toThrow();
+    });
+
+    it('should return builder instance for method chaining', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      const result = builder.setUpdateMasterKeyCallData('0x' + 'dd'.repeat(64));
+
+      expect(result).toBe(builder);
     });
   });
 

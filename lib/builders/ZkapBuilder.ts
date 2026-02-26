@@ -338,6 +338,13 @@ export class ZkapBuilder extends BaseAccountBuilder {
       this.userOp.verificationGasLimit = ethers.toBeHex("1500000");
     }
 
+    // [PATCH] Set defaults for fields needed by calculatePreVerificationGas → packUserOp → encodeUserOp
+    if (!this.userOp.preVerificationGas) {
+      this.userOp.preVerificationGas = "0x00";
+    }
+    if (!this.userOp.signature) {
+      this.userOp.signature = "0x";
+    }
     const preVerificationGas = this.calculatePreVerificationGas(
       this.userOp as UserOperation
     );
