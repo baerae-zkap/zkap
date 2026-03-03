@@ -135,6 +135,88 @@ describe('PasskeySigner', () => {
       await expect(signer.signUserOpHash(mockUserOpHash)).rejects.toThrow('WebAuthn error');
     });
 
+    it('should produce base64URL challenge of exactly 43 chars from raw 32-byte hash', async () => {
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+
+      await signer.signUserOpHash(mockUserOpHash);
+
+      const challenge = mockVerifyWithPasskey.mock.calls[0][1];
+      // 32 raw bytes → base64URL = ceil(32/3)*4 - padding = 43 chars
+      expect(challenge.length).toBe(43);
+      // base64URL alphabet only (no +, /, =)
+      expect(challenge).toMatch(/^[A-Za-z0-9_-]+$/);
+    });
+
+    it('should produce challenge matching contract Base64.encodeURL(abi.encodePacked(bytes32(msgHash)))', async () => {
+      const userOpHash = '0x' + 'ab'.repeat(32);
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+
+      await signer.signUserOpHash(userOpHash);
+
+      const challenge = mockVerifyWithPasskey.mock.calls[0][1];
+      // Manually compute expected: raw bytes → base64 → base64URL
+      const rawBytes = ethers.getBytes(userOpHash);
+      const expected = ethers.encodeBase64(rawBytes)
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      expect(challenge).toBe(expected);
+    });
+
+    it('should NOT apply EIP-191 prefix to challenge', async () => {
+      const userOpHash = '0x' + 'ff'.repeat(32);
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+
+      await signer.signUserOpHash(userOpHash);
+
+      const challenge = mockVerifyWithPasskey.mock.calls[0][1];
+      // EIP-191 would produce keccak256("\x19Ethereum Signed Message:\n32" + hash),
+      // which is a different 32-byte value → different base64URL.
+      // The raw base64URL of 0xff repeated 32 times is deterministic:
+      const rawBytes = ethers.getBytes(userOpHash);
+      const expectedRaw = ethers.encodeBase64(rawBytes)
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      // If EIP-191 was applied, this would NOT match
+      expect(challenge).toBe(expectedRaw);
+    });
+
+    it('should throw when clientDataJSON is missing type field', async () => {
+      mockVerifyWithPasskey.mockResolvedValueOnce({
+        response: {
+          signature: createMockDerSignature(),
+          authenticatorData: base64URLencode('authdata123'),
+          clientDataJSON: base64URLencode('{"challenge":"mockchallenge","origin":"https://example.com"}'),
+        },
+      });
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+      await expect(signer.signUserOpHash(mockUserOpHash))
+        .rejects.toThrow('clientDataJSON missing "type" field');
+    });
+
+    it('should throw when clientDataJSON is missing challenge field', async () => {
+      mockVerifyWithPasskey.mockResolvedValueOnce({
+        response: {
+          signature: createMockDerSignature(),
+          authenticatorData: base64URLencode('authdata123'),
+          clientDataJSON: base64URLencode('{"type":"webauthn.get","origin":"https://example.com"}'),
+        },
+      });
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+      await expect(signer.signUserOpHash(mockUserOpHash))
+        .rejects.toThrow('clientDataJSON missing "challenge" field');
+    });
+
+    it('should throw when clientDataJSON is too short for pattern matching', async () => {
+      mockVerifyWithPasskey.mockResolvedValueOnce({
+        response: {
+          signature: createMockDerSignature(),
+          authenticatorData: base64URLencode('authdata123'),
+          clientDataJSON: base64URLencode('{}'),
+        },
+      });
+      const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
+      await expect(signer.signUserOpHash(mockUserOpHash))
+        .rejects.toThrow('clientDataJSON missing "type" field');
+    });
+
     it('should throw when clientDataJSON is missing origin field', async () => {
       mockVerifyWithPasskey.mockResolvedValueOnce({
         response: {
