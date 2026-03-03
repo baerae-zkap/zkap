@@ -451,6 +451,10 @@ export abstract class BaseAccountBuilder {
     // 기본 preVerificationGas (ZK proof signature overhead 반영)
     let preVerificationGas = BigInt(30000);
 
+    // handleOps() ABI 인코딩 오버헤드 (함수 셀렉터 4B + 배열 offset/length 64B + beneficiary 32B + 구조체 오버헤드)
+    const HANDLE_OPS_OVERHEAD_GAS = BigInt(2000);
+    preVerificationGas += HANDLE_OPS_OVERHEAD_GAS;
+
     // calldata 비용 추가
     const packedUserOp = this.packUserOp(userOp);
     const encodedUserOp = this.encodeUserOp(packedUserOp, false);

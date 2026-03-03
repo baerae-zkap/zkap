@@ -680,6 +680,36 @@ describe('ZkapBuilder', () => {
         .rejects.toThrow('signerKeyTypes is not set');
     });
 
+    it('should replace "0x" signature with dummy signature for PVG calculation', async () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([4]); // keyWebAuthn
+      builder.setCallData('0x1234');
+      // signature is "0x" by default
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(userOp.preVerificationGas).toBeDefined();
+      expect(BigInt(userOp.preVerificationGas)).toBeGreaterThan(0n);
+      // dummy signature이 주입되었으므로 "0x"가 아님
+      expect(userOp.signature).not.toBe('0x');
+    });
+
+    it('should preserve non-"0x" signature and not replace with dummy', async () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([4]); // keyWebAuthn
+      builder.setCallData('0x1234');
+      const existingSig = '0x' + 'ab'.repeat(65);
+      (builder as any).userOp.signature = existingSig;
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(userOp.signature).toBe(existingSig);
+    });
+
     it('should skip temp verificationGasLimit if already pre-set', async () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '11'.repeat(20));
@@ -1307,5 +1337,62 @@ describe('ZkapBuilder', () => {
     });
   });
 
+  describe('createDummySignature', () => {
+    it('should return a hex string', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSignerKeyTypes([4]); // keyWebAuthn
+
+      const sig = (builder as any).createDummySignature();
+
+      expect(typeof sig).toBe('string');
+      expect(sig).toMatch(/^0x/);
+    });
+
+    it('should fall back to keyWebAuthn when signerKeyTypes is not set', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      // signerKeyTypes 미설정 → 내부에서 [keyWebAuthn] 사용
+
+      const sig = (builder as any).createDummySignature();
+
+      expect(sig).toMatch(/^0x/);
+    });
+
+    it('should return ABI-encoded output (uint8[], bytes[]) for single key type', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSignerKeyTypes([1]); // keyAddress
+
+      const sig = (builder as any).createDummySignature();
+
+      // AbiCoder.encode mock → '0x' + '0a'.repeat(100)
+      expect(sig).toBe('0x' + '0a'.repeat(100));
+    });
+
+    it('should return ABI-encoded output for multiple key types', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSignerKeyTypes([1, 4]); // keyAddress + keyWebAuthn
+
+      const sig = (builder as any).createDummySignature();
+
+      expect(sig).toMatch(/^0x/);
+    });
+
+    it('should not throw for unknown key type (uses fallback size 100)', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      // setSignerKeyTypes 유효성 검증 우회 후 알 수 없는 키 타입 주입
+      (builder as any).signerKeyTypes = [99];
+
+      expect(() => (builder as any).createDummySignature()).not.toThrow();
+    });
+
+    it('should produce consistent output for same key types', () => {
+      const builder1 = new ZkapBuilder(mockAccountInfo);
+      builder1.setSignerKeyTypes([4]);
+      const builder2 = new ZkapBuilder(mockAccountInfo);
+      builder2.setSignerKeyTypes([4]);
+
+      expect((builder1 as any).createDummySignature())
+        .toBe((builder2 as any).createDummySignature());
+    });
+  });
 
 });

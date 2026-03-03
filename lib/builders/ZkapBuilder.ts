@@ -38,6 +38,16 @@ export class ZkapBuilder extends BaseAccountBuilder {
   static readonly OAUTH_RS256_KEY_VALIDATION_GAS = 350000n; // RSA-2048 서명 검증
   static readonly ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 1000000n; // 신규 컨트랙트 측정값 기준, 여유분 포함 (구 컨트랙트: ~340000)
 
+  // 키 타입별 예상 서명 크기 (bytes) — preVerificationGas 추정용 더미 서명 생성에 사용
+  private static readonly ESTIMATED_SIG_SIZES: Record<number, number> = {
+    1: 65,     // keyAddress: ECDSA (r:32 + s:32 + v:1)
+    2: 65,     // keySecp256k1: ECDSA
+    3: 100,    // keySecp256r1: DER-encoded P-256
+    4: 800,    // keyWebAuthn: authenticatorData + clientDataJSON + DER sig + 4x uint256
+    5: 300,    // keyOAuthRS256: RSA-2048 signature + metadata
+    6: 2000,   // keyZkOAuthRS256: ZK proof (대형)
+  };
+
   protected factoryInterface: ethers.Interface = new ethers.Interface(
     ZkapAccountFactoryABI
   );
@@ -345,8 +355,8 @@ export class ZkapBuilder extends BaseAccountBuilder {
     if (!this.userOp.preVerificationGas) {
       this.userOp.preVerificationGas = "0x00";
     }
-    if (!this.userOp.signature) {
-      this.userOp.signature = "0x";
+    if (!this.userOp.signature || this.userOp.signature === "0x") {
+      this.userOp.signature = this.createDummySignature();
     }
     const preVerificationGas = this.calculatePreVerificationGas(
       this.userOp as UserOperation
@@ -564,6 +574,22 @@ export class ZkapBuilder extends BaseAccountBuilder {
     // 이전에 setSignerKeyTypes()로 설정한 값은 무효화됩니다.
     this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
     return this;
+  }
+
+  /**
+   * preVerificationGas 추정을 위한 더미 서명을 생성합니다.
+   * 실제 서명 구조(encode(["uint8[]", "bytes[]"], ...))를 모방하여
+   * 정확한 calldataCost 추정이 가능하도록 합니다.
+   */
+  private createDummySignature(): string {
+    const keyTypes = this.signerKeyTypes ?? [PrimitiveAccountKeyTypes.keyWebAuthn];
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const indices = keyTypes.map((_, i) => i);
+    const dummySigs = keyTypes.map(kt => {
+      const size = ZkapBuilder.ESTIMATED_SIG_SIZES[kt] ?? 100;
+      return ethers.hexlify(new Uint8Array(size).fill(0xfe));
+    });
+    return abiCoder.encode(["uint8[]", "bytes[]"], [indices, dummySigs]);
   }
 
   /**
