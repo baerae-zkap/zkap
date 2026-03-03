@@ -1,4 +1,4 @@
-import { base64URLencode, base64URLdecode } from "../utils/base64url";
+import { base64URLdecode, toURLEncode } from "../utils/base64url";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
 import {
   unwrapSignature,
@@ -6,7 +6,6 @@ import {
   wrapSignature,
 } from "../utils/signature";
 import { ethers } from "ethers";
-import cryptoUtils from "../utils/crypto";
 import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
 
 function findSubarray(haystack: Uint8Array, needle: Uint8Array): number {
@@ -63,8 +62,8 @@ export class PasskeySigner implements IUserOpSigner {
   }
 
   async signUserOpHash(userOpHash: string): Promise<string[]> {
-    const signedMessage = cryptoUtils.getSignedMessageHash(userOpHash);
-    const challenge = base64URLencode(signedMessage);
+    // raw 32 bytes → base64URL (컨트랙트의 Base64.encodeURL(abi.encodePacked(bytes32(msgHash)))와 일치)
+    const challenge = toURLEncode(ethers.encodeBase64(ethers.getBytes(userOpHash)));
     const authResp = await this.verifyWithPasskey(
       this.credentialId,
       challenge
