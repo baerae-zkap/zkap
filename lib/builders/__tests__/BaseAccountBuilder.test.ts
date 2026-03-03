@@ -624,6 +624,14 @@ describe('BaseAccountBuilder', () => {
       expect(pvgLarge).toBeGreaterThan(pvgEmpty);
       expect(pvgLarge - pvgEmpty).toBeGreaterThanOrEqual(BigInt(2080));
     });
+
+    it('should include handleOps ABI encoding overhead (2000 gas) on top of base 30000', () => {
+      pvgBuilder.setCallData('0x');
+      const pvg = pvgBuilder.calcPvg(pvgBuilder.getUserOp() as UserOperation);
+
+      // base 30000 + HANDLE_OPS_OVERHEAD_GAS 2000 + calldata >= 32000
+      expect(pvg).toBeGreaterThanOrEqual(BigInt(32000));
+    });
   });
 
   describe('setInitCode (abstract implementation)', () => {
