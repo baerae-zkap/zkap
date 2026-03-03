@@ -230,6 +230,45 @@ describe('ZkapBuilder', () => {
       expect(userOp.callData).toBeDefined();
       expect(userOp.callData).not.toBe('0x');
     });
+
+    it('should set signerKeyTypes to keyWebAuthn by default', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      builder.setExecuteCallData('0x' + '22'.repeat(20), BigInt(0), '0x1234');
+
+      // signerKeyTypes가 자동 설정되었으므로 setCallData가 throw하지 않음
+      expect(() => builder.setCallData('0x9999')).not.toThrow();
+    });
+
+    it('should use explicitly provided signerKeyTypes', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      // keyAddress(1) 명시적으로 지정
+      builder.setExecuteCallData('0x' + '22'.repeat(20), BigInt(0), '0x1234', [1]);
+
+      expect(() => builder.setCallData('0x9999')).not.toThrow();
+    });
+
+    it('should allow signerKeyTypes to be overridden by setSignerKeyTypes after call', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      builder.setExecuteCallData('0x' + '22'.repeat(20), BigInt(0), '0x1234');
+      builder.setSignerKeyTypes([1, 4]); // 이후 오버라이드
+
+      expect(() => builder.setCallData('0x9999')).not.toThrow();
+    });
+
+    it('should return builder instance for method chaining', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      const result = builder.setExecuteCallData('0x' + '22'.repeat(20), BigInt(0), '0x1234');
+
+      expect(result).toBe(builder);
+    });
   });
 
   describe('setExecuteBatchCallData', () => {
@@ -245,6 +284,48 @@ describe('ZkapBuilder', () => {
 
       const userOp = builder.getUserOp();
       expect(userOp.callData).toBeDefined();
+    });
+
+    it('should set signerKeyTypes to keyWebAuthn by default', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      builder.setExecuteBatchCallData(
+        ['0x' + '22'.repeat(20)],
+        [BigInt(0)],
+        ['0x1234']
+      );
+
+      // signerKeyTypes가 자동 설정되었으므로 setCallData가 throw하지 않음
+      expect(() => builder.setCallData('0x9999')).not.toThrow();
+    });
+
+    it('should use explicitly provided signerKeyTypes', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      // keyAddress(1) 명시적으로 지정
+      builder.setExecuteBatchCallData(
+        ['0x' + '22'.repeat(20)],
+        [BigInt(0)],
+        ['0x1234'],
+        [1]
+      );
+
+      expect(() => builder.setCallData('0x9999')).not.toThrow();
+    });
+
+    it('should return builder instance for method chaining', () => {
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+
+      const result = builder.setExecuteBatchCallData(
+        ['0x' + '22'.repeat(20)],
+        [BigInt(0)],
+        ['0x1234']
+      );
+
+      expect(result).toBe(builder);
     });
   });
 
@@ -573,6 +654,21 @@ describe('ZkapBuilder', () => {
 
       const userOp = builder.getUserOp();
       expect(userOp.verificationGasLimit).toBeDefined();
+    });
+
+    it('should default initCode to "0x" when not set and wallet is deployed', async () => {
+      mockGetCode.mockResolvedValueOnce('0x1234'); // deployed
+
+      const builder = new ZkapBuilder(mockAccountInfo);
+      builder.setSender('0x' + '11'.repeat(20));
+      builder.setSignerKeyTypes([4]); // keyWebAuthn
+      builder.setCallData('0x1234');
+      // initCode 미설정
+
+      await builder.autoFillUserOp();
+
+      const userOp = builder.getUserOp();
+      expect(userOp.initCode).toBe('0x');
     });
 
     it('should throw when signerKeyTypes is not set before autoFillUserOp', async () => {

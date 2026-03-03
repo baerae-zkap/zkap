@@ -339,6 +339,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
     }
 
     // [PATCH] Set defaults for fields needed by calculatePreVerificationGas → packUserOp → encodeUserOp
+    if (!this.userOp.initCode) {
+      this.userOp.initCode = "0x";
+    }
     if (!this.userOp.preVerificationGas) {
       this.userOp.preVerificationGas = "0x00";
     }
@@ -573,13 +576,18 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
   /**
    * execute callData를 설정합니다.
-   * @note autoFillUserOp() 전에 반드시 setSignerKeyTypes()를 호출하여 서명 키 타입을 지정해야 합니다.
-   *       미설정 시 verificationGasLimit이 과소 추정될 수 있습니다.
+   * @param contractAddress 대상 컨트랙트 주소
+   * @param value 전송할 ETH (wei)
+   * @param data calldata (ETH 전송 시 '0x')
+   * @param signerKeyTypes 서명 키 타입 배열 (미지정 시 keyWebAuthn 기본값).
+   *        다른 키 타입이 필요하면 명시적으로 전달하거나, 이후 setSignerKeyTypes()로 오버라이드 가능.
+   * @warning 이 메서드는 signerKeyTypes를 설정합니다. 이전에 setSignerKeyTypes()로 설정한 값은 덮어씌워집니다.
    */
   setExecuteCallData(
     contractAddress: string,
     value: ethers.BigNumberish,
-    data: string
+    data: string,
+    signerKeyTypes?: number[]
   ): this {
     const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const useropCallData = callDataBuilder.encode("execute", [
@@ -589,18 +597,24 @@ export class ZkapBuilder extends BaseAccountBuilder {
     ]);
 
     this.setCallDataInternal(useropCallData);
+    this.setSignerKeyTypes(signerKeyTypes ?? [PrimitiveAccountKeyTypes.keyWebAuthn]);
     return this;
   }
 
   /**
    * executeBatch callData를 설정합니다.
-   * @note autoFillUserOp() 전에 반드시 setSignerKeyTypes()를 호출하여 서명 키 타입을 지정해야 합니다.
-   *       미설정 시 verificationGasLimit이 과소 추정될 수 있습니다.
+   * @param contractAddresses 대상 컨트랙트 주소 배열
+   * @param values 전송할 ETH 배열 (wei)
+   * @param data calldata 배열
+   * @param signerKeyTypes 서명 키 타입 배열 (미지정 시 keyWebAuthn 기본값).
+   *        다른 키 타입이 필요하면 명시적으로 전달하거나, 이후 setSignerKeyTypes()로 오버라이드 가능.
+   * @warning 이 메서드는 signerKeyTypes를 설정합니다. 이전에 setSignerKeyTypes()로 설정한 값은 덮어씌워집니다.
    */
   setExecuteBatchCallData(
     contractAddresses: string[],
     values: ethers.BigNumberish[],
-    data: string[]
+    data: string[],
+    signerKeyTypes?: number[]
   ): this {
     const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const useropCallData = callDataBuilder.encode("executeBatch(address[],uint256[],bytes[])", [
@@ -610,6 +624,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     ]);
 
     this.setCallDataInternal(useropCallData);
+    this.setSignerKeyTypes(signerKeyTypes ?? [PrimitiveAccountKeyTypes.keyWebAuthn]);
     return this;
   }
 
