@@ -2,7 +2,7 @@ name: Dev PR CI
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
 
 permissions:
   contents: read
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   dev-pr-ci:
-    uses: baerae-zkap/zkap-workflows/.github/workflows/dev-pr-ci.yml@main
+    uses: baerae-zkap/zkap-workflows/.github/workflows/dev-pr-ci.yml@feat/pr-ci-enhancements
     with:
       package-manager: npm
       use-private-packages: false
