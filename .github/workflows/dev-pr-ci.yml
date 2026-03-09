@@ -14,5 +14,4 @@ jobs:
     with:
       package-manager: npm
       use-private-packages: false
-      runner: ubuntu-latest
     secrets: inherit
