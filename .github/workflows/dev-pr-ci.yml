@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   dev-pr-ci:
-    uses: baerae-zkap/zkap-workflows/.github/workflows/dev-pr-ci.yml@feat/pr-ci-enhancements
+    uses: baerae-zkap/zkap-workflows/.github/workflows/dev-pr-ci.yml@main
     with:
       package-manager: npm
       use-private-packages: false
