@@ -1,0 +1,13 @@
+name: SDK Develop Merged CI
+on:
+  push:
+    branches: [develop]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  sdk-dev-merged-ci:
+    uses: baerae-zkap/zkap-workflows/.github/workflows/sdk-dev-merged-ci.yml@main
+    with:
+      package-manager: npm
+    secrets: inherit
