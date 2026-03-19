@@ -90,6 +90,88 @@ describe('packUserOperation', () => {
     expect(packed.paymasterAndData).toBe('0x');
   });
 
+  it('sets paymasterAndData to 0x when paymaster is "0x" (empty)', () => {
+    const userOp = makeUserOp({
+      paymaster: '0x',
+    });
+
+    const packed = packUserOperation(userOp);
+    expect(packed.paymasterAndData).toBe('0x');
+  });
+
+  it('sets paymasterAndData to 0x when paymaster is undefined (falls back to ZeroAddress)', () => {
+    const userOp = makeUserOp({
+      paymaster: undefined as unknown as string,
+    });
+
+    const packed = packUserOperation(userOp);
+    expect(packed.paymasterAndData).toBe('0x');
+  });
+
+  it('packs paymasterAndData with paymasterData omitting 0x prefix', () => {
+    const paymasterAddr = '0x' + 'BB'.repeat(20);
+    const userOp = makeUserOp({
+      paymaster: paymasterAddr,
+      paymasterVerificationGasLimit: '0x0',
+      paymasterPostOpGasLimit: '0x0',
+      paymasterData: 'cafebabe', // no 0x prefix
+    });
+
+    const packed = packUserOperation(userOp);
+    expect(packed.paymasterAndData).not.toBe('0x');
+    // paymasterData without 0x prefix should be included raw
+    expect(packed.paymasterAndData.toLowerCase()).toContain('cafebabe');
+  });
+
+  it('packs paymasterAndData with missing paymasterVerificationGasLimit and paymasterPostOpGasLimit (defaults to 0x0)', () => {
+    const paymasterAddr = '0x' + 'CC'.repeat(20);
+    const userOp = makeUserOp({
+      paymaster: paymasterAddr,
+      paymasterVerificationGasLimit: undefined as unknown as string,
+      paymasterPostOpGasLimit: undefined as unknown as string,
+      paymasterData: '0x',
+    });
+
+    const packed = packUserOperation(userOp);
+    expect(packed.paymasterAndData).not.toBe('0x');
+    const raw = packed.paymasterAndData.slice(2);
+    // paymaster address (40 chars) + pmVerGas (32 chars) + pmPostGas (32 chars)
+    expect(raw.length).toBeGreaterThanOrEqual(40 + 64);
+  });
+
+  it('handles gas limit values without 0x prefix in padTo16Bytes', () => {
+    // Pass gas values without 0x prefix to exercise the non-0x branch in padTo16Bytes
+    const userOp = makeUserOp({
+      verificationGasLimit: '186a0',   // no 0x prefix
+      callGasLimit: '5208',            // no 0x prefix
+      maxPriorityFeePerGas: '77359400',
+      maxFeePerGas: '3b9aca00',
+    });
+
+    const packed = packUserOperation(userOp);
+    const raw = packed.accountGasLimits.slice(2);
+    const verGas = BigInt('0x' + raw.slice(0, 32));
+    const callGas = BigInt('0x' + raw.slice(32, 64));
+    expect(verGas).toBe(BigInt(0x186a0));
+    expect(callGas).toBe(BigInt(0x5208));
+  });
+
+  it('handles paymaster address without 0x prefix', () => {
+    // paymaster without 0x to exercise the non-0x branch in paymasterClean
+    const paymasterAddrNoPrefix = 'DD'.repeat(20); // 40 chars, no 0x
+    const userOp = makeUserOp({
+      paymaster: paymasterAddrNoPrefix,
+      paymasterVerificationGasLimit: '0x0',
+      paymasterPostOpGasLimit: '0x0',
+      paymasterData: '0x',
+    });
+
+    const packed = packUserOperation(userOp);
+    expect(packed.paymasterAndData).not.toBe('0x');
+    const raw = packed.paymasterAndData.slice(2);
+    expect(raw.slice(0, 40).toLowerCase()).toBe('dd'.repeat(20));
+  });
+
   it('packs paymasterAndData when paymaster is set', () => {
     const paymasterAddr = '0x' + 'AA'.repeat(20);
     const userOp = makeUserOp({
@@ -185,6 +267,53 @@ describe('unpackUserOperation', () => {
 
     const unpacked = unpackUserOperation(packed);
     expect(unpacked.paymaster).toBe(ethers.ZeroAddress);
+  });
+
+  it('extracts only paymaster address when paymasterAndData has exactly 40 hex chars (no gas fields)', () => {
+    // pad = exactly 40 hex chars (20 bytes = address only, no pmVerGas/pmPostGas/pmData)
+    const paymasterAddr = 'AA'.repeat(20); // 40 hex chars, no 0x
+    const packed: PackedUserOperation = {
+      sender: '0x' + '11'.repeat(20),
+      nonce: '0x0',
+      initCode: '0x',
+      callData: '0x',
+      accountGasLimits: '0x' + '00'.repeat(32),
+      preVerificationGas: '0x5208',
+      gasFees: '0x' + '00'.repeat(32),
+      paymasterAndData: '0x' + paymasterAddr,
+      signature: '0x',
+    };
+
+    const unpacked = unpackUserOperation(packed);
+    expect(unpacked.paymaster.toLowerCase()).toBe('0x' + 'aa'.repeat(20));
+    // Gas limits should remain at defaults since pad.length < 40 + 64
+    expect(unpacked.paymasterVerificationGasLimit).toBe('0x0');
+    expect(unpacked.paymasterPostOpGasLimit).toBe('0x0');
+    expect(unpacked.paymasterData).toBe('0x');
+  });
+
+  it('extracts paymasterData when pad has address + gas fields + extra data', () => {
+    const paymasterAddr = 'CC'.repeat(20);          // 40 chars
+    const pmVerGas = '00'.repeat(16);               // 32 chars
+    const pmPostGas = '00'.repeat(16);              // 32 chars
+    const pmData = 'deadbeef';                       // extra data
+    const pad = paymasterAddr + pmVerGas + pmPostGas + pmData;
+
+    const packed: PackedUserOperation = {
+      sender: '0x' + '11'.repeat(20),
+      nonce: '0x0',
+      initCode: '0x',
+      callData: '0x',
+      accountGasLimits: '0x' + '00'.repeat(32),
+      preVerificationGas: '0x5208',
+      gasFees: '0x' + '00'.repeat(32),
+      paymasterAndData: '0x' + pad,
+      signature: '0x',
+    };
+
+    const unpacked = unpackUserOperation(packed);
+    expect(unpacked.paymaster.toLowerCase()).toBe('0x' + 'cc'.repeat(20));
+    expect(unpacked.paymasterData.toLowerCase()).toBe('0xdeadbeef');
   });
 });
 

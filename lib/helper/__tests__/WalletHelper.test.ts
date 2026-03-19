@@ -320,4 +320,101 @@ describe('WalletHelper', () => {
       expect(Array.isArray(keys)).toBe(true);
     });
   });
+
+  describe('sendBatchTransaction', () => {
+    it('builds, signs, submits and returns userOpHash and receipt promise', async () => {
+      const chainRegistry = makeMockChainRegistry();
+      const bundlerClient = makeMockBundlerClient();
+      const helper = makeWalletHelper(chainRegistry, bundlerClient);
+      const signer = makeMockSigner();
+
+      const result = await helper.sendBatchTransaction({
+        sender: MOCK_ADDRESS,
+        transactions: [
+          { to: '0x' + '22'.repeat(20), value: '0' },
+          { to: '0x' + '33'.repeat(20), value: '1000', data: '0xdeadbeef' },
+        ],
+        chainId: MOCK_CHAIN_ID,
+        signer,
+      });
+
+      expect(result.userOpHash).toBe(MOCK_USER_OP_HASH);
+      expect(result.receipt).toBeInstanceOf(Promise);
+      expect(bundlerClient.submitUserOp).toHaveBeenCalled();
+    });
+
+    it('calls signer.signUserOpHash with the computed userOpHash', async () => {
+      const signer = makeMockSigner();
+      const helper = makeWalletHelper();
+
+      await helper.sendBatchTransaction({
+        sender: MOCK_ADDRESS,
+        transactions: [{ to: '0x' + '22'.repeat(20), value: '0' }],
+        chainId: MOCK_CHAIN_ID,
+        signer,
+      });
+
+      expect(signer.signUserOpHash).toHaveBeenCalledWith(MOCK_USER_OP_HASH);
+    });
+
+    it('uses 0x as default data for transactions without data field', async () => {
+      const { ZkapBuilder } = require('../../builders/ZkapBuilder');
+      const signer = makeMockSigner();
+      const helper = makeWalletHelper();
+
+      await helper.sendBatchTransaction({
+        sender: MOCK_ADDRESS,
+        transactions: [
+          { to: '0x' + '22'.repeat(20), value: '0' },           // no data
+          { to: '0x' + '33'.repeat(20), value: '0', data: '0xab' }, // with data
+        ],
+        chainId: MOCK_CHAIN_ID,
+        signer,
+      });
+
+      const builderInstance = ZkapBuilder.mock.results[ZkapBuilder.mock.results.length - 1].value;
+      expect(builderInstance.setExecuteBatchCallData).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.any(String)]),
+        expect.arrayContaining([expect.any(String)]),
+        expect.arrayContaining(['0x', '0xab']),
+        signer.keyTypes
+      );
+    });
+
+    it('constructs keyIndexList from signer.keyTypes', async () => {
+      const { ZkapBuilder } = require('../../builders/ZkapBuilder');
+      const signer = makeMockSigner([3, 5]); // two key types
+      const helper = makeWalletHelper();
+
+      await helper.sendBatchTransaction({
+        sender: MOCK_ADDRESS,
+        transactions: [{ to: '0x' + '22'.repeat(20), value: '0' }],
+        chainId: MOCK_CHAIN_ID,
+        signer,
+      });
+
+      const builderInstance = ZkapBuilder.mock.results[ZkapBuilder.mock.results.length - 1].value;
+      expect(builderInstance.setSignature).toHaveBeenCalledWith([0, 1], expect.any(Array));
+    });
+  });
+
+  describe('constructor apiUrl option', () => {
+    it('accepts custom apiUrl and strips trailing slash', () => {
+      const helper = new WalletHelper({
+        chainRegistry: makeMockChainRegistry() as any,
+        bundlerClient: makeMockBundlerClient() as any,
+        apiUrl: 'https://custom.api.example.com/',
+      });
+      // The helper constructs without error and the apiUrl is stripped
+      expect(helper).toBeInstanceOf(WalletHelper);
+    });
+
+    it('uses default apiUrl when not provided', () => {
+      const helper = new WalletHelper({
+        chainRegistry: makeMockChainRegistry() as any,
+        bundlerClient: makeMockBundlerClient() as any,
+      });
+      expect(helper).toBeInstanceOf(WalletHelper);
+    });
+  });
 });

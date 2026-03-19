@@ -395,6 +395,17 @@ describe('ZkapBundlerProvider', () => {
       await expect(provider.getStatus(MOCK_USER_OP_HASH))
         .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
     });
+
+    it('throws NETWORK_ERROR on non-ok non-404 response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Internal Server Error'),
+      });
+      const provider = new ZkapBundlerProvider();
+      await expect(provider.getStatus(MOCK_USER_OP_HASH))
+        .rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    });
   });
 
   describe('getReceipt', () => {
@@ -535,6 +546,82 @@ describe('Erc4337BundlerProvider', () => {
       expect(await provider.getStatus(MOCK_USER_OP_HASH)).toBe('failed');
     });
   });
+
+  describe('getReceipt', () => {
+    it('returns null when rpcCall returns null', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ jsonrpc: '2.0', id: 1, result: null }),
+      });
+
+      const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+      expect(await provider.getReceipt(MOCK_USER_OP_HASH)).toBeNull();
+    });
+
+    it('returns UserOpReceipt with transactionHash when result has transactionHash', async () => {
+      const txHash = '0x' + 'dd'.repeat(32);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          result: {
+            transactionHash: txHash,
+            blockNumber: 12345,
+            success: true,
+            actualGasCost: '100000',
+            actualGasUsed: '80000',
+          },
+        }),
+      });
+
+      const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+      const receipt = await provider.getReceipt(MOCK_USER_OP_HASH);
+
+      expect(receipt).not.toBeNull();
+      expect(receipt!.txHash).toBe(txHash);
+      expect(receipt!.blockNumber).toBe(12345);
+      expect(receipt!.success).toBe(true);
+      expect(receipt!.actualGasCost).toBe('100000');
+      expect(receipt!.actualGasUsed).toBe('80000');
+      expect(receipt!.userOpHash).toBe(MOCK_USER_OP_HASH);
+    });
+
+    it('falls back to txHash when transactionHash is absent', async () => {
+      const txHash = '0x' + 'ee'.repeat(32);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          result: {
+            txHash,
+            blockNumber: 999,
+            success: false,
+            actualGasCost: '0',
+            actualGasUsed: '0',
+          },
+        }),
+      });
+
+      const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+      const receipt = await provider.getReceipt(MOCK_USER_OP_HASH);
+
+      expect(receipt!.txHash).toBe(txHash);
+      expect(receipt!.success).toBe(false);
+    });
+
+    it('returns empty string txHash when neither transactionHash nor txHash present', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          result: { blockNumber: 100, success: true },
+        }),
+      });
+
+      const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+      const receipt = await provider.getReceipt(MOCK_USER_OP_HASH);
+
+      expect(receipt!.txHash).toBe('');
+      expect(receipt!.blockNumber).toBe(100);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -597,6 +684,27 @@ describe('classifyBundlerError (via Erc4337BundlerProvider)', () => {
 
   it('classifies fetch errors as NETWORK_ERROR, retryable', async () => {
     makeRpcError('fetch failed: connection reset');
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+    await expect(provider.submitUserOp(makePackedUserOp(), MOCK_ENTRY_POINT))
+      .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+  });
+
+  it('classifies AA31 as AA40_PAYMASTER_ERROR', async () => {
+    makeRpcError('AA31 paymaster deposit too low');
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+    await expect(provider.submitUserOp(makePackedUserOp(), MOCK_ENTRY_POINT))
+      .rejects.toMatchObject({ code: 'AA40_PAYMASTER_ERROR' });
+  });
+
+  it('classifies AA32 as AA40_PAYMASTER_ERROR', async () => {
+    makeRpcError('AA32 paymaster expired or not due');
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+    await expect(provider.submitUserOp(makePackedUserOp(), MOCK_ENTRY_POINT))
+      .rejects.toMatchObject({ code: 'AA40_PAYMASTER_ERROR' });
+  });
+
+  it('classifies econnrefused as NETWORK_ERROR', async () => {
+    makeRpcError('ECONNREFUSED connection refused');
     const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
     await expect(provider.submitUserOp(makePackedUserOp(), MOCK_ENTRY_POINT))
       .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });

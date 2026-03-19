@@ -184,6 +184,79 @@ describe('AccountReader', () => {
       expect(keys[0].keyType).toBe('webauthn');
       expect(keys[0].webauthn).toBeUndefined();
     });
+
+    it('detects address key type (keyAddress=1)', async () => {
+      mockTxKeyList
+        .mockResolvedValueOnce([MOCK_LOGIC, BigInt(1)])
+        .mockRejectedValueOnce(new Error('end'));
+      mockKeyType.mockResolvedValueOnce(BigInt(1)); // keyAddress
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.getTxKeyList(MOCK_ADDRESS);
+
+      expect(keys[0].keyType).toBe('address');
+    });
+
+    it('detects secp256k1 key type (keySecp256k1=2)', async () => {
+      mockTxKeyList
+        .mockResolvedValueOnce([MOCK_LOGIC, BigInt(1)])
+        .mockRejectedValueOnce(new Error('end'));
+      mockKeyType.mockResolvedValueOnce(BigInt(2)); // keySecp256k1
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.getTxKeyList(MOCK_ADDRESS);
+
+      expect(keys[0].keyType).toBe('secp256k1');
+    });
+
+    it('detects secp256r1 key type (keySecp256r1=3)', async () => {
+      mockTxKeyList
+        .mockResolvedValueOnce([MOCK_LOGIC, BigInt(1)])
+        .mockRejectedValueOnce(new Error('end'));
+      mockKeyType.mockResolvedValueOnce(BigInt(3)); // keySecp256r1
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.getTxKeyList(MOCK_ADDRESS);
+
+      expect(keys[0].keyType).toBe('secp256r1');
+    });
+
+    it('detects oauthRs256 key type (keyOAuthRS256=5)', async () => {
+      mockTxKeyList
+        .mockResolvedValueOnce([MOCK_LOGIC, BigInt(1)])
+        .mockRejectedValueOnce(new Error('end'));
+      mockKeyType.mockResolvedValueOnce(BigInt(5)); // keyOAuthRS256
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.getTxKeyList(MOCK_ADDRESS);
+
+      expect(keys[0].keyType).toBe('oauthRs256');
+    });
+
+    it('detects zkOAuth key type (keyZkOAuthRS256=6)', async () => {
+      mockTxKeyList
+        .mockResolvedValueOnce([MOCK_LOGIC, BigInt(1)])
+        .mockRejectedValueOnce(new Error('end'));
+      mockKeyType.mockResolvedValueOnce(BigInt(6)); // keyZkOAuthRS256
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.getTxKeyList(MOCK_ADDRESS);
+
+      expect(keys[0].keyType).toBe('zkOAuth');
+    });
+
+    it('stops at MAX_TX_KEYS (5) even if all entries are valid', async () => {
+      // Provide 6 entries — only 5 should be read
+      for (let i = 0; i < 6; i++) {
+        mockTxKeyList.mockResolvedValueOnce([MOCK_LOGIC, BigInt(i)]);
+        mockKeyType.mockResolvedValueOnce(BigInt(99)); // unknown
+      }
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.getTxKeyList(MOCK_ADDRESS);
+
+      expect(keys).toHaveLength(5);
+    });
   });
 
   describe('getMasterKeyInfo', () => {

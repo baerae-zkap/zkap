@@ -275,4 +275,119 @@ describe('ChainRegistry', () => {
         .rejects.toThrow('ChainRegistry: network error fetching supported chains');
     });
   });
+
+  describe('_parseChainConfig (via getChainConfig)', () => {
+    it('reads poseidonMerkleTreeDirectory from contracts when not at top level', async () => {
+      const data = makeApiChain({
+        poseidonMerkleTreeDirectory: undefined,
+        contracts: {
+          zkOAuthVerifier1of1: '0x' + '11'.repeat(20),
+          zkOAuthVerifier3of3: '0x' + '22'.repeat(20),
+          hAudLists: '0x' + '33'.repeat(20),
+          hAudLists1: '0x' + '44'.repeat(20),
+          poseidonMerkleTreeDirectory: 'https://contracts-merkle.example.com',
+        },
+      });
+      mockFetch.mockResolvedValueOnce(okResponse(data));
+
+      const registry = new ChainRegistry();
+      const config = await registry.getChainConfig(42161);
+      expect(config.poseidonMerkleTreeDirectory).toBe('https://contracts-merkle.example.com');
+    });
+
+    it('reads contract addresses from flat data fields when contracts object is absent', async () => {
+      const data = {
+        chainId: 42161,
+        name: 'Arbitrum',
+        rpcUrl: 'https://arb1.arbitrum.io/rpc',
+        entryPoint: '0x' + '5F'.repeat(20),
+        zkapFactory: '0x' + 'AB'.repeat(20),
+        bundlerUrl: 'https://bundler.example.com',
+        poseidonMerkleTreeDirectory: 'https://merkle.example.com',
+        // No contracts key — flat fields instead
+        zkOAuthVerifier1of1: '0x' + 'A1'.repeat(20),
+        zkOAuthVerifier3of3: '0x' + 'A2'.repeat(20),
+        hAudLists: '0x' + 'A3'.repeat(20),
+        hAudLists1: '0x' + 'A4'.repeat(20),
+      };
+      mockFetch.mockResolvedValueOnce(okResponse(data));
+
+      const registry = new ChainRegistry();
+      const config = await registry.getChainConfig(42161);
+      expect(config.contracts.zkOAuthVerifier1of1).toBe('0x' + 'A1'.repeat(20));
+      expect(config.contracts.zkOAuthVerifier3of3).toBe('0x' + 'A2'.repeat(20));
+      expect(config.contracts.hAudLists).toBe('0x' + 'A3'.repeat(20));
+      expect(config.contracts.hAudLists1).toBe('0x' + 'A4'.repeat(20));
+    });
+
+    it('prefers contracts object fields over flat data fields for contract addresses', async () => {
+      const data = {
+        chainId: 42161,
+        name: 'Arbitrum',
+        rpcUrl: 'https://arb1.arbitrum.io/rpc',
+        entryPoint: '0x' + '5F'.repeat(20),
+        zkapFactory: '0x' + 'AB'.repeat(20),
+        bundlerUrl: 'https://bundler.example.com',
+        poseidonMerkleTreeDirectory: 'https://merkle.example.com',
+        // Both nested and flat — nested should win
+        zkOAuthVerifier1of1: '0x' + 'FF'.repeat(20), // flat (should be ignored)
+        contracts: {
+          zkOAuthVerifier1of1: '0x' + '11'.repeat(20), // nested (should win)
+          zkOAuthVerifier3of3: '0x' + '22'.repeat(20),
+          hAudLists: '0x' + '33'.repeat(20),
+          hAudLists1: '0x' + '44'.repeat(20),
+        },
+      };
+      mockFetch.mockResolvedValueOnce(okResponse(data));
+
+      const registry = new ChainRegistry();
+      const config = await registry.getChainConfig(42161);
+      expect(config.contracts.zkOAuthVerifier1of1).toBe('0x' + '11'.repeat(20));
+    });
+
+    it('accepts entryPoint from entrypoint (lowercase) alias', async () => {
+      const data = {
+        chainId: 42161,
+        name: 'Arbitrum',
+        rpcUrl: 'https://arb1.arbitrum.io/rpc',
+        entrypoint: '0x' + '5F'.repeat(20), // lowercase alias
+        zkapFactory: '0x' + 'AB'.repeat(20),
+        bundlerUrl: 'https://bundler.example.com',
+        poseidonMerkleTreeDirectory: '',
+        contracts: {},
+      };
+      mockFetch.mockResolvedValueOnce(okResponse(data));
+
+      const registry = new ChainRegistry();
+      const config = await registry.getChainConfig(42161);
+      expect(config.entryPoint).toBe('0x' + '5F'.repeat(20));
+    });
+
+    it('accepts zkapFactory from factory alias', async () => {
+      const data = {
+        chainId: 42161,
+        name: 'Arbitrum',
+        rpcUrl: 'https://arb1.arbitrum.io/rpc',
+        entryPoint: '0x' + '5F'.repeat(20),
+        factory: '0x' + 'AB'.repeat(20), // alias
+        bundlerUrl: 'https://bundler.example.com',
+        poseidonMerkleTreeDirectory: '',
+        contracts: {},
+      };
+      mockFetch.mockResolvedValueOnce(okResponse(data));
+
+      const registry = new ChainRegistry();
+      const config = await registry.getChainConfig(42161);
+      expect(config.zkapFactory).toBe('0x' + 'AB'.repeat(20));
+    });
+
+    it('throws when chainId is NaN', async () => {
+      const data = makeApiChain({ chainId: 'not-a-number' });
+      mockFetch.mockResolvedValueOnce(okResponse(data));
+
+      const registry = new ChainRegistry();
+      await expect(registry.getChainConfig(42161))
+        .rejects.toThrow('ChainRegistry: invalid or missing chainId in API response');
+    });
+  });
 });
