@@ -3,7 +3,6 @@
  */
 
 import { ChainRegistry } from '../ChainRegistry';
-import type { ChainConfig } from '../ChainRegistry';
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;

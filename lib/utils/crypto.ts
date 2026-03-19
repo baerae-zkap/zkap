@@ -197,20 +197,20 @@ const K = [
 function commonVkParser(
   commonVk: string[]
 ): [string[][], string, string, string, string] {
-  let g1Generator = [commonVk[0], commonVk[1]];
-  let g2Generator = [commonVk[3], commonVk[2], commonVk[5], commonVk[4]];
-  let g2X = [commonVk[7], commonVk[6], commonVk[9], commonVk[8]];
-  let g1Z = [commonVk[10], commonVk[11]];
-  let g2Z = [commonVk[13], commonVk[12], commonVk[15], commonVk[14]];
+  const g1Generator = [commonVk[0], commonVk[1]];
+  const g2Generator = [commonVk[3], commonVk[2], commonVk[5], commonVk[4]];
+  const g2X = [commonVk[7], commonVk[6], commonVk[9], commonVk[8]];
+  const g1Z = [commonVk[10], commonVk[11]];
+  const g2Z = [commonVk[13], commonVk[12], commonVk[15], commonVk[14]];
 
-  let pairingVk = [g1Generator, g2Generator, g2X, g1Z, g2Z];
+  const pairingVk = [g1Generator, g2Generator, g2X, g1Z, g2Z];
 
-  let n = commonVk[16];
-  let m0 = commonVk[17];
-  let sigma = commonVk[18];
-  let omega = commonVk[19];
+  const n = commonVk[16];
+  const m0 = commonVk[17];
+  const sigma = commonVk[18];
+  const omega = commonVk[19];
 
-  let verifyingKeyBase: [string[][], string, string, string, string] = [
+  const verifyingKeyBase: [string[][], string, string, string, string] = [
     pairingVk,
     n,
     m0,
@@ -221,7 +221,7 @@ function commonVkParser(
 }
 
 function getSignedMessageHash(message: string): string {
-  let signedMessage = ethers.keccak256(
+  const signedMessage = ethers.keccak256(
     ethers.concat([
       ethers.toUtf8Bytes("\x19Ethereum Signed Message:\n32"),
       ethers.getBytes(message),
@@ -231,40 +231,40 @@ function getSignedMessageHash(message: string): string {
   return signedMessage;
 }
 
-function userSpecificVkParser(userVk: string[] | BigInt[]): bigint[][] {
+function userSpecificVkParser(userVk: string[] | bigint[]): bigint[][] {
   if (userVk.length !== 16) {
     throw new Error("userVk length must be 16");
   }
 
-  let g2Mu = [
+  const g2Mu = [
     BigInt(userVk[1].toString()),
     BigInt(userVk[0].toString()),
     BigInt(userVk[3].toString()),
     BigInt(userVk[2].toString()),
   ];
 
-  let g2MuX = [
+  const g2MuX = [
     BigInt(userVk[5].toString()),
     BigInt(userVk[4].toString()),
     BigInt(userVk[7].toString()),
     BigInt(userVk[6].toString()),
   ];
 
-  let g2MuZ = [
+  const g2MuZ = [
     BigInt(userVk[9].toString()),
     BigInt(userVk[8].toString()),
     BigInt(userVk[11].toString()),
     BigInt(userVk[10].toString()),
   ];
 
-  let vAcc = [
+  const vAcc = [
     BigInt(userVk[13].toString()),
     BigInt(userVk[12].toString()),
     BigInt(userVk[15].toString()),
     BigInt(userVk[14].toString()),
   ];
 
-  let userSpecificVk = [g2Mu, g2MuX, g2MuZ, vAcc];
+  const userSpecificVk = [g2Mu, g2MuX, g2MuZ, vAcc];
 
   return userSpecificVk;
 }
@@ -405,7 +405,7 @@ export function padAndStrToFieldsBN254(
   userMaxClaimLen: number,
   padChar: number
 ): bigint[] {
-  let maxClaimLen = calculateMaxClaimLen(userMaxClaimLen);
+  const maxClaimLen = calculateMaxClaimLen(userMaxClaimLen);
 
   s = padStr(s, maxClaimLen, padChar);
 

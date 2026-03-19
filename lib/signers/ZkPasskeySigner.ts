@@ -248,7 +248,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
     let adjustedPublicKeys: string[] = [];
     let adjustedLeafIndices: number[] = [];
     let adjustedMerklePaths: string[][] = [];
-    let signatures: string[] = [];
+    const signatures: string[] = [];
     let proofAndPublicInput: { proof: string[]; publicInputs: string[] };
 
     if (idTokens.length === 0 || idTokens.length > 3) {

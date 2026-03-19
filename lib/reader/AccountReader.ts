@@ -160,8 +160,6 @@ export class AccountReader {
     // Count master keys and detect 3-of-3
     let keyCount = 1;
     const anchorList: string[] = [];
-    const is3of3 = threshold >= 3;
-
     // Attempt to read anchor data from the verifier
     try {
       const verifierContract = new ethers.Contract(logic, ZK_OAUTH_VERIFIER_ABI, this.provider);

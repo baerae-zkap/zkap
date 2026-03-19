@@ -18,7 +18,9 @@ const mockGetData = jest.fn();
 const mockGetAnchor = jest.fn();
 
 // We need different Contract instances per ABI. We track by constructing in order.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let contractCallCount = 0;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const contractMocks: Record<string, jest.Mock>[] = [];
 
 jest.mock('ethers', () => {
