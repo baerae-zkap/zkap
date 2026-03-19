@@ -346,7 +346,7 @@ describe('signature', () => {
 
   describe('flipSecp256r1Signature', () => {
     // secp256r1 curve order N
-    const N_HEX = 'FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551';
+    const _N_HEX = 'FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551'; // eslint-disable-line @typescript-eslint/no-unused-vars
     // N/2 (halfN)
     const HALF_N_HEX = '7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a8';
 

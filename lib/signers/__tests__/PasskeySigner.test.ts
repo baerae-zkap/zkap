@@ -8,6 +8,7 @@
 import { PasskeySigner } from '../PasskeySigner';
 import { PrimitiveAccountKeyTypes } from '../../types/AccountKey';
 import { base64URLencode } from '../../utils/base64url';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { wrapSignature, toHex } from '../../utils/signature';
 import { ethers } from 'ethers';
 

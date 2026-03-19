@@ -10,7 +10,7 @@ export function unwrapSignature(sigBuffer: Uint8Array) {
   if (sigBuffer[2] !== 0x02) {
     throw new Error("Expected DER INTEGER tag (0x02) for r");
   }
-  let rLength = sigBuffer[3];
+  const rLength = sigBuffer[3];
   if (rLength > sigBuffer.length - 4) {
     throw new Error("Invalid r length in DER signature");
   }

@@ -71,7 +71,7 @@ export abstract class BaseAccountBuilder {
     }
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
     const PAYMASTER_SIG_BYTES = paymasterSigBytes;
-    const PAYMASTER_SIG_HEX_LENGTH = PAYMASTER_SIG_BYTES * 2;
+    const _PAYMASTER_SIG_HEX_LENGTH = PAYMASTER_SIG_BYTES * 2; // eslint-disable-line @typescript-eslint/no-unused-vars
     // minimum valid payload: paymaster addr(20) + verifyGasLimit(16) + postOpGasLimit(16) + sig(65) = 117 bytes
     // hex representation: 117 * 2 + 2("0x" prefix) = 236 chars
     // Changed from <= PAYMASTER_SIG_HEX_LENGTH + 2 to < 236 to correctly enforce the minimum

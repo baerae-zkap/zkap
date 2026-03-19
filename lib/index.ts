@@ -34,3 +34,23 @@ export * from "./utils/crypto";
 export * from "./utils/signature";
 export * from "./utils/base64url";
 export { IUserOpSigner } from "./utils/IUserOpSigner";
+export { packUserOperation, unpackUserOperation, createDummyPasskeySignature, createDummyZkSignature } from "./utils/userOpUtils";
+export { computeSalt } from "./utils/salt";
+
+// Bundler client
+export { BundlerClient } from "./client/BundlerClient";
+export { ZkapBundlerProvider, Erc4337BundlerProvider } from "./client/BundlerProvider";
+export { BundlerError } from "./client/types";
+export type { BundlerProvider, BundlerErrorCode, UserOpStatus, UserOpReceipt } from "./client/types";
+
+// Chain registry
+export { ChainRegistry } from "./registry/ChainRegistry";
+export type { ChainConfig } from "./registry/ChainRegistry";
+
+// Account reader
+export { AccountReader } from "./reader/AccountReader";
+export type { TxKeyInfo, MasterKeyInfo, WebAuthnKeyData as AccountWebAuthnKeyData, KeyType } from "./reader/AccountReader";
+
+// Wallet helper
+export { WalletHelper } from "./helper/WalletHelper";
+export type { WalletHelperConfig } from "./helper/WalletHelper";

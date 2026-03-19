@@ -59,6 +59,7 @@ describe('ZkapAccount', () => {
     });
 
     it('should throw when address is invalid', () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mockEthers = require('ethers');
       mockEthers.ethers.isAddress.mockReturnValueOnce(false);
       expect(() => new ZkapAccount(
@@ -70,6 +71,7 @@ describe('ZkapAccount', () => {
     });
 
     it('should throw when entryPointAddress is invalid', () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mockEthers = require('ethers');
       mockEthers.ethers.isAddress
         .mockReturnValueOnce(true)
