@@ -34,7 +34,7 @@ function getOutOfCircuitHashSegment(jwt: string, keys: string[]): string {
   if (parts.length !== 3) {
     throw new Error("Invalid JWT: must contain header, payload, and signature");
   }
-  const [headerB64, payloadB64, _] = parts;
+  const [headerB64, payloadB64] = parts;
 
   // header의 길이에 1을 더한 값이 payOffsetB64
   const payOffsetB64 = headerB64.length + 1;

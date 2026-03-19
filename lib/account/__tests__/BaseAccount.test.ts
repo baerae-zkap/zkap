@@ -8,11 +8,13 @@ import { BaseAccount } from '../BaseAccount';
 
 // Concrete implementation for testing
 class TestAccount extends BaseAccount {
-  async signUserOpHash(userOpHash: string): Promise<string[]> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async signUserOpHash(_userOpHash: string): Promise<string[]> {
     return ['0xsignature'];
   }
 
-  async sendTransaction(userOp: any): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async sendTransaction(_userOp: any): Promise<string> {
     return '0xtxhash';
   }
 

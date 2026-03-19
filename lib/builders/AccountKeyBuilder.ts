@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-duplicate-enum-values */
 import { ethers } from "ethers";
 import {
   CompositeAccountKeyTypes,

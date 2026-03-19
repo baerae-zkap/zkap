@@ -46,6 +46,7 @@ jest.mock('ethers', () => {
 
 import { ZkapCreator, ZkapCreatorInfo } from '../ZkapCreator';
 import { ZkapFactoryBuilder } from '../ZkapFactoryBuilder';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ethers } from 'ethers';
 
 describe('ZkapCreator', () => {
