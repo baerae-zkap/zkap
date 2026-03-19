@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * WalletHelper 테스트
  */
@@ -16,6 +17,9 @@ const mockGetData = jest.fn();
 const mockGetAnchor = jest.fn();
 const mockFactoryGetAddress = jest.fn();
 
+// These mocks are used inside jest.mock factory below — referenced by the builder mock object.
+// Declared here so they are hoisted and accessible in the factory.
+/* eslint-disable @typescript-eslint/no-unused-vars */
 const mockAutoFillUserOp = jest.fn();
 const mockGetUserOpHash = jest.fn();
 const mockGetPackedUserOp = jest.fn();
@@ -23,6 +27,7 @@ const mockSetSender = jest.fn();
 const mockSetExecuteCallData = jest.fn();
 const mockSetExecuteBatchCallData = jest.fn();
 const mockSetSignature = jest.fn();
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 jest.mock('ethers', () => {
   const actual = jest.requireActual('ethers');
@@ -80,11 +85,8 @@ jest.mock('../../builders/ZkapBuilder', () => {
 });
 
 import { WalletHelper } from '../WalletHelper';
-import type { WalletHelperConfig } from '../WalletHelper';
 import type { ChainConfig } from '../../registry/ChainRegistry';
-import type { BundlerClient } from '../../client/BundlerClient';
 import type { UserOpReceipt } from '../../client/types';
-import { ethers } from 'ethers';
 
 // ---------------------------------------------------------------------------
 // Helpers

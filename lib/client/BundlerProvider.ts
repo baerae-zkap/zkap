@@ -32,6 +32,7 @@ export class ZkapBundlerProvider implements BundlerProvider {
     this.baseUrl = (config && config.baseUrl) ? config.baseUrl.replace(/\/$/, "") : "https://api.zkap.app";
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async submitUserOp(userOp: PackedUserOperation, _entryPoint: string): Promise<string> {
     const url = `${this.baseUrl}/api/v1/bundler/submit-direct`;
     let res: Response;
