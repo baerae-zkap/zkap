@@ -36,5 +36,6 @@ jobs:
     needs: [ci]
     if: ${{ !cancelled() && inputs.run-mode != 'ci' && (needs.ci.result == 'success' || inputs.run-mode == 'cd') }}
     uses: baerae-zkap/zkap-workflows/.github/workflows/sdk-rc-cd.yml@main
-
+    with:
+      skip-artifact-download: ${{ inputs.run-mode == 'cd' }}
     secrets: inherit
