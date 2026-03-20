@@ -38,4 +38,5 @@ jobs:
     uses: baerae-zkap/zkap-workflows/.github/workflows/sdk-rc-cd.yml@main
     with:
       skip-artifact-download: ${{ inputs.run-mode == 'cd' }}
+      version: ${{ inputs.version }}
     secrets: inherit
