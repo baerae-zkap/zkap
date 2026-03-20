@@ -16,7 +16,7 @@ on:
         type: string
         required: true
   push:
-    tags: ['v*-test.*']
+    tags: ['v*-rc.*']
 
 permissions:
   actions: read
