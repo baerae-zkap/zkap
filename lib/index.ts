@@ -54,3 +54,8 @@ export type { TxKeyInfo, MasterKeyInfo, WebAuthnKeyData as AccountWebAuthnKeyDat
 // Wallet helper
 export { WalletHelper } from "./helper/WalletHelper";
 export type { WalletHelperConfig } from "./helper/WalletHelper";
+
+// Provider config
+export { ZkapProviderConfig } from "./config/ZkapProviderConfig";
+export type { SocialProvider, ProviderEntry, ZkapProviderConfigOptions } from "./config/ZkapProviderConfig";
+export type { ProviderPreset } from "./config/presets";
