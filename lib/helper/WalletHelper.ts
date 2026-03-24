@@ -193,4 +193,13 @@ export class WalletHelper {
     const chainConfig = await this.chainRegistry.getChainConfig(chainId);
     return this.getAccountReader(chainConfig).getTxKeyList(address);
   }
+
+  /**
+   * Find txKeys matching the given rpIdHash (SHA-256 of rpId).
+   * Returns all WebAuthn keys whose allowedRpIdHash matches.
+   */
+  async findTxKeysByRpId(address: string, chainId: number, rpIdHash: string): Promise<TxKeyInfo[]> {
+    const chainConfig = await this.chainRegistry.getChainConfig(chainId);
+    return this.getAccountReader(chainConfig).findTxKeysByRpId(address, rpIdHash);
+  }
 }

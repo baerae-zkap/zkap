@@ -365,4 +365,100 @@ describe('AccountReader', () => {
       expect(info.threshold).toBe(1);
     });
   });
+
+  describe('findTxKeysByRpId', () => {
+    const MOCK_RP_ID_HASH = '0x' + 'dd'.repeat(32);
+    const OTHER_RP_ID_HASH = '0x' + 'ee'.repeat(32);
+
+    function setupWebAuthnKey(rpIdHash: string, credentialId: string) {
+      mockTxKeyList.mockResolvedValueOnce([MOCK_LOGIC, BigInt(1)]);
+      mockKeyType.mockResolvedValueOnce(BigInt(4)); // keyWebAuthn
+      mockGetKeyData.mockResolvedValueOnce([
+        '0x' + 'aa'.repeat(32),
+        '0x' + 'bb'.repeat(32),
+        credentialId,
+        '0x' + 'cc'.repeat(32),
+        rpIdHash,
+      ]);
+    }
+
+    it('returns matching webauthn keys by rpIdHash', async () => {
+      setupWebAuthnKey(MOCK_RP_ID_HASH, 'cred-1');
+      mockTxKeyList.mockRejectedValueOnce(new Error('end'));
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.findTxKeysByRpId(MOCK_ADDRESS, MOCK_RP_ID_HASH);
+
+      expect(keys).toHaveLength(1);
+      expect(keys[0].webauthn!.credentialId).toBe('cred-1');
+    });
+
+    it('returns empty array when no rpIdHash matches', async () => {
+      setupWebAuthnKey(OTHER_RP_ID_HASH, 'cred-1');
+      mockTxKeyList.mockRejectedValueOnce(new Error('end'));
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.findTxKeysByRpId(MOCK_ADDRESS, MOCK_RP_ID_HASH);
+
+      expect(keys).toHaveLength(0);
+    });
+
+    it('returns multiple matching keys', async () => {
+      // Two webauthn keys with same rpIdHash
+      setupWebAuthnKey(MOCK_RP_ID_HASH, 'cred-1');
+      setupWebAuthnKey(MOCK_RP_ID_HASH, 'cred-2');
+      mockTxKeyList.mockRejectedValueOnce(new Error('end'));
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.findTxKeysByRpId(MOCK_ADDRESS, MOCK_RP_ID_HASH);
+
+      expect(keys).toHaveLength(2);
+      expect(keys[0].webauthn!.credentialId).toBe('cred-1');
+      expect(keys[1].webauthn!.credentialId).toBe('cred-2');
+    });
+
+    it('filters out non-webauthn keys', async () => {
+      // First key: address type, second key: webauthn matching
+      mockTxKeyList
+        .mockResolvedValueOnce([MOCK_LOGIC, BigInt(0)])
+        .mockResolvedValueOnce([MOCK_LOGIC, BigInt(1)]);
+      mockKeyType
+        .mockResolvedValueOnce(BigInt(1))  // keyAddress
+        .mockResolvedValueOnce(BigInt(4)); // keyWebAuthn
+      mockGetKeyData.mockResolvedValueOnce([
+        '0x' + 'aa'.repeat(32),
+        '0x' + 'bb'.repeat(32),
+        'cred-webauthn',
+        '0x' + 'cc'.repeat(32),
+        MOCK_RP_ID_HASH,
+      ]);
+      mockTxKeyList.mockRejectedValueOnce(new Error('end'));
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.findTxKeysByRpId(MOCK_ADDRESS, MOCK_RP_ID_HASH);
+
+      expect(keys).toHaveLength(1);
+      expect(keys[0].webauthn!.credentialId).toBe('cred-webauthn');
+    });
+
+    it('matches rpIdHash case-insensitively', async () => {
+      const upperHash = '0x' + 'DD'.repeat(32);
+      setupWebAuthnKey(upperHash, 'cred-1');
+      mockTxKeyList.mockRejectedValueOnce(new Error('end'));
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.findTxKeysByRpId(MOCK_ADDRESS, MOCK_RP_ID_HASH);
+
+      expect(keys).toHaveLength(1);
+    });
+
+    it('returns empty array when no keys exist', async () => {
+      mockTxKeyList.mockRejectedValueOnce(new Error('revert'));
+
+      const reader = new AccountReader({ rpcUrl: 'https://rpc.example.com' });
+      const keys = await reader.findTxKeysByRpId(MOCK_ADDRESS, MOCK_RP_ID_HASH);
+
+      expect(keys).toHaveLength(0);
+    });
+  });
 });
