@@ -136,6 +136,19 @@ export class AccountReader {
     return result;
   }
 
+  /**
+   * Find txKeys matching the given rpIdHash (SHA-256 of rpId).
+   * Returns all WebAuthn keys whose allowedRpIdHash matches.
+   */
+  async findTxKeysByRpId(address: string, rpIdHash: string): Promise<TxKeyInfo[]> {
+    const keys = await this.getTxKeyList(address);
+    return keys.filter(
+      (k) =>
+        k.keyType === "webauthn" &&
+        k.webauthn?.allowedRpIdHash?.toLowerCase() === rpIdHash.toLowerCase(),
+    );
+  }
+
   async getMasterKeyInfo(address: string): Promise<MasterKeyInfo> {
     const account = new ethers.Contract(address, ZKAP_ACCOUNT_ABI, this.provider);
 
