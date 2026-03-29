@@ -24,7 +24,7 @@ on:
       - '!v*-beta.*'
 
 permissions:
-  actions: read
+  actions: write
   contents: read
   id-token: write
 
