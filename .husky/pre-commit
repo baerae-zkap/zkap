@@ -1,0 +1,29 @@
+# Block .env files from being committed
+staged_env=$(git diff --cached --name-only | grep -E '(^|/)\.env' | grep -v -E '\.env\.(sample|example|ignore)$' || true)
+if [ -n "$staged_env" ]; then
+  echo "ERROR: .env files are staged for commit:"
+  echo "$staged_env"
+  echo "Add to .gitignore or run: git reset HEAD <file>"
+  exit 1
+fi
+
+# Block version regression (compare with origin develop branch package.json version)
+# fork: upstream/develop, direct clone: origin/develop
+if [ -f "package.json" ]; then
+  BASE=$(git remote | grep -q upstream && echo upstream/develop || echo origin/develop)
+  if git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+    remote_ver=$(git show "$BASE":package.json 2>/dev/null | sed -n 's/.*"version".*"\(.*\)".*/\1/p' | head -1)
+    local_ver=$(sed -n 's/.*"version".*"\(.*\)".*/\1/p' package.json | head -1)
+    if [ -n "$remote_ver" ] && [ -n "$local_ver" ]; then
+      lowest=$(printf '%s\n%s' "$local_ver" "$remote_ver" | sort -V | head -1)
+      if [ "$lowest" = "$local_ver" ] && [ "$local_ver" != "$remote_ver" ]; then
+        echo "ERROR: Version regression detected: $local_ver < $remote_ver ($BASE)"
+        echo "Please set version to $remote_ver or higher."
+        exit 1
+      fi
+    fi
+  fi
+fi
+
+# Lint staged files
+npx lint-staged

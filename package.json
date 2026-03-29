@@ -9,7 +9,8 @@
     "test:ci": "jest --ci --coverage --coverageReporters=text-summary",
     "lint": "eslint \"lib/**/*.ts\" --fix",
     "build": "tsc",
-    "pub": "sh ./publish.sh"
+    "pub": "sh ./publish.sh",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -51,8 +52,10 @@
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "eslint": "^8.57.1",
+    "husky": "^9.1.7",
     "jest": "^30.2.0",
     "jest-junit": "^16.0.0",
+    "lint-staged": "^16.4.0",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3"
   }
