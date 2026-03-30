@@ -76,7 +76,7 @@ async function getOAuthPublicKey(jwksUrl: string, kid: string): Promise<string> 
   const existing = jwksCache.get(cacheKey);
   if (existing && existing.n !== key.n) {
     // 동일 kid로 키가 로테이션된 경우 즉시 업데이트 (stale key 방지)
-    console.warn(`[zkap-aa-sdk] JWKS key rotated for cacheKey=${cacheKey}: updating cache`);
+
   }
   jwksCache.set(cacheKey, { n: key.n, cachedAt: Date.now() });
   return key.n;
