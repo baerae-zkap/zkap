@@ -390,7 +390,7 @@ export abstract class BaseAccountBuilder {
    * @returns 추정된 가스 비용 (wei 단위)
    */
   async estimateUserOpGasCost(userOp: UserOperation): Promise<string> {
-    console.warn("[zkap-aa-sdk] estimateUserOpGasCost is experimental and not validated. Use at your own risk.");
+
     if (!this.provider) {
       throw new Error("Provider is required for gas estimation");
     }
@@ -427,7 +427,7 @@ export abstract class BaseAccountBuilder {
       const feeData = await this.provider.getFeeData();
       const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? BigInt(0);
       if (gasPrice === BigInt(0)) {
-        console.warn("[zkap-aa-sdk] estimateUserOpGasCost: gasPrice is 0. Cost estimate may be inaccurate.");
+
       }
 
       // 7. 총 비용 계산 (가스 * 가스가격)
