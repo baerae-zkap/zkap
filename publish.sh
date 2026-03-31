@@ -1,17 +1,13 @@
 #!/bin/bash
-# remove dist directory
+set -e
+
+# Clean and rebuild
 rm -rf ./dist
-echo remove ./dist 'done'
+echo "Cleaned dist/"
 
-# generate dist
 npm run build
-echo build 'done'
+echo "Build complete"
 
-gcloud auth login
-echo gcloud auth login 'done'
-
-npx google-artifactregistry-auth
-echo npx google-artifactregistry-auth 'done'
-
-# publish!
-npm publish
+# Publish to npmjs.com (requires prior: npm login)
+npm publish --access public
+echo "Published to npmjs.com"

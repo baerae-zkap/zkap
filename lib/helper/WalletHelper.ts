@@ -17,19 +17,16 @@ const ZKAP_FACTORY_ABI = [
 export interface WalletHelperConfig {
   chainRegistry: ChainRegistry;
   bundlerClient: BundlerClient;
-  apiUrl?: string;
 }
 
 export class WalletHelper {
   private readonly chainRegistry: ChainRegistry;
   private readonly bundlerClient: BundlerClient;
-  private readonly apiUrl: string;
   private readonly _readers: Map<number, AccountReader> = new Map();
 
   constructor(config: WalletHelperConfig) {
     this.chainRegistry = config.chainRegistry;
     this.bundlerClient = config.bundlerClient;
-    this.apiUrl = (config.apiUrl || "https://api.zkap.app").replace(/\/$/, "");
   }
 
   /**

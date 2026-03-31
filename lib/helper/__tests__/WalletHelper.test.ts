@@ -400,23 +400,4 @@ describe('WalletHelper', () => {
     });
   });
 
-  describe('constructor apiUrl option', () => {
-    it('accepts custom apiUrl and strips trailing slash', () => {
-      const helper = new WalletHelper({
-        chainRegistry: makeMockChainRegistry() as any,
-        bundlerClient: makeMockBundlerClient() as any,
-        apiUrl: 'https://custom.api.example.com/',
-      });
-      // The helper constructs without error and the apiUrl is stripped
-      expect(helper).toBeInstanceOf(WalletHelper);
-    });
-
-    it('uses default apiUrl when not provided', () => {
-      const helper = new WalletHelper({
-        chainRegistry: makeMockChainRegistry() as any,
-        bundlerClient: makeMockBundlerClient() as any,
-      });
-      expect(helper).toBeInstanceOf(WalletHelper);
-    });
-  });
 });

@@ -1,7 +1,10 @@
 {
   "name": "@baerae-zkap/zkap-aa",
-  "version": "0.0.35",
+  "version": "0.1.0",
   "description": "A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
@@ -22,7 +25,8 @@
   },
   "license": "ISC",
   "publishConfig": {
-    "registry": "https://asia-northeast3-npm.pkg.dev/zkap-dev/zkap-npm-packages/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "bugs": {
     "url": "https://github.com/baerae-zkap/zkap-aa/issues"
@@ -30,6 +34,7 @@
   "homepage": "https://github.com/baerae-zkap/zkap-aa#readme",
   "files": [
     "dist/lib/",
+    "LICENSE",
     "README.md",
     "package.json"
   ],

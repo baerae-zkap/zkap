@@ -1,0 +1,21 @@
+title = "zkap-aa-sdk gitleaks config"
+
+[allowlist]
+description = "Known false positives in test fixtures and deleted dev utilities"
+
+# Suppress false positives in test fixture files
+# These files contain mock Ethereum addresses and placeholder API key strings
+# used exclusively for unit tests — not real credentials.
+paths = [
+  "lib/__tests__/helpers/fixtures.ts",
+  "lib/utils/__tests__/PaymasterService.test.ts",
+  "lib/builders/aggregators/__tests__/OneInchAggregator.test.ts",
+]
+
+# idTokenSimulator.ts (deleted in a later commit) contained a self-generated
+# RSA key pair used ONLY to sign mock JWT tokens in local dev/test.
+# It was never used in production and grants no access to any service.
+# The file is deleted from the working tree; this entry covers the history scan.
+commits = [
+  "8befcd6b",
+]
