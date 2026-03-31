@@ -1,8 +1,8 @@
 /**
- * ZkPasskeySigner 테스트
+ * ZkPasskeySigner tests
  *
- * OAuth OIDC를 사용한 ZK 증명 기반 서명 Signer
- * Google/Kakao OAuth 공개키 가져오기, ZK 증명 서버 통신, 스마트 컨트랙트 상호작용
+ * Signer that signs using ZK proofs with OAuth OIDC
+ * Fetches Google/Kakao OAuth public keys, communicates with the ZK proof server, and interacts with smart contracts
  */
 
 // Mock ABIs first (before any imports)

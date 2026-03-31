@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * WalletHelper 테스트
+ * WalletHelper tests
  */
 
 // ---------------------------------------------------------------------------

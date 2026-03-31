@@ -1,9 +1,9 @@
 import { ethers } from 'ethers';
 
 /**
- * Base64URL 문자열을 Uint8Array로 디코딩합니다.
- * @note Node.js Buffer에 의존하므로 브라우저 환경에서는 폴리필이 필요합니다.
- *       브라우저 호환이 필요한 경우 atob()와 Uint8Array를 사용하는 방식으로 교체하세요.
+ * Decodes a Base64URL string to Uint8Array.
+ * @note Depends on Node.js Buffer; a polyfill is required in browser environments.
+ *       For browser compatibility, replace with an implementation using atob() and Uint8Array.
  */
 export function base64URLdecode(str: string): Uint8Array {
   const base64Encoded = str.replace(/-/g, '+').replace(/_/g, '/');

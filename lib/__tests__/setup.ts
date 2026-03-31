@@ -1,23 +1,23 @@
 /**
- * Jest 전역 Setup 파일
- * 모든 테스트 전에 실행됨
+ * Jest global setup file
+ * Runs before all tests
  */
 
-// fetch가 없는 Node 버전을 위한 polyfill
-// Node 18+에서는 자동으로 있음
+// Polyfill for Node versions that do not have fetch
+// Available automatically in Node 18+
 if (typeof global.fetch === 'undefined') {
   global.fetch = jest.fn();
 }
 
-// 전역 mock 리셋
+// Reset global mocks
 beforeEach(() => {
   jest.clearAllMocks();
 });
 
-// 테스트 타임아웃 설정 (crypto 연산이 느릴 수 있음)
+// Set test timeout (crypto operations can be slow)
 jest.setTimeout(10000);
 
-// console.error/warn 을 테스트에서 캡처하려면 아래 주석 해제
+// Uncomment below to capture console.error/warn in tests
 // const originalConsoleError = console.error;
 // const originalConsoleWarn = console.warn;
 //

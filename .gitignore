@@ -5,21 +5,19 @@ coverage/
 *.log
 .DS_Store
 
-# Use npm, not yarn
-yarn.lock
-.yarn/
-.pnp.*
-
 # Build artifacts
 dist.tar.gz
 *.tgz
 
-# Claude Code settings (개인 설정)
+# Examples env files — never commit real credentials
+examples/**/.env
+
+# Claude Code settings (personal, not project-specific)
 .claude/settings.json
 .claude/settings.local.json
 .claude/cache/
 .claude/commands/
 .claude/hooks/
 
-# Oh-My-Claudecode (세션 및 상태)
+# Oh-My-Claudecode (session and state)
 .omc/

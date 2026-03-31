@@ -1,10 +1,10 @@
 /**
- * signature.ts 테스트
+ * signature.ts tests
  *
- * 함수 목록:
- * - unwrapSignature: DER 인코딩된 서명에서 r, s 추출
- * - flipSecp256r1Signature: s가 N/2보다 크면 flip (malleability 방지)
- * - wrapSignature: r, s를 DER 형식으로 래핑
+ * Function list:
+ * - unwrapSignature: extracts r, s from a DER-encoded signature
+ * - flipSecp256r1Signature: flips s if greater than N/2 (prevents malleability)
+ * - wrapSignature: wraps r, s into DER format
  * - toHex: Uint8Array → hex string
  * - fromHex: hex string → Uint8Array
  */

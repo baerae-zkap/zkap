@@ -1,12 +1,12 @@
 /**
- * 테스트용 Fixture 데이터 - ZKAP AA SDK용
+ * Test fixture data for the ZKAP AA SDK
  */
 
 import { UserOperation } from '../../types/UserOperation';
 import { PrimitiveAccountKeyTypes } from '../../types/AccountKey';
 
 /**
- * 테스트용 주소들
+ * Test addresses
  */
 export const MOCK_ADDRESSES = {
   sender: '0x1234567890123456789012345678901234567890',
@@ -18,7 +18,7 @@ export const MOCK_ADDRESSES = {
 } as const;
 
 /**
- * ZkapBuilder 설정
+ * ZkapBuilder configuration
  */
 export const MOCK_CHAIN_CONFIG = {
   chainId: 1,
@@ -27,7 +27,7 @@ export const MOCK_CHAIN_CONFIG = {
 } as const;
 
 /**
- * Paymaster 설정
+ * Paymaster configuration
  */
 export const MOCK_PAYMASTER_CONFIG = {
   serverUrl: 'https://paymaster.example.com',
@@ -37,7 +37,7 @@ export const MOCK_PAYMASTER_CONFIG = {
 } as const;
 
 /**
- * 완전한 UserOperation 객체
+ * Complete UserOperation object
  */
 export const MOCK_USER_OP: UserOperation = {
   sender: MOCK_ADDRESSES.sender,
@@ -57,7 +57,7 @@ export const MOCK_USER_OP: UserOperation = {
 };
 
 /**
- * Paymaster가 설정된 UserOperation
+ * UserOperation with Paymaster configured
  */
 export const MOCK_USER_OP_WITH_PAYMASTER: UserOperation = {
   ...MOCK_USER_OP,
@@ -67,15 +67,15 @@ export const MOCK_USER_OP_WITH_PAYMASTER: UserOperation = {
 };
 
 /**
- * initCode가 있는 UserOperation (지갑 생성 시)
+ * UserOperation with initCode (for wallet creation)
  */
 export const MOCK_USER_OP_WITH_INIT_CODE: UserOperation = {
   ...MOCK_USER_OP,
-  initCode: `${MOCK_ADDRESSES.factory}${'00'.repeat(100)}`, // factory + calldata
+  initCode: `${MOCK_ADDRESSES.factory}${"00".repeat(100)}`, // factory + calldata
 };
 
 /**
- * WebAuthn 키 정보
+ * WebAuthn key info
  */
 export const MOCK_WEBAUTHN_KEY = {
   credentialPubkey: '0x04' + 'ab'.repeat(64), // uncompressed secp256r1 public key
@@ -85,7 +85,7 @@ export const MOCK_WEBAUTHN_KEY = {
 };
 
 /**
- * ZK-OAuth 키 정보
+ * ZK-OAuth key info
  */
 export const MOCK_ZK_OAUTH_KEY = {
   n: 17,
@@ -95,17 +95,17 @@ export const MOCK_ZK_OAUTH_KEY = {
 };
 
 /**
- * 테스트용 UserOp 해시
+ * Test UserOp hash
  */
 export const MOCK_USER_OP_HASH = '0x' + 'ab'.repeat(32);
 
 /**
- * 테스트용 개인키 (절대 실제 사용 금지!)
+ * Test private key (NEVER use in production!)
  */
 export const MOCK_PRIVATE_KEY = '0x' + '11'.repeat(32);
 
 /**
- * 키 타입 상수 (편의용)
+ * Key type constants (for convenience)
  */
 export const KEY_TYPES = {
   ADDRESS: PrimitiveAccountKeyTypes.keyAddress,
@@ -117,7 +117,7 @@ export const KEY_TYPES = {
 } as const;
 
 /**
- * Gas 관련 상수
+ * Gas-related constants
  */
 export const GAS_CONSTANTS = {
   ADDRESS_KEY_VALIDATION: 15000n,

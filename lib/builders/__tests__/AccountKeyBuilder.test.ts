@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * AccountKeyBuilder 테스트
+ * AccountKeyBuilder tests
  *
- * 다양한 키 타입의 인코딩 및 디코딩 기능 테스트
+ * Tests for encoding and decoding of various key types
  */
 
 // Mock crypto module before imports

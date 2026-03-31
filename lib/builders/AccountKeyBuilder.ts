@@ -85,7 +85,7 @@ export class AccountKeyBuilder {
       this.keys = [];
       this.encodedKey = "";
     } else {
-      // key 값 셋팅
+      // Set key values
       this.threshold = threshold;
       this.keys = keys;
       this.checkThreshold();
@@ -131,7 +131,7 @@ export class AccountKeyBuilder {
     functionName: string,
     args: readonly unknown[]
   ): string {
-    // 함수 시그니처와 인자를 인코딩
+    // Encode function signature and arguments
     return contractInterface.encodeFunctionData(functionName, args);
   }
 
@@ -140,11 +140,11 @@ export class AccountKeyBuilder {
   }
 
   /**
-   * OAuth audience 목록으로부터 hAudList 값을 계산합니다.
-   * ZkOAuthRS256KeyData.hAudList 필드에 전달할 값을 생성합니다.
+   * Computes the hAudList value from a list of OAuth audiences.
+   * Generates the value to pass to the ZkOAuthRS256KeyData.hAudList field.
    *
-   * @param audiences - OAuth audience 문자열 배열 (e.g. ['https://example.com'])
-   * @returns ABI-encoded keccak256 해시 (uint256 hex string)
+   * @param audiences - Array of OAuth audience strings (e.g. ['https://example.com'])
+   * @returns ABI-encoded keccak256 hash (uint256 hex string)
    */
   static computeHAudList(audiences: string[]): string {
     if (!audiences || audiences.length === 0) {
@@ -205,13 +205,13 @@ export class AccountKeyBuilder {
   }
 
   setEncodedKeyData(threshold: number, keyInfoList: KeyInfo[]): string {
-    // 각 리스트를 분리해서 준비
+    // Prepare each list separately
     const logicList: string[] = [];
     const keyInitDataList: string[] = [];
     const weightList: number[] = [];
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
 
-    // KeyInfo 리스트를 순회하면서 각 리스트에 데이터 추가
+    // Iterate through the KeyInfo list and add data to each list
     for (const keyInfo of keyInfoList) {
       logicList.push(keyInfo.logicContract);
       weightList.push(keyInfo.weight);
@@ -366,7 +366,7 @@ export class AccountKeyBuilder {
     const x = ethers.hexlify(pubkeyBytes.slice(1, 33));
     const y = ethers.hexlify(pubkeyBytes.slice(33, 65));
 
-    // x, y 좌표가 0인지 검증 (무효한 공개키)
+    // Validate that x, y coordinates are non-zero (invalid public key if zero)
     const xBigInt = BigInt(x);
     const yBigInt = BigInt(y);
     if (xBigInt === 0n || yBigInt === 0n) {

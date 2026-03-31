@@ -1,5 +1,5 @@
 /**
- * BundlerClient, BundlerProvider, BundlerError, classifyBundlerError 테스트
+ * Tests for BundlerClient, BundlerProvider, BundlerError, and classifyBundlerError
  */
 
 import { BundlerClient } from '../BundlerClient';

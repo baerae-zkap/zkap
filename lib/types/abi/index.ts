@@ -17,7 +17,7 @@ interface HardhatArtifact {
   abi: any[];
 }
 
-// 각 Hardhat artifact JSON 에서 abi 필드만 export
+// Export only the abi field from each Hardhat artifact JSON
 export const AccountKeyAddressABI = (AccountKeyAddress as HardhatArtifact).abi;
 export const AccountKeySecp256r1ABI = (AccountKeySecp256r1 as HardhatArtifact).abi;
 export const AccountKeyWebAuthnABI = (AccountKeyWebAuthn as HardhatArtifact).abi;

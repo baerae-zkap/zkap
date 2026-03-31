@@ -53,14 +53,14 @@ export class ZkapAccount extends BaseAccount {
   }
 
   /**
-   * ERC-4337 번들러에 UserOperation을 전송합니다.
-   * @param packedUserOp 전송할 PackedUserOperation
-   * @returns 번들러가 반환한 userOpHash (0x + 64 hex chars)
+   * Sends a UserOperation to the ERC-4337 bundler.
+   * @param packedUserOp The PackedUserOperation to send
+   * @returns The userOpHash returned by the bundler (0x + 64 hex chars)
    */
   async sendTransaction(packedUserOp: PackedUserOperation): Promise<string> {
     const entryPointAddress = await this.entryPoint.getAddress();
-    // ERC-4337 표준 번들러 RPC: eth_sendUserOperation
-    // provider는 번들러 호환 엔드포인트여야 합니다
+    // ERC-4337 standard bundler RPC: eth_sendUserOperation
+    // The provider must be a bundler-compatible endpoint
     const userOpHash = await this.provider.send("eth_sendUserOperation", [
       {
         sender: packedUserOp.sender,

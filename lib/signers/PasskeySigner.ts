@@ -62,7 +62,7 @@ export class PasskeySigner implements IUserOpSigner {
   }
 
   async signUserOpHash(userOpHash: string): Promise<string[]> {
-    // raw 32 bytes → base64URL (컨트랙트의 Base64.encodeURL(abi.encodePacked(bytes32(msgHash)))와 일치)
+    // raw 32 bytes → base64URL (matches contract's Base64.encodeURL(abi.encodePacked(bytes32(msgHash))))
     const challenge = toURLEncode(ethers.encodeBase64(ethers.getBytes(userOpHash)));
     const authResp = await this.verifyWithPasskey(
       this.credentialId,

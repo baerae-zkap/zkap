@@ -1,7 +1,7 @@
 /**
- * base64url 유틸리티 테스트
+ * base64url utility tests
  *
- * 실제 함수 시그니처:
+ * Actual function signatures:
  * - base64URLencode(str: string): string
  * - base64URLdecode(str: string): Uint8Array
  * - StringToUint8Array(str: string): Uint8Array
@@ -24,7 +24,7 @@ describe('base64url', () => {
       const result = base64URLencode(input);
 
       expect(typeof result).toBe('string');
-      // base64url: + → -, / → _, 패딩(=) 제거
+      // base64url: + → -, / → _, padding (=) removed
       expect(result).not.toContain('+');
       expect(result).not.toContain('/');
       expect(result).not.toContain('=');
@@ -44,7 +44,7 @@ describe('base64url', () => {
     });
 
     it('should produce URL-safe output for problematic bytes', () => {
-      // base64에서 +, / 가 나올 수 있는 문자열
+      // String that can produce + and / in base64
       const input = '>>>???<<<';
       const result = base64URLencode(input);
 
@@ -69,8 +69,8 @@ describe('base64url', () => {
     });
 
     it('should handle base64url with - and _', () => {
-      // - 와 _ 가 포함된 base64url 문자열 (표준 base64의 +, /를 대체)
-      // ">>>" 의 base64url 인코딩
+      // base64url string containing - and _ (replacing + and / from standard base64)
+      // base64url encoding of ">>>"
       const encoded = 'Pj4-'; // >>> in base64url (standard base64: Pj4+)
       const result = base64URLdecode(encoded);
 
@@ -79,7 +79,7 @@ describe('base64url', () => {
     });
 
     it('should handle strings without padding', () => {
-      // base64url은 패딩을 생략할 수 있음
+      // base64url can omit padding
       const encoded = 'YQ'; // "a" without padding (standard: YQ==)
       const result = base64URLdecode(encoded);
 
@@ -142,8 +142,8 @@ describe('base64url', () => {
     });
 
     it('should handle high byte values via UTF-8 encoding', () => {
-      // TextEncoder는 UTF-8로 인코딩: String.fromCharCode(255) = 'ÿ' (U+00FF)는
-      // UTF-8에서 2바이트 [0xC3, 0xBF] = [195, 191]로 인코딩됨
+      // TextEncoder encodes as UTF-8: String.fromCharCode(255) = 'ÿ' (U+00FF) is
+      // encoded as 2 bytes in UTF-8: [0xC3, 0xBF] = [195, 191]
       const input = String.fromCharCode(255);
       const result = StringToUint8Array(input);
 
@@ -167,7 +167,7 @@ describe('base64url', () => {
     });
 
     it('should handle valid UTF-8 byte sequences', () => {
-      // TextDecoder는 UTF-8 바이트를 디코딩합니다.
+      // TextDecoder decodes UTF-8 bytes.
       // [0xC3, 0xBF] = ÿ (U+00FF), [0xC2, 0x80] = U+0080 (control char)
       const input = new Uint8Array([0xC3, 0xBF]);
       const result = Uint8ArrayToString(input);

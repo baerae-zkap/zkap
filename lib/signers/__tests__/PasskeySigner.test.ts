@@ -1,8 +1,8 @@
 /**
- * PasskeySigner 테스트
+ * PasskeySigner tests
  *
- * WebAuthn (Passkey) 기반 서명을 수행하는 Signer
- * verifyWithPasskey 콜백을 통해 브라우저의 WebAuthn API와 통신
+ * Signer that performs WebAuthn (Passkey)-based signing
+ * Communicates with the browser WebAuthn API via the verifyWithPasskey callback
  */
 
 import { PasskeySigner } from '../PasskeySigner';
@@ -12,20 +12,20 @@ import { base64URLencode } from '../../utils/base64url';
 import { wrapSignature, toHex } from '../../utils/signature';
 import { ethers } from 'ethers';
 
-// DER 인코딩된 secp256r1 서명 생성 헬퍼
+// Helper to generate DER-encoded secp256r1 signatures
 function createMockDerSignature(): string {
-  // 32바이트 r, s 값 생성
+  // Generate 32-byte r, s values
   const r = new Uint8Array(32).fill(0x11);
   const s = new Uint8Array(32).fill(0x22);
 
-  // DER 형식으로 래핑
+  // Wrap in DER format
   const derSig = wrapSignature(r, s);
 
-  // base64url 인코딩
+  // base64url encode
   return base64URLencode(String.fromCharCode(...derSig));
 }
 
-// Mock WebAuthn 응답 생성
+// Build mock WebAuthn response
 function createMockAuthResponse(signature?: string) {
   return {
     response: {
@@ -56,7 +56,7 @@ describe('PasskeySigner', () => {
     it('should store credentialId', () => {
       const signer = new PasskeySigner('my-credential', mockVerifyWithPasskey);
 
-      // credentialId는 private이지만 signUserOpHash에서 사용됨
+      // credentialId is private but used inside signUserOpHash
       expect(signer.keyTypes).toBeDefined();
     });
   });
@@ -99,7 +99,7 @@ describe('PasskeySigner', () => {
 
       const signatures = await signer.signUserOpHash(mockUserOpHash);
 
-      // 결과는 ABI 인코딩된 (authenticatorData, clientDataJSON, signature)
+      // Result is ABI-encoded (authenticatorData, clientDataJSON, signature)
       expect(signatures[0].length).toBeGreaterThan(10);
     });
 
@@ -289,7 +289,7 @@ describe('PasskeySigner', () => {
       const signer = new PasskeySigner(mockCredentialId, mockVerifyWithPasskey);
       const signatures = await signer.signUserOpHash('0x' + 'ff'.repeat(32));
 
-      // 결과는 ABI 인코딩됨
+      // result is ABI-encoded
       expect(signatures[0]).toMatch(/^0x/);
       expect(signatures[0].length).toBeGreaterThan(100); // ABI encoded 3 bytes values
     });

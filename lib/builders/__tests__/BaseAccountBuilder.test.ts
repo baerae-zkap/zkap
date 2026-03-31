@@ -1,8 +1,8 @@
 /**
- * BaseAccountBuilder 테스트
+ * BaseAccountBuilder tests
  *
- * UserOperation을 구성하는 추상 빌더 클래스
- * setters, getters, encoding, packing 함수들 테스트
+ * Abstract builder class for constructing UserOperations
+ * Tests for setters, getters, encoding, and packing functions
  */
 
 import { BaseAccountBuilder } from '../BaseAccountBuilder';

@@ -1,12 +1,12 @@
 /**
- * 공통 Mock 헬퍼 함수 - ZKAP AA SDK용
+ * Common mock helper functions for the ZKAP AA SDK
  */
 
 import { PrimitiveAccountKeyTypes } from '../../types/AccountKey';
 
 /**
- * Mock JsonRpcProvider 생성
- * ZkapBuilder, ZkapAccount 등에서 사용
+ * Create a mock JsonRpcProvider
+ * Used by ZkapBuilder, ZkapAccount, etc.
  */
 export const createMockProvider = () => ({
   getCode: jest.fn().mockResolvedValue('0x'),
@@ -19,7 +19,7 @@ export const createMockProvider = () => ({
 });
 
 /**
- * Mock EntryPoint Contract 생성
+ * Create a mock EntryPoint Contract
  */
 export const createMockEntryPointContract = () => ({
   getNonce: jest.fn().mockResolvedValue(BigInt(0)),
@@ -27,21 +27,21 @@ export const createMockEntryPointContract = () => ({
 });
 
 /**
- * IUserOpSigner Mock 생성
- * 주의: IUserOpSigner 인터페이스에는 signUserOpHash만 있음
- * keyTypes는 구현체(PasskeySigner, ZkOidcSigner 등)에만 있음
+ * Create an IUserOpSigner mock
+ * Note: the IUserOpSigner interface only has signUserOpHash
+ * keyTypes exists only on concrete implementations (PasskeySigner, ZkOidcSigner, etc.)
  */
 export const createMockSigner = () => ({
   signUserOpHash: jest.fn().mockResolvedValue(['0xmocksignature']),
 });
 
 /**
- * PasskeySigner용 verifyWithPasskey 콜백 Mock
+ * Mock verifyWithPasskey callback for PasskeySigner
  */
 export const createMockVerifyWithPasskey = () =>
   jest.fn().mockResolvedValue({
     response: {
-      // base64url 인코딩된 값들
+      // base64url-encoded values
       signature: 'MEUCIQDmocksignaturebase64urlencoded',
       authenticatorData: 'SZYN5YgOjGh0NBcPZHZgW4mockauthdata',
       clientDataJSON: 'eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoibW9ja2NoYWxsZW5nZSIsIm9yaWdpbiI6Imh0dHBzOi8vYXBwLmV4YW1wbGUuY29tIn0',
@@ -49,7 +49,7 @@ export const createMockVerifyWithPasskey = () =>
   });
 
 /**
- * fetch Mock 생성 - PaymasterService용
+ * Create a fetch mock for PaymasterService
  */
 export const createMockFetch = () => {
   const mockFetch = jest.fn();
@@ -58,7 +58,7 @@ export const createMockFetch = () => {
 };
 
 /**
- * Paymaster 성공 응답 Mock
+ * Mock successful Paymaster response
  */
 export const mockPaymasterSuccessResponse = (paymasterData: string = '0xpaymasterdata') => ({
   ok: true,
@@ -70,7 +70,7 @@ export const mockPaymasterSuccessResponse = (paymasterData: string = '0xpaymaste
 });
 
 /**
- * Paymaster 에러 응답 Mock
+ * Mock Paymaster error response
  */
 export const mockPaymasterErrorResponse = (message: string = 'Error') => ({
   ok: true,
@@ -80,7 +80,7 @@ export const mockPaymasterErrorResponse = (message: string = 'Error') => ({
 });
 
 /**
- * HTTP 에러 응답 Mock
+ * Mock HTTP error response
  */
 export const mockHttpErrorResponse = (status: number = 500, statusText: string = 'Internal Server Error') => ({
   ok: false,
@@ -89,7 +89,7 @@ export const mockHttpErrorResponse = (status: number = 500, statusText: string =
 });
 
 /**
- * AddressKeySigner용 Mock
+ * Mock for AddressKeySigner
  */
 export const createMockAddressKeySigner = () => ({
   keyTypes: [PrimitiveAccountKeyTypes.keyAddress],
@@ -97,7 +97,7 @@ export const createMockAddressKeySigner = () => ({
 });
 
 /**
- * PasskeySigner용 Mock
+ * Mock for PasskeySigner
  */
 export const createMockPasskeySigner = () => ({
   keyTypes: [PrimitiveAccountKeyTypes.keyWebAuthn],
@@ -105,7 +105,7 @@ export const createMockPasskeySigner = () => ({
 });
 
 /**
- * ZkOidcSigner용 Mock
+ * Mock for ZkOidcSigner
  */
 export const createMockZkOidcSigner = () => ({
   keyTypes: [PrimitiveAccountKeyTypes.keyZkOAuthRS256],
