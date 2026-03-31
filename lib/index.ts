@@ -22,7 +22,7 @@ export { OneInchAggregator } from "./builders/aggregators/OneInchAggregator";
 // Signer classes
 export { AddressKeySigner } from "./signers/AddressKeySigner";
 export { PasskeySigner } from "./signers/PasskeySigner";
-export { ZkPasskeySigner, clearJwksCache } from "./signers/ZkPasskeySigner";
+export { ZkOAuthSigner } from "./signers/ZkOAuthSigner";
 export { ZkOidcSigner } from "./signers/ZkOidcSigner";
 
 // Paymaster service

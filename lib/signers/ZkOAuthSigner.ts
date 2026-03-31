@@ -90,9 +90,22 @@ async function getKakaoOAuthPublicKey(kid: string): Promise<string> {
   return getOAuthPublicKey("https://kauth.kakao.com/.well-known/jwks.json", kid);
 }
 
-// TODO(post-PR#16): Rename ZkPasskeySigner to ZkOAuthRS256Signer (or similar) to reflect its actual role.
-//                   Consider splitting into per-provider subclasses (Google, Kakao, etc.).
-export class ZkPasskeySigner implements IUserOpSigner {
+/**
+ * Signs UserOperations using ZK proofs of OAuth RS256 JWT tokens (Google Sign-In, Kakao).
+ *
+ * **Supported providers:** `"google"` and `"kakao"` only.
+ * Apple and other OIDC providers are not yet supported.
+ *
+ * **Threshold constraint:** `zkapK` must equal 1. Multi-proof (k>1) threshold signing
+ * is not yet implemented. Pass `zkapK=1` and `zkapN` equal to the number of OAuth slots.
+ *
+ * **Usage flow:**
+ * 1. Construct with proof server URL, RPC URL, wallet address, and OAuth provider config.
+ * 2. Call `prepareIdToken(userOpHash, index)` for each provider slot before signing.
+ * 3. Call `signUserOpHash(userOpHash)` to produce the ABI-encoded ZK proof signature.
+ * 4. Call `destroy()` after signing to clear sensitive token data from memory.
+ */
+export class ZkOAuthSigner implements IUserOpSigner {
   public readonly keyTypes: number[] = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
   private static readonly PROOF_SERVER_TIMEOUT_MS = 30_000;
   private proofServerUrl: string;
@@ -137,7 +150,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
     }
     if (zkapK !== 1) {
       throw new Error(
-        `ZkPasskeySigner currently supports only zkapK=1 (got zkapK=${zkapK}). ` +
+        `ZkOAuthSigner currently supports only zkapK=1 (got zkapK=${zkapK}). ` +
         "For k>1 threshold proofs, use a signer path that provides multi-proof payloads."
       );
     }
@@ -149,7 +162,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
 
     // Enforce HTTPS for proof server (except localhost and private network addresses)
     const proofUrl = new URL(proofServerUrl);
-    if (proofUrl.protocol !== 'https:' && !ZkPasskeySigner._isLocalOrPrivateHost(proofUrl.hostname)) {
+    if (proofUrl.protocol !== 'https:' && !ZkOAuthSigner._isLocalOrPrivateHost(proofUrl.hostname)) {
       throw new Error(
         'proofServerUrl must use HTTPS. HTTP is only allowed for localhost, 127.0.0.1, ' +
         'RFC1918 private addresses (10.x.x.x, 172.16-31.x.x, 192.168.x.x), and .local domains.'
@@ -295,7 +308,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
     const exp = now.toString();
     {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), ZkPasskeySigner.PROOF_SERVER_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => controller.abort(), ZkOAuthSigner.PROOF_SERVER_TIMEOUT_MS);
       let fetchResponse: Response;
       try {
         fetchResponse = await fetch(`${this.proofServerUrl}/proof2`, {
@@ -317,7 +330,7 @@ export class ZkPasskeySigner implements IUserOpSigner {
         });
       } catch (fetchError) {
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          throw new Error(`Proof server request timed out after ${ZkPasskeySigner.PROOF_SERVER_TIMEOUT_MS}ms`);
+          throw new Error(`Proof server request timed out after ${ZkOAuthSigner.PROOF_SERVER_TIMEOUT_MS}ms`);
         }
         throw fetchError;
       } finally {
@@ -545,10 +558,10 @@ export class ZkPasskeySigner implements IUserOpSigner {
         const hi = parseInt(hexMatch[1], 16);
         const lo = parseInt(hexMatch[2], 16);
         const ipv4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
-        return ZkPasskeySigner._isLocalOrPrivateHost(ipv4);
+        return ZkOAuthSigner._isLocalOrPrivateHost(ipv4);
       }
       // Dotted decimal form: x.x.x.x
-      return ZkPasskeySigner._isLocalOrPrivateHost(mapped);
+      return ZkOAuthSigner._isLocalOrPrivateHost(mapped);
     }
     if (hostname.endsWith('.local')) return true;
     // RFC1918 private ranges: 10.x.x.x, 172.16-31.x.x, 192.168.x.x
