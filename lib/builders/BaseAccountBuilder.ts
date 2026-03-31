@@ -240,6 +240,7 @@ export abstract class BaseAccountBuilder {
     return this;
   }
 
+  /** Sets the smart wallet address that will send this UserOperation. */
   setSender(sender: string): this {
     if (!ethers.isAddress(sender)) {
       throw new Error(`setSender: invalid Ethereum address: "${sender}"`);
@@ -318,10 +319,12 @@ export abstract class BaseAccountBuilder {
     return this.userOp as UserOperation;
   }
 
+  /** Returns the ERC-4337 packed UserOperation ready for submission to the bundler. */
   getPackedUserOp(): PackedUserOperation {
     return this.packUserOp(this.getUserOp());
   }
 
+  /** Returns the UserOperation hash (domain-separated) that signers must sign. */
   getUserOpHash(): string {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
     const packed = this.getPackedUserOp();
