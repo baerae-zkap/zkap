@@ -473,6 +473,13 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Sets the initCode for deploying the wallet on first use.
+   * Only needed when the wallet has not been deployed yet.
+   * @param zkapFactory Address of the ZkapFactory contract
+   * @param salt Deterministic salt (use `WalletHelper.computeSalt(aud, sub)`)
+   * @param keys Encoded master key and tx key
+   */
   setInitCode(
     zkapFactory: string,
     salt: ethers.BigNumberish,
@@ -496,11 +503,20 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Sets the initCode field directly as a raw hex string.
+   * Prefer `setInitCode()` unless you are constructing initCode manually.
+   */
   setRawInitCode(initCode: string): this {
     this.userOp.initCode = initCode;
     return this;
   }
 
+  /**
+   * Encodes and sets the UserOperation signature.
+   * @param keyIndexList Indices of the keys used to sign (e.g. [0] for the first key)
+   * @param keySignatureList Hex-encoded signatures returned by `signer.signUserOpHash()`
+   */
   setSignature(keyIndexList: number[], keySignatureList: string[]): this {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
 
@@ -654,6 +670,10 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Sets arbitrary callData directly. Requires `setSignerKeyTypes()` to be called first.
+   * Prefer `setExecuteCallData()` or `setExecuteBatchCallData()` for standard transfers.
+   */
   setCallData(callData: string): this {
     if (!this.signerKeyTypes || this.signerKeyTypes.length === 0) {
       throw new Error(
@@ -664,6 +684,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Sets the key types used to sign this UserOperation.
+   * Must match the key type(s) registered on the wallet.
+   * @param keyTypes Array of `PrimitiveAccountKeyTypes` values (e.g. `[keyWebAuthn]`)
+   */
   setSignerKeyTypes(keyTypes: number[]): this {
     if (!Array.isArray(keyTypes) || keyTypes.length === 0) {
       throw new Error("keyTypes must be a non-empty array");
@@ -685,6 +710,10 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Returns the UserOperation hash scoped to the paymaster context.
+   * Used internally by PaymasterService; not needed for typical signing flows.
+   */
   getUserOpHashForPaymaster(): string {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
 
