@@ -17,7 +17,7 @@ const ESM_DIR = new URL('../dist/esm', import.meta.url).pathname;
 function walkJs(dir) {
   const entries = readdirSync(dir);
   for (const entry of entries) {
-    const full = join(dir, entry);
+    const full = join(dir, entry); // bearer:disable javascript_lang_path_traversal
     if (statSync(full).isDirectory()) {
       walkJs(full);
     } else if (extname(entry) === '.js') {
@@ -27,7 +27,7 @@ function walkJs(dir) {
 }
 
 function resolveExtension(importingFile, importPath) {
-  const base = join(dirname(importingFile), importPath);
+  const base = join(dirname(importingFile), importPath); // bearer:disable javascript_lang_path_traversal
   // Check if it resolves as a directory with index.js
   if (existsSync(base) && statSync(base).isDirectory()) {
     return `${importPath}/index.js`;
