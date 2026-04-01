@@ -1,7 +1,6 @@
 import { ethers } from "ethers";
 import { AccountKeyBuilder } from "../builders/AccountKeyBuilder";
-import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
-import type { KeyInfo, WebAuthnKeyData as BuilderWebAuthnKeyData } from "../types/AccountKey";
+import type { WebAuthnKeyData as BuilderWebAuthnKeyData } from "../types/AccountKey";
 import type { TxKeyInfo } from "../reader/AccountReader";
 
 const MAX_TX_KEYS = 5;
