@@ -1,0 +1,12 @@
+{
+  "name": "basic-userop-example",
+  "private": true,
+  "description": "Basic UserOp example for @baerae-zkap/zkap-aa",
+  "scripts": {
+    "chains": "node index.js chains",
+    "send": "node index.js send"
+  },
+  "dependencies": {
+    "@baerae-zkap/zkap-aa": "*"
+  }
+}

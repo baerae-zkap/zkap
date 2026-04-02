@@ -1,7 +1,7 @@
 /**
- * SwapBuilder 테스트
+ * SwapBuilder tests
  *
- * DEX 애그리게이터를 통한 스왑 트랜잭션 데이터를 생성하는 빌더
+ * Builder that generates swap transaction data via a DEX aggregator
  */
 
 // Mock OneInchAggregator

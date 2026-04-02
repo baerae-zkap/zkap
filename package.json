@@ -1,14 +1,17 @@
 {
   "name": "@baerae-zkap/zkap-aa",
-  "version": "0.0.35",
+  "version": "0.1.0",
   "description": "A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --coverageReporters=text-summary",
     "lint": "eslint \"lib/**/*.ts\" --fix",
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.esm.json && node scripts/add-esm-ext.mjs",
     "pub": "sh ./publish.sh",
     "prepare": "husky"
   },
@@ -22,7 +25,8 @@
   },
   "license": "ISC",
   "publishConfig": {
-    "registry": "https://asia-northeast3-npm.pkg.dev/zkap-dev/zkap-npm-packages/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "bugs": {
     "url": "https://github.com/baerae-zkap/zkap-aa/issues"
@@ -30,6 +34,8 @@
   "homepage": "https://github.com/baerae-zkap/zkap-aa#readme",
   "files": [
     "dist/lib/",
+    "dist/esm/",
+    "LICENSE",
     "README.md",
     "package.json"
   ],
@@ -39,10 +45,11 @@
     "jwt-decode": "^4.0.0"
   },
   "main": "dist/lib/index.js",
+  "module": "dist/esm/index.js",
   "types": "dist/lib/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/lib/index.js",
+      "import": "./dist/esm/index.js",
       "require": "./dist/lib/index.js",
       "types": "./dist/lib/index.d.ts"
     }

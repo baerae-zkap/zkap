@@ -11,10 +11,10 @@ function sha256BlockCompress(data: Uint8Array): number[] {
     throw new Error("data length must be a multiple of 64 bytes");
   }
 
-  // 초기 해시 값으로 시작
+  // Start with initial hash values
   let state = INITIAL_HASH_VALUE;
 
-  // 64바이트 단위로 데이터를 순회하면서 상태 업데이트
+  // Process data in 64-byte chunks and update state
   for (let i = 0; i < data.length; i += 64) {
     const chunk = data.slice(i, i + 64);
     state = sha256BlockCompressWithState(state, chunk);
@@ -29,16 +29,16 @@ function getOutOfCircuitHashSegment(jwt: string, keys: string[]): string {
   }
   const hashBlockSize = 64; // 512 bits
 
-  // JWT를 '.' 구분자로 분리 (header, payload, signature)
+  // Split JWT by '.' delimiter (header, payload, signature)
   const parts = jwt.split(".");
   if (parts.length !== 3) {
     throw new Error("Invalid JWT: must contain header, payload, and signature");
   }
   const [headerB64, payloadB64] = parts;
 
-  // header의 길이에 1을 더한 값이 payOffsetB64
+  // payOffsetB64 is header length + 1
   const payOffsetB64 = headerB64.length + 1;
-  // URL-safe Base64 디코딩을 수행하여 payload 문자열 생성
+  // Perform URL-safe Base64 decoding to produce the payload string
   const payload = base64urlToUtf8(payloadB64);
 
   const minOffset = Math.min(
@@ -47,7 +47,7 @@ function getOutOfCircuitHashSegment(jwt: string, keys: string[]): string {
 
   const minOffsetB64 = Math.floor(minOffset / 3) * 4;
 
-  // 최종 outOfCircuitHashLen 계산: (payOffsetB64 + minOffsetB64)를 hashBlockSize로 나눈 몫에 hashBlockSize를 곱함
+  // Calculate final outOfCircuitHashLen: floor((payOffsetB64 + minOffsetB64) / hashBlockSize) * hashBlockSize
   const outOfCircuitHashLen =
     Math.floor((payOffsetB64 + minOffsetB64) / hashBlockSize) * hashBlockSize;
   return jwt.slice(0, outOfCircuitHashLen);
@@ -68,8 +68,8 @@ function Utf8ToUint8Array(utf8: string): Uint8Array {
   return encoder.encode(utf8);
 }
 
-// 32비트 우측 회전 함수
-// x를 n비트 오른쪽으로 회전
+// 32-bit right rotation
+// Rotate x right by n bits
 const rotateRight = (x: number, n: number): number =>
   ((x >>> n) | (x << (32 - n))) >>> 0;
 
@@ -82,7 +82,7 @@ function sha256BlockCompressWithState(state: number[], data: Uint8Array) {
 
   const w = new Uint32Array(64);
 
-  // 메시지 스케줄 준비: 4바이트씩 읽어 빅엔디안 형식으로 변환
+  // Prepare message schedule: read 4 bytes at a time in big-endian format
   for (let i = 0; i < 16; i++) {
     const j = i * 4;
     w[i] =
@@ -93,7 +93,7 @@ function sha256BlockCompressWithState(state: number[], data: Uint8Array) {
       0;
   }
 
-  // 메시지 스케줄 확장
+  // Extend message schedule
   for (let i = 16; i < 64; i++) {
     const s0 =
       (rotateRight(w[i - 15], 7) ^
@@ -108,10 +108,10 @@ function sha256BlockCompressWithState(state: number[], data: Uint8Array) {
     w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
   }
 
-  // 작업 변수 초기화
+  // Initialize working variables
   let [a, b, c, d, e, f, g, h] = state;
 
-  // 압축 함수 메인 루프
+  // Main compression loop
   for (let i = 0; i < 64; i++) {
     const s1 =
       (rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)) >>> 0;
@@ -132,7 +132,7 @@ function sha256BlockCompressWithState(state: number[], data: Uint8Array) {
     a = (temp1 + temp2) >>> 0;
   }
 
-  // 압축 결과를 원래 상태와 더하여 새로운 상태를 계산
+  // Add compressed result to original state to compute new state
   return [
     (state[0] + a) >>> 0,
     (state[1] + b) >>> 0,
@@ -146,9 +146,9 @@ function sha256BlockCompressWithState(state: number[], data: Uint8Array) {
 }
 
 function getValueOffsetFromKey(payload: string, key: string): number {
-  // key에 해당하는 claim을 찾기 위한 정규식 패턴.
-  // 패턴은 "key" 다음에 optional 공백, 콜론, optional 공백, 그리고
-  // value를 (큰 따옴표가 있으면 그 따옴표까지 포함하여, 없으면 공백, 콤마, 또는 '}' 전까지) 캡처합니다.
+  // Regex pattern to find the claim corresponding to the key.
+  // The pattern captures "key" followed by optional whitespace, colon, optional whitespace,
+  // and the value (including surrounding quotes if present, or up to whitespace, comma, or '}').
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regexPattern = new RegExp(
     `"${escapedKey}"\\s*:\\s*(?<value>"[^"]*"|[^\\s,\\}]+)`
@@ -159,7 +159,7 @@ function getValueOffsetFromKey(payload: string, key: string): number {
     throw new Error(`Claim with key "${key}" not found in payload`);
   }
 
-  // match[0]는 전체 매칭 문자열, match.groups?.value는 named capture group(값)입니다.
+  // match[0] is the full matched string; match.groups?.value is the named capture group (value).
   const fullMatch = match[0];
   const valuePart = match.groups?.value;
   if (!valuePart) {
@@ -168,10 +168,10 @@ function getValueOffsetFromKey(payload: string, key: string): number {
     );
   }
 
-  // 전체 매칭 문자열 내에서 valuePart가 시작하는 인덱스를 계산합니다.
+  // Calculate the index at which valuePart starts within the full matched string.
   const indexInMatch = fullMatch.indexOf(valuePart);
 
-  // 전체 payload에서의 offset은 매칭 시작 인덱스(match.index)와 valuePart의 내부 인덱스(indexInMatch)의 합입니다.
+  // The offset in the full payload is the sum of the match start index (match.index) and the inner index of valuePart (indexInMatch).
   return (match.index /* istanbul ignore next */ ?? 0) + indexInMatch;
 }
 
@@ -276,7 +276,7 @@ function userSpecificVkToStringArray(userSpecificVk: bigint[][]): string[] {
 
   const [g2Mu, g2MuX, g2MuZ, vAcc] = userSpecificVk;
 
-  // 각 배열의 길이가 4인지 확인
+  // Verify each array has exactly 4 elements
   if (
     g2Mu.length !== 4 ||
     g2MuX.length !== 4 ||
@@ -286,7 +286,7 @@ function userSpecificVkToStringArray(userSpecificVk: bigint[][]): string[] {
     throw new Error("Each element in userSpecificVk must have 4 elements");
   }
 
-  // 원래 순서대로 재배열
+  // Rearrange back to original order
   return [
     g2Mu[1].toString(),
     g2Mu[0].toString(),
@@ -308,11 +308,11 @@ function userSpecificVkToStringArray(userSpecificVk: bigint[][]): string[] {
 }
 
 /**
- * Solidity의 formattingModulorN 함수와 동일한 로직을 수행합니다.
- * 바이트 배열을 뒤집고, 8바이트 청크로 나누어 little-endian 방식으로
- * uint256(bigint) 배열로 변환합니다.
- * @param n '0x' 접두사를 포함한 16진수 문자열 또는 Uint8Array
- * @returns bigint[] 타입의 배열
+ * Performs the same logic as Solidity's formattingModulorN function.
+ * Reverses the byte array, splits it into 8-byte chunks, and converts
+ * to an array of uint256 (bigint) values in little-endian order.
+ * @param n Hex string with '0x' prefix or Uint8Array
+ * @returns Array of type bigint[]
  */
 export function formattingModulorN(n: string | Uint8Array): string[] {
   const bytes = ethers.getBytes(n);
@@ -341,10 +341,10 @@ export function formattingModulorN(n: string | Uint8Array): string[] {
 }
 
 /**
- * Rust의 calculate_max_claim_len을 TypeScript로 변환
- * @param userMaxClaimLen 사용자가 요청한 최대 claim 길이
- * @param modulusBitSize   필드의 모듈러스 비트 크기 (기본값: BN254)
- * @returns 필드 limb 단위로 맞춘 max_claim_len
+ * TypeScript port of Rust's calculate_max_claim_len.
+ * @param userMaxClaimLen Maximum claim length requested by the user
+ * @param modulusBitSize   Modulus bit size of the field (default: BN254)
+ * @returns max_claim_len aligned to field limb units
  */
 export function calculateMaxClaimLen(
   userMaxClaimLen: number,
@@ -357,11 +357,11 @@ export function calculateMaxClaimLen(
 }
 
 /**
- * 문자열을 지정된 길이로 패딩
- * @param s 문자열
- * @param targetLen 목표 길이
- * @param padChar 패딩에 사용할 문자 (u8 코드 값)
- * @returns 패딩된 문자열
+ * Pads a string to the specified length.
+ * @param s The string to pad
+ * @param targetLen Target length
+ * @param padChar Character code to use for padding (u8 value)
+ * @returns Padded string
  */
 export function padStr(s: string, targetLen: number, padChar: number): string {
   const len = s.length;
@@ -380,7 +380,7 @@ function beBytesToBigInt(bytes: Uint8Array): bigint {
   return x;
 }
 
-/** Rust의 F::from_be_bytes_mod_order와 동일: 31바이트씩 끊어 mod p */
+/** Equivalent to Rust's F::from_be_bytes_mod_order: splits into 31-byte chunks, reduces mod p */
 function strToFieldsBN254(s: string): bigint[] {
   const bytes = new TextEncoder().encode(s);
 

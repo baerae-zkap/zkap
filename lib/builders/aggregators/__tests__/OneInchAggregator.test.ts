@@ -1,7 +1,7 @@
 /**
- * OneInchAggregator 테스트
+ * OneInchAggregator tests
  *
- * 1inch DEX 애그리게이터 API와 통신하여 스왑/승인 트랜잭션 데이터를 가져옴
+ * Fetches swap/approval transaction data by communicating with the 1inch DEX aggregator API
  */
 
 import { OneInchAggregator } from '../OneInchAggregator';

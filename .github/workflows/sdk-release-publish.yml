@@ -3,45 +3,87 @@ name: SDK Release Publish
 on:
   workflow_dispatch:
     inputs:
-      run-mode:
-        description: '실행 모드 (all: CI+CD, ci: CI만, cd: CD만)'
-        type: choice
-        options:
-          - all
-          - ci
-          - cd
-        default: 'all'
       version:
-        description: '버전 (예: v1.2.0). 태그 트리거 시 자동 추출'
+        description: 'Version to publish (e.g. v1.2.0). Auto-extracted from tag on tag push.'
         type: string
-        required: true
+        required: false
+      skip-tests:
+        description: 'Skip tests and build (use when re-running publish step only)'
+        type: boolean
+        default: false
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
-      - '!v*-rc.*'
-      - '!v*-dev.*'
-      - '!v*-alpha.*'
-      - '!v*-beta.*'
 
 permissions:
-  actions: write
   contents: read
-  id-token: write
 
 jobs:
-  ci:
-    if: ${{ inputs.run-mode != 'cd' }}
-    uses: baerae-zkap/zkap-workflows/.github/workflows/sdk-release-ci.yml@main
-    with:
-      package-manager: npm
-      version: ${{ inputs.version }}
-    secrets: inherit
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  cd:
-    needs: [ci]
-    if: ${{ !cancelled() && inputs.run-mode != 'ci' && (needs.ci.result == 'success' || inputs.run-mode == 'cd') }}
-    uses: baerae-zkap/zkap-workflows/.github/workflows/sdk-release-cd.yml@main
-    with:
-      skip-artifact-download: ${{ inputs.run-mode == 'cd' }}
-      version: ${{ inputs.version }}
-    secrets: inherit
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid version format: $VERSION (expected x.y.z)"
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Verify version is newer than published
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          PKG_NAME=$(node -p "require('./package.json').name")
+          LATEST=$(npm view "$PKG_NAME" dist-tags.latest --registry https://registry.npmjs.org 2>/dev/null || echo "")
+          if [ -z "$LATEST" ]; then
+            echo "No published version found on npmjs.com. Proceeding with first publish."
+          else
+            echo "Current latest: $LATEST"
+            if [ "$(printf '%s\n' "$LATEST" "$VERSION" | sort -V | tail -1)" != "$VERSION" ] || [ "$VERSION" = "$LATEST" ]; then
+              echo "::error::$VERSION is not newer than current latest $LATEST"
+              exit 1
+            fi
+            echo "Version $VERSION > $LATEST. Proceeding."
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        if: ${{ !inputs.skip-tests }}
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        if: ${{ !inputs.skip-tests }}
+        run: npm test -- --ci --forceExit
+
+      - name: Build
+        if: ${{ !inputs.skip-tests }}
+        run: npm run build
+
+      - name: Publish dry-run
+        run: npm publish --dry-run
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm pkg delete scripts.prepare 2>/dev/null || true
+          echo "Publishing v${{ steps.version.outputs.value }} to npmjs.com"
+          npm publish --access public --tag latest

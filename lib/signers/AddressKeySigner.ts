@@ -31,9 +31,9 @@ export class AddressKeySigner implements IUserOpSigner {
   }
 
   /**
-   * 메모리에서 개인키 참조를 제거합니다.
-   * @note JavaScript 문자열은 불변이므로 참조 제거만 가능합니다.
-   *       민감한 키 재사용을 방지하기 위해 사용 후 호출하세요.
+   * Removes private key references from memory.
+   * @note JavaScript strings are immutable, so only the reference can be removed.
+   *       Call this after use to prevent reuse of sensitive key data.
    */
   destroy(): void {
     this.privateKeys = [];

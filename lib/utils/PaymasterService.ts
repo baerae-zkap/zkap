@@ -9,11 +9,11 @@ export enum PaymasterMode {
 
 export interface PaymasterServiceConfig {
   /**
-   * Paymaster 서버 URL (예: "http://127.0.0.1:3000")
+   * Paymaster server URL (e.g. "http://127.0.0.1:3000")
    */
   serverUrl: string;
   /**
-   * Paymaster 컨트랙트 주소
+   * Paymaster contract address
    */
   paymasterAddress: string;
   /**
@@ -24,8 +24,8 @@ export interface PaymasterServiceConfig {
   mode: PaymasterMode;
 
   /**
-   * ERC20 모드에서 사용할 토큰 주소.
-   * PaymasterMode.ERC20 일 때 필수.
+   * Token address to use in ERC20 mode.
+   * Required when PaymasterMode.ERC20 is set.
    */
   tokenAddress?: string;
 }
@@ -43,8 +43,8 @@ const ERC20_PAYMASTER_VERIFICATION_GAS = 40000n;
 const ERC20_PAYMASTER_POST_OP_GAS = 100000n;
 
 /**
- * Paymaster 서비스 클래스
- * Paymaster 서버와 통신하여 paymaster 데이터를 가져옵니다.
+ * Paymaster service class.
+ * Communicates with the paymaster server to retrieve paymaster data.
  */
 export class PaymasterService {
   private static readonly FETCH_TIMEOUT_MS = 30_000;
@@ -96,10 +96,10 @@ export class PaymasterService {
   }
 
   /**
-   * Paymaster 서버에 RPC 요청을 보내고 paymasterData를 반환합니다.
-   * @param endpoint 요청 경로 (예: "/paymaster/get-paymaster-data")
-   * @param params RPC params 배열
-   * @returns paymasterData 문자열
+   * Sends an RPC request to the paymaster server and returns paymasterData.
+   * @param endpoint Request path (e.g. "/paymaster/get-paymaster-data")
+   * @param params Array of RPC params
+   * @returns paymasterData string
    */
   private async requestPaymasterData(
     endpoint: string,
@@ -184,9 +184,9 @@ export class PaymasterService {
   }
 
   /**
-   * Paymaster 데이터를 가져옵니다.
-   * @param userOp UserOperation 객체
-   * @returns Paymaster 데이터
+   * Retrieves paymaster data.
+   * @param userOp UserOperation object
+   * @returns Paymaster data
    */
   async getPaymasterDataVerifying(userOp: UserOperation): Promise<string> {
     return this.requestPaymasterData(
@@ -215,8 +215,8 @@ export class PaymasterService {
   }
 
   /**
-   * Paymaster 검증 가스 한도를 추정합니다.
-   * @returns Paymaster 검증 가스 한도
+   * Estimates the paymaster verification gas limit.
+   * @returns Paymaster verification gas limit
    */
   estimatePaymasterVerificationGasLimit(): bigint {
     if (this.config.mode === PaymasterMode.VERIFYING) {
@@ -228,8 +228,8 @@ export class PaymasterService {
   }
 
   /**
-   * Paymaster PostOp 가스 한도를 추정합니다.
-   * @returns Paymaster PostOp 가스 한도
+   * Estimates the paymaster PostOp gas limit.
+   * @returns Paymaster PostOp gas limit
    */
   estimatePaymasterPostOpGasLimit(): bigint {
     if (this.config.mode === PaymasterMode.VERIFYING) {

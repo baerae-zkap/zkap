@@ -1,20 +1,20 @@
 /**
- * crypto.ts 테스트
+ * crypto.ts tests
  *
- * Export된 함수들:
- * - formattingModulorN: 바이트를 ZK 회로용으로 포맷
- * - calculateMaxClaimLen: 최대 claim 길이 계산
- * - padStr: 문자열 패딩
- * - padAndStrToFieldsBN254: 패딩 후 BN254 필드 변환
+ * Exported functions:
+ * - formattingModulorN: formats bytes for ZK circuits
+ * - calculateMaxClaimLen: calculates maximum claim length
+ * - padStr: pads a string
+ * - padAndStrToFieldsBN254: pads then converts to BN254 fields
  *
  * Default export (cryptoUtils):
- * - sha256BlockCompress: SHA256 부분 업데이트 (ZK 회로용 블록 압축)
- * - getOutOfCircuitHashSegment: JWT에서 해시 세그먼트 추출
+ * - sha256BlockCompress: SHA256 partial update (block compression for ZK circuits)
+ * - getOutOfCircuitHashSegment: extracts the hash segment from a JWT
  * - Utf8ToUint8Array: UTF8 → Uint8Array
- * - commonVkParser: 공통 VK 파서
- * - userSpecificVkParser: 사용자별 VK 파서
- * - userSpecificVkToStringArray: VK → 문자열 배열
- * - getSignedMessageHash: 이더리움 서명 메시지 해시
+ * - commonVkParser: common VK parser
+ * - userSpecificVkParser: user-specific VK parser
+ * - userSpecificVkToStringArray: converts VK to string array
+ * - getSignedMessageHash: Ethereum signed message hash
  */
 
 import cryptoUtils, {

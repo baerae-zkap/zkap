@@ -1,13 +1,13 @@
 /**
- * AddressKeySigner 테스트
+ * AddressKeySigner tests
  *
- * EOA 개인키로 UserOp에 서명하는 Signer
+ * Signer that signs UserOps using an EOA private key
  */
 
 import { AddressKeySigner } from '../AddressKeySigner';
 import { PrimitiveAccountKeyTypes } from '../../types/AccountKey';
 
-// 테스트용 개인키 (절대 실제 사용 금지!)
+// Test private key (NEVER use in production!)
 const TEST_PRIVATE_KEY_1 = '0x' + '11'.repeat(32);
 const TEST_PRIVATE_KEY_2 = '0x' + '22'.repeat(32);
 
@@ -95,7 +95,7 @@ describe('AddressKeySigner', () => {
       const signer = new AddressKeySigner([TEST_PRIVATE_KEY_1, TEST_PRIVATE_KEY_2]);
       signer.destroy();
 
-      // 내부 privateKeys가 비어있어 서명 시 빈 배열 반환
+      // Internal privateKeys is empty, so signing returns an empty array
       return expect(signer.signUserOpHash(mockHash)).resolves.toEqual([]);
     });
 

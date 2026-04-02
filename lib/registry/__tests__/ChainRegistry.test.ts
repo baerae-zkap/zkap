@@ -1,5 +1,5 @@
 /**
- * ChainRegistry 테스트
+ * ChainRegistry tests
  */
 
 import { ChainRegistry } from '../ChainRegistry';

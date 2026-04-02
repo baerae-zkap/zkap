@@ -9,7 +9,16 @@ export interface ChainConfig {
   contracts: {
     zkOAuthVerifier1of1: string;
     zkOAuthVerifier3of3: string;
+    /**
+     * Address of the hAudLists contract (audience allowlist v1).
+     * Used by ZkOAuthSigner to verify that the OAuth `aud` claim is in the allowed set.
+     */
     hAudLists: string;
+    /**
+     * Address of the hAudLists1 contract (audience allowlist v2, single-slot variant).
+     * Introduced to support a simplified 1-of-1 audience verification path.
+     * Use `hAudLists` for multi-slot verifiers; use `hAudLists1` for 1-of-1 verifiers.
+     */
     hAudLists1: string;
   };
 }

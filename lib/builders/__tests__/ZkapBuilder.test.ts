@@ -1,7 +1,7 @@
 /**
- * ZkapBuilder 테스트
+ * ZkapBuilder tests
  *
- * ZKAP 계정용 UserOperation 빌더
+ * UserOperation builder for ZKAP accounts
  */
 
 // Mock fetch for PaymasterService
@@ -237,7 +237,7 @@ describe('ZkapBuilder', () => {
 
       builder.setExecuteCallData('0x' + '22'.repeat(20), BigInt(0), '0x1234');
 
-      // signerKeyTypes가 자동 설정되었으므로 setCallData가 throw하지 않음
+      // signerKeyTypes was automatically set, so setCallData does not throw
       expect(() => builder.setCallData('0x9999')).not.toThrow();
     });
 
@@ -245,7 +245,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '11'.repeat(20));
 
-      // keyAddress(1) 명시적으로 지정
+      // Explicitly specify keyAddress(1)
       builder.setExecuteCallData('0x' + '22'.repeat(20), BigInt(0), '0x1234', [1]);
 
       expect(() => builder.setCallData('0x9999')).not.toThrow();
@@ -256,7 +256,7 @@ describe('ZkapBuilder', () => {
       builder.setSender('0x' + '11'.repeat(20));
 
       builder.setExecuteCallData('0x' + '22'.repeat(20), BigInt(0), '0x1234');
-      builder.setSignerKeyTypes([1, 4]); // 이후 오버라이드
+      builder.setSignerKeyTypes([1, 4]); // override afterwards
 
       expect(() => builder.setCallData('0x9999')).not.toThrow();
     });
@@ -296,7 +296,7 @@ describe('ZkapBuilder', () => {
         ['0x1234']
       );
 
-      // signerKeyTypes가 자동 설정되었으므로 setCallData가 throw하지 않음
+      // signerKeyTypes was automatically set, so setCallData does not throw
       expect(() => builder.setCallData('0x9999')).not.toThrow();
     });
 
@@ -304,7 +304,7 @@ describe('ZkapBuilder', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '11'.repeat(20));
 
-      // keyAddress(1) 명시적으로 지정
+      // Explicitly specify keyAddress(1)
       builder.setExecuteBatchCallData(
         ['0x' + '22'.repeat(20)],
         [BigInt(0)],
@@ -365,7 +365,7 @@ describe('ZkapBuilder', () => {
 
       builder.setUpdateTxKeyCallData('0x' + 'cc'.repeat(64));
 
-      // signerKeyTypes가 설정되면 setCallData가 throw하지 않음
+      // Once signerKeyTypes is set, setCallData does not throw
       expect(() => builder.setCallData('0x9999')).not.toThrow();
     });
 
@@ -415,7 +415,7 @@ describe('ZkapBuilder', () => {
 
       builder.setUpdateMasterKeyCallData('0x' + 'dd'.repeat(64));
 
-      // signerKeyTypes가 설정되면 setCallData가 throw하지 않음
+      // Once signerKeyTypes is set, setCallData does not throw
       expect(() => builder.setCallData('0x9999')).not.toThrow();
     });
 
@@ -586,7 +586,7 @@ describe('ZkapBuilder', () => {
 
       const builder = new ZkapBuilder(mockAccountInfo);
       builder.setSender('0x' + '11'.repeat(20));
-      builder.setSignerKeyTypes([1]); // keyAddress — signerKeyTypes 필수
+      builder.setSignerKeyTypes([1]); // keyAddress — signerKeyTypes required
 
       await expect(builder.autoFillUserOp()).rejects.toThrow(
         'Failed to get fee data from provider'
@@ -663,7 +663,7 @@ describe('ZkapBuilder', () => {
       builder.setSender('0x' + '11'.repeat(20));
       builder.setSignerKeyTypes([4]); // keyWebAuthn
       builder.setCallData('0x1234');
-      // initCode 미설정
+      // initCode not set
 
       await builder.autoFillUserOp();
 
@@ -692,7 +692,7 @@ describe('ZkapBuilder', () => {
       const userOp = builder.getUserOp();
       expect(userOp.preVerificationGas).toBeDefined();
       expect(BigInt(userOp.preVerificationGas)).toBeGreaterThan(0n);
-      // dummy signature이 주입되었으므로 "0x"가 아님
+      // A dummy signature was injected, so it is not "0x"
       expect(userOp.signature).not.toBe('0x');
     });
 
@@ -1035,7 +1035,7 @@ describe('ZkapBuilder', () => {
     });
 
     it('should wrap non-Error throw from parseTransaction', async () => {
-      // parseTransaction이 Error 아닌 값을 throw → catch의 non-Error 분기 커버
+      // parseTransaction throws a non-Error value → covers the non-Error branch in catch
       mockParseTransaction.mockImplementationOnce(() => { throw 'string error'; });
 
       const builder = new ZkapBuilder(mockAccountInfo);
@@ -1350,7 +1350,7 @@ describe('ZkapBuilder', () => {
 
     it('should fall back to keyWebAuthn when signerKeyTypes is not set', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
-      // signerKeyTypes 미설정 → 내부에서 [keyWebAuthn] 사용
+      // signerKeyTypes not set → [keyWebAuthn] used internally
 
       const sig = (builder as any).createDummySignature();
 
@@ -1378,7 +1378,7 @@ describe('ZkapBuilder', () => {
 
     it('should not throw for unknown key type (uses fallback size 100)', () => {
       const builder = new ZkapBuilder(mockAccountInfo);
-      // setSignerKeyTypes 유효성 검증 우회 후 알 수 없는 키 타입 주입
+      // Bypass setSignerKeyTypes validation then inject unknown key type
       (builder as any).signerKeyTypes = [99];
 
       expect(() => (builder as any).createDummySignature()).not.toThrow();

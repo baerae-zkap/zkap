@@ -1,7 +1,7 @@
 /**
- * ZkOidcSigner 테스트
+ * ZkOidcSigner tests
  *
- * ZK 증명을 사용하여 OAuth OIDC 인증을 수행하는 Signer
+ * Signer that performs OAuth OIDC authentication using ZK proofs
  */
 
 import { ZkOidcSigner } from '../ZkOidcSigner';
@@ -286,7 +286,7 @@ describe('ZkOidcSigner', () => {
       expect(decoded[1].length).toBe(2); // jwtExpList (K=2)
       expect(decoded[2].length).toBe(2); // partialRhsList (K=2)
       expect(decoded[3].length).toBe(2); // proofs (K=2)
-      expect(decoded[3][0].length).toBe(8); // 각 proof는 8요소
+      expect(decoded[3][0].length).toBe(8); // each proof has 8 elements
       expect(decoded[3][1].length).toBe(8);
     });
 

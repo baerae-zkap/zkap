@@ -1,7 +1,7 @@
 /**
- * BaseAccount 테스트
+ * BaseAccount tests
  *
- * 추상 계정 기본 클래스
+ * Abstract base account class
  */
 
 import { BaseAccount } from '../BaseAccount';

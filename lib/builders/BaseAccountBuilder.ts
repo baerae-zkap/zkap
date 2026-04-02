@@ -2,12 +2,12 @@ import { UserOperation, PackedUserOperation } from "../types/UserOperation";
 import { ethers } from "ethers";
 
 export abstract class BaseAccountBuilder {
-  /** 가스 추정치에 20% 여유분을 더하기 위한 승수 (120/100 = 1.2배) */
+  /** Multiplier to add 20% buffer to gas estimates (120/100 = 1.2x) */
   protected static readonly GAS_ESTIMATE_MULTIPLIER = BigInt(120);
   protected static readonly GAS_ESTIMATE_DIVISOR = BigInt(100);
   /** minimum paymasterAndData hex length: (20 + 16 + 16 + 65) * 2 + 2("0x") = 236 */
   protected static readonly PAYMASTER_AND_DATA_MIN_HEX_LENGTH = 236;
-  /** paymaster postOp 가스 기본값: ERC-4337 일반적인 postOp 작업(토큰 이체 등)의 경험적 하한값 */
+  /** Default paymaster postOp gas: empirical lower bound for typical ERC-4337 postOp operations (e.g. token transfer) */
   protected static readonly DEFAULT_PAYMASTER_POST_OP_GAS = BigInt(5000);
   protected userOp: Partial<UserOperation> = {};
   protected chainId: number;
@@ -58,12 +58,12 @@ export abstract class BaseAccountBuilder {
   }
 
   /**
-   * Paymaster용 UserOperation 해시 계산을 위해 UserOp을 ABI 인코딩합니다.
-   * @requires 이 메서드 호출 전 autoFillUserOp()이 완료되어야 합니다.
-   *           미완료 시 paymasterAndData가 올바르지 않아 잘못된 해시가 계산될 수 있습니다.
-   * @param packedUserOp 인코딩할 PackedUserOperation
-   * @param paymasterSigBytes paymaster 서명 바이트 수 (기본값 65)
-   * @returns ABI 인코딩된 UserOperation 문자열
+   * ABI-encodes a UserOp for paymaster UserOperation hash calculation.
+   * @requires autoFillUserOp() must be completed before calling this method.
+   *           If not, paymasterAndData may be incorrect and an invalid hash will be computed.
+   * @param packedUserOp The PackedUserOperation to encode
+   * @param paymasterSigBytes Number of bytes in the paymaster signature (default 65)
+   * @returns ABI-encoded UserOperation string
    */
   encodeUserOpForPaymaster(packedUserOp: PackedUserOperation, paymasterSigBytes: number = 65): string {
     if (!Number.isInteger(paymasterSigBytes) || paymasterSigBytes < 1 || paymasterSigBytes > 256) {
@@ -79,14 +79,14 @@ export abstract class BaseAccountBuilder {
     // paymasterAndData that is exactly PAYMASTER_SIG_HEX_LENGTH + 2 chars long.
     // 236 = (paymaster_addr(20) + verifyGasLimit(16) + postOpGasLimit(16) + sig(65)) * 2 hex chars + 2 ("0x")
     if (packedUserOp.paymasterAndData.length < BaseAccountBuilder.PAYMASTER_AND_DATA_MIN_HEX_LENGTH) {
-      // "0x" prefix(2) + 최소 sig 길이 미만이면 서명 영역이 없는 것
+      // "0x" prefix(2) + less than minimum sig length means there is no signature area
       throw new Error(
         `paymasterAndData too short to contain signature: length=${packedUserOp.paymasterAndData.length}, expected at least ${BaseAccountBuilder.PAYMASTER_AND_DATA_MIN_HEX_LENGTH}`
       );
     }
     // paymasterAndData = paymaster_addr(20) + verifyGasLimit(16) + postOpGasLimit(16) + paymasterData
-    // paymasterData 끝 PAYMASTER_SIG_BYTES 바이트가 서명. 모드 무관하게 서명은 항상 마지막에 위치.
-    // C-1: ethers.dataSlice는 byte 단위로 슬라이스 (64-bit 안전)
+    // The last PAYMASTER_SIG_BYTES bytes of paymasterData are the signature. Signature is always last regardless of mode.
+    // C-1: ethers.dataSlice slices by byte (64-bit safe)
     const totalBytes = (packedUserOp.paymasterAndData.length - 2) / 2;
     return defaultAbiCoder.encode(
       [
@@ -240,6 +240,7 @@ export abstract class BaseAccountBuilder {
     return this;
   }
 
+  /** Sets the smart wallet address that will send this UserOperation. */
   setSender(sender: string): this {
     if (!ethers.isAddress(sender)) {
       throw new Error(`setSender: invalid Ethereum address: "${sender}"`);
@@ -309,7 +310,7 @@ export abstract class BaseAccountBuilder {
   }
 
   getUserOp(): UserOperation {
-    this.applyDefaults(); // 설정되지 않은 필드에만 기본값 적용 (기존 값 보존)
+    this.applyDefaults(); // Apply defaults only to unset fields (preserves existing values)
 
     if (!this.userOp.sender || !ethers.isAddress(this.userOp.sender) || this.userOp.sender === ethers.ZeroAddress) {
       throw new Error("Sender is not set or is zero address. Please set a valid sender address.");
@@ -318,10 +319,12 @@ export abstract class BaseAccountBuilder {
     return this.userOp as UserOperation;
   }
 
+  /** Returns the ERC-4337 packed UserOperation ready for submission to the bundler. */
   getPackedUserOp(): PackedUserOperation {
     return this.packUserOp(this.getUserOp());
   }
 
+  /** Returns the UserOperation hash (domain-separated) that signers must sign. */
   getUserOpHash(): string {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
     const packed = this.getPackedUserOp();
@@ -380,14 +383,14 @@ export abstract class BaseAccountBuilder {
   }
 
   /**
-   * UserOperation의 가스 비용을 추정합니다.
-   * EntryPoint의 simulateValidation과 simulateHandleOp을 사용하여 가스를 추정합니다.
-   * @experimental 이 메서드는 검증되지 않았습니다.
-   * @note ERC-4337 v0.7에서 simulateValidation은 ValidationResult revert로 응답하므로
-   *       estimateGas 기반 검증 가스 추정이 실제로 동작하지 않습니다.
-   *       테스트 후 사용하세요.
-   * @param userOp 추정할 UserOperation
-   * @returns 추정된 가스 비용 (wei 단위)
+   * Estimates the gas cost of a UserOperation.
+   * Uses the EntryPoint's simulateValidation and simulateHandleOp to estimate gas.
+   * @experimental This method has not been fully validated.
+   * @note In ERC-4337 v0.7, simulateValidation responds with a ValidationResult revert,
+   *       so estimateGas-based verification gas estimation does not work in practice.
+   *       Test before using.
+   * @param userOp The UserOperation to estimate
+   * @returns Estimated gas cost (in wei)
    */
   async estimateUserOpGasCost(userOp: UserOperation): Promise<string> {
 
@@ -396,16 +399,16 @@ export abstract class BaseAccountBuilder {
     }
 
     try {
-      // 1. preVerificationGas 계산
+      // 1. Calculate preVerificationGas
       const preVerificationGas = this.calculatePreVerificationGas(userOp);
 
-      // 2. verificationGasLimit 추정
+      // 2. Estimate verificationGasLimit
       const verificationGasLimit = await this.estimateVerificationGas(userOp);
 
-      // 3. callGasLimit 추정
+      // 3. Estimate callGasLimit
       const callGasLimit = await this.estimateCallGas(userOp);
 
-      // 4. paymaster gas 추정 (paymaster가 있는 경우)
+      // 4. Estimate paymaster gas (if paymaster is set)
       let paymasterVerificationGasLimit = BigInt(0);
       let paymasterPostOpGasLimit = BigInt(0);
 
@@ -415,7 +418,7 @@ export abstract class BaseAccountBuilder {
         paymasterPostOpGasLimit = paymasterGas.postOp;
       }
 
-      // 5. 총 가스 계산
+      // 5. Calculate total gas
       const totalGas =
         preVerificationGas +
         verificationGasLimit +
@@ -423,14 +426,14 @@ export abstract class BaseAccountBuilder {
         paymasterVerificationGasLimit +
         paymasterPostOpGasLimit;
 
-      // 6. 가스 가격 가져오기
+      // 6. Get gas price
       const feeData = await this.provider.getFeeData();
       const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? BigInt(0);
       if (gasPrice === BigInt(0)) {
 
       }
 
-      // 7. 총 비용 계산 (가스 * 가스가격)
+      // 7. Calculate total cost (gas * gas price)
       const totalCost = totalGas * gasPrice;
 
       return totalCost.toString();
@@ -443,19 +446,19 @@ export abstract class BaseAccountBuilder {
   }
 
   /**
-   * preVerificationGas를 계산합니다.
+   * Calculates preVerificationGas.
    * @param userOp UserOperation
    * @returns preVerificationGas
    */
   protected calculatePreVerificationGas(userOp: UserOperation): bigint {
-    // 기본 preVerificationGas (ZK proof signature overhead 반영)
+    // Base preVerificationGas (accounting for ZK proof signature overhead)
     let preVerificationGas = BigInt(30000);
 
-    // handleOps() ABI 인코딩 오버헤드 (함수 셀렉터 4B + 배열 offset/length 64B + beneficiary 32B + 구조체 오버헤드)
+    // handleOps() ABI encoding overhead (function selector 4B + array offset/length 64B + beneficiary 32B + struct overhead)
     const HANDLE_OPS_OVERHEAD_GAS = BigInt(2000);
     preVerificationGas += HANDLE_OPS_OVERHEAD_GAS;
 
-    // calldata 비용 추가
+    // Add calldata cost
     const packedUserOp = this.packUserOp(userOp);
     const encodedUserOp = this.encodeUserOp(packedUserOp, false);
     // EIP-2028: zero byte = 4 gas, non-zero byte = 16 gas
@@ -471,7 +474,7 @@ export abstract class BaseAccountBuilder {
   }
 
   /**
-   * verificationGasLimit을 추정합니다.
+   * Estimates verificationGasLimit.
    * @param userOp UserOperation
    * @returns verificationGasLimit
    */
@@ -484,7 +487,7 @@ export abstract class BaseAccountBuilder {
     }
 
     try {
-      // EntryPoint의 simulateValidation 호출
+      // Call EntryPoint's simulateValidation
       const entryPointInterface = new ethers.Interface([
         "function simulateValidation((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)) external",
       ]);
@@ -512,7 +515,7 @@ export abstract class BaseAccountBuilder {
         data: callData,
       });
 
-      // 20% 여유분 추가
+      // Add 20% buffer
       /* istanbul ignore next */
       return (gasEstimate * BaseAccountBuilder.GAS_ESTIMATE_MULTIPLIER) / BaseAccountBuilder.GAS_ESTIMATE_DIVISOR;
     } catch (error) {
@@ -524,7 +527,7 @@ export abstract class BaseAccountBuilder {
   }
 
   /**
-   * callGasLimit을 추정합니다.
+   * Estimates callGasLimit.
    * @param userOp UserOperation
    * @returns callGasLimit
    */
@@ -535,12 +538,12 @@ export abstract class BaseAccountBuilder {
     }
 
     try {
-      // callData가 있는 경우에만 추정
+      // Only estimate if callData is present
       if (!userOp.callData || userOp.callData === "0x") {
         return BigInt(0);
       }
 
-      // EntryPoint의 simulateHandleOp 호출
+      // Call EntryPoint's simulateHandleOp
       const entryPointInterface = new ethers.Interface([
         "function simulateHandleOp((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes),address,bytes) external",
       ]);
@@ -568,7 +571,7 @@ export abstract class BaseAccountBuilder {
         data: callData,
       });
 
-      // 20% 여유분 추가
+      // Add 20% buffer
       /* istanbul ignore next */
       return (gasEstimate * BaseAccountBuilder.GAS_ESTIMATE_MULTIPLIER) / BaseAccountBuilder.GAS_ESTIMATE_DIVISOR;
     } catch (error) {
@@ -581,9 +584,9 @@ export abstract class BaseAccountBuilder {
   }
 
   /**
-   * paymaster gas를 추정합니다.
+   * Estimates paymaster gas.
    * @param userOp UserOperation
-   * @returns paymaster gas 정보
+   * @returns Paymaster gas information
    */
   private async estimatePaymasterGas(userOp: UserOperation): Promise<{
     verification: bigint;
@@ -595,7 +598,7 @@ export abstract class BaseAccountBuilder {
     }
 
     try {
-      // paymaster의 validatePaymasterUserOp 호출
+      // Call paymaster's validatePaymasterUserOp
       const paymasterInterface = new ethers.Interface([
         "function validatePaymasterUserOp((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes),bytes32,uint256) external returns (bytes memory, uint256)",
       ]);
@@ -633,11 +636,11 @@ export abstract class BaseAccountBuilder {
         data: callData,
       });
 
-      // 20% 여유분 추가
+      // Add 20% buffer
       /* istanbul ignore next */
       const verificationGas = (gasEstimate * BaseAccountBuilder.GAS_ESTIMATE_MULTIPLIER) / BaseAccountBuilder.GAS_ESTIMATE_DIVISOR;
 
-      // postOp gas는 일반적으로 작은 값
+      // postOp gas is generally a small value
       /* istanbul ignore next */
       const postOpGas = BaseAccountBuilder.DEFAULT_PAYMASTER_POST_OP_GAS;
 

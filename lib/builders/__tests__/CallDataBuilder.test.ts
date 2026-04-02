@@ -1,7 +1,7 @@
 /**
- * CallDataBuilder 테스트
+ * CallDataBuilder tests
  *
- * 컨트랙트 ABI를 사용하여 callData를 인코딩/디코딩하는 빌더
+ * Builder that encodes/decodes callData using contract ABIs
  */
 
 import { CallDataBuilder } from '../CallDataBuilder';

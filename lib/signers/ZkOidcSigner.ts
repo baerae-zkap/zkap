@@ -18,17 +18,17 @@ export class ZkOidcSigner implements IUserOpSigner {
   private proofs: string[][] | undefined;
 
   /**
-   * ZK proof 데이터 설정
-   * @param data.sharedInputs - 6개 요소 배열
-   *   - [0] hanchor: Anchor 해시
-   *   - [1] h_ctx: Context 해시
+   * Sets ZK proof data.
+   * @param data.sharedInputs - Array of 6 elements
+   *   - [0] hanchor: Anchor hash
+   *   - [1] h_ctx: Context hash
    *   - [2] root: Merkle root
-   *   - [3] h_sign_userop: UserOp 해시 (mod SNARK_SCALAR_FIELD)
-   *   - [4] lhs: Left-hand side 합계
-   *   - [5] h_aud_list: Audience 리스트 해시
-   * @param data.jwtExpList - K개 요소: 각 proof의 jwt_exp (Unix timestamp)
-   * @param data.partialRhsList - K개 요소: 각 proof의 partial_rhs
-   * @param data.proofs - K x 8 배열: K개의 Groth16 증명
+   *   - [3] h_sign_userop: UserOp hash (mod SNARK_SCALAR_FIELD)
+   *   - [4] lhs: Left-hand side sum
+   *   - [5] h_aud_list: Audience list hash
+   * @param data.jwtExpList - K elements: jwt_exp (Unix timestamp) for each proof
+   * @param data.partialRhsList - K elements: partial_rhs for each proof
+   * @param data.proofs - K x 8 array: K Groth16 proofs
    */
   setProofData(data: {
     sharedInputs: string[];
@@ -65,7 +65,7 @@ export class ZkOidcSigner implements IUserOpSigner {
         throw new Error(`setProofData: proofs[${i}] must be an array of 8 elements, got ${data.proofs[i]?.length}`);
       }
     }
-    // BN254 scalar field 범위 검증
+    // Validate BN254 scalar field range
     for (let i = 0; i < data.jwtExpList.length; i++) {
       validateBN254Field(data.jwtExpList[i], `jwtExpList[${i}]`);
     }
@@ -92,7 +92,7 @@ export class ZkOidcSigner implements IUserOpSigner {
       throw new Error(`signUserOpHash: userOpHash must be a 0x-prefixed 32-byte hex string (66 chars), got: ${userOpHash}`);
     }
 
-    // userOpHash와 sharedInputs[3] 바인딩 검증
+    // Validate binding between userOpHash and sharedInputs[3]
     // sharedInputs[3] == userOpHash mod BN254_FR
     const expectedHSignUserOp = (BigInt(userOpHash) % BN254_FR).toString();
     if (this.sharedInputs[3] !== expectedHSignUserOp) {
@@ -111,8 +111,8 @@ export class ZkOidcSigner implements IUserOpSigner {
   }
 
   /**
-   * 메모리에서 ZK proof 데이터 참조를 제거합니다.
-   * @note 민감한 증명 데이터 재사용을 방지하기 위해 사용 후 호출하세요.
+   * Removes ZK proof data references from memory.
+   * @note Call this after use to prevent reuse of sensitive proof data.
    */
   destroy(): void {
     this.sharedInputs = undefined;

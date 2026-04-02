@@ -1,9 +1,9 @@
 /**
- * PaymasterService 테스트
+ * PaymasterService tests
  *
- * Paymaster 서버와 통신하여 paymaster 데이터를 가져오는 서비스
- * - VERIFYING 모드: 기본 paymaster 검증
- * - ERC20 모드: ERC20 토큰으로 가스비 지불
+ * Service that fetches paymaster data by communicating with the paymaster server
+ * - VERIFYING mode: basic paymaster verification
+ * - ERC20 mode: pay gas fees with ERC20 tokens
  */
 
 import {
@@ -263,7 +263,7 @@ describe('PaymasterService', () => {
     it('should throw when result.userOp is missing', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ result: { paymasterData: '0xabcd' } }), // userOp 없음
+        json: () => Promise.resolve({ result: { paymasterData: '0xabcd' } }), // no userOp
       });
 
       const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));

@@ -20,8 +20,8 @@ export interface ZkapAccountInfo {
   entryPoint: string;
   enUrl: string;
   /**
-   * Paymaster 설정 (대납 기능 활성화)
-   * 설정하면 autoFillUserOp에서 paymaster 관련 데이터를 자동으로 채움
+   * Paymaster configuration (enables gas sponsorship)
+   * When set, autoFillUserOp will automatically populate paymaster-related data
    */
   paymaster?: PaymasterServiceConfig;
 }
@@ -32,20 +32,20 @@ export class ZkapBuilder extends BaseAccountBuilder {
   static readonly GAS_BUFFER = BigInt(25000);
 
   static readonly ADDRESS_KEY_VALIDATION_GAS = 15000n;
-  static readonly SECP256K1_KEY_VALIDATION_GAS = 15000n;  // secp256k1 ECDSA, ecrecover 수준
-  static readonly SECP256R1_KEY_VALIDATION_GAS = 470000n; // P-256 ECDSA, WebAuthn과 유사
-  static readonly WEB_AUTHN_KEY_VALIDATION_GAS = 470000n; // 측정시 약 45만 gas 소모
-  static readonly OAUTH_RS256_KEY_VALIDATION_GAS = 350000n; // RSA-2048 서명 검증
-  static readonly ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 1000000n; // 신규 컨트랙트 측정값 기준, 여유분 포함 (구 컨트랙트: ~340000)
+  static readonly SECP256K1_KEY_VALIDATION_GAS = 15000n;  // secp256k1 ECDSA, ecrecover level
+  static readonly SECP256R1_KEY_VALIDATION_GAS = 470000n; // P-256 ECDSA, similar to WebAuthn
+  static readonly WEB_AUTHN_KEY_VALIDATION_GAS = 470000n; // measured at approximately 450k gas
+  static readonly OAUTH_RS256_KEY_VALIDATION_GAS = 350000n; // RSA-2048 signature verification
+  static readonly ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 1000000n; // based on new contract measurement, includes buffer (old contract: ~340000)
 
-  // 키 타입별 예상 서명 크기 (bytes) — preVerificationGas 추정용 더미 서명 생성에 사용
+  // Estimated signature sizes per key type (bytes) — used to generate dummy signatures for preVerificationGas estimation
   private static readonly ESTIMATED_SIG_SIZES: Record<number, number> = {
     1: 65,     // keyAddress: ECDSA (r:32 + s:32 + v:1)
     2: 65,     // keySecp256k1: ECDSA
     3: 100,    // keySecp256r1: DER-encoded P-256
     4: 800,    // keyWebAuthn: authenticatorData + clientDataJSON + DER sig + 4x uint256
     5: 300,    // keyOAuthRS256: RSA-2048 signature + metadata
-    6: 2000,   // keyZkOAuthRS256: ZK proof (대형)
+    6: 2000,   // keyZkOAuthRS256: ZK proof (large)
   };
 
   protected factoryInterface: ethers.Interface = new ethers.Interface(
@@ -65,7 +65,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     super(chainId, entryPoint, provider);
     this.provider = provider;
 
-    // Paymaster 설정이 있으면 PaymasterService 인스턴스 생성
+    // Create PaymasterService instance if paymaster config is provided
     if (paymaster) {
       const paymasterServiceConfig: PaymasterServiceConfig = {
         serverUrl: paymaster.serverUrl,
@@ -75,7 +75,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
         tokenAddress: paymaster.tokenAddress,
       };
       this.paymasterService = new PaymasterService(paymasterServiceConfig);
-      // Paymaster 주소 설정
+      // Set paymaster address
       this.setPaymaster(paymaster.paymasterAddress);
     }
   }
@@ -111,7 +111,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     funcList: string[];
   } {
     if (parsedTx.fragment.inputs.length === 1) {
-      // 신 스타일: executeBatch({address target, uint256 value, bytes data}[] calls)
+      // New style: executeBatch({address target, uint256 value, bytes data}[] calls)
       const calls = parsedTx.args[0];
       return {
         destList: calls.map((c: BatchCallArg) => c.target),
@@ -119,9 +119,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
         funcList: calls.map((c: BatchCallArg) => c.data),
       };
     } else {
-      // 구 스타일: executeBatch(address[] dest, uint256[] value, bytes[] func)
-      // @deprecated 이 분기는 구버전 ZkapAccount 컨트랙트와의 하위 호환을 위해 유지됩니다.
-      //             신규 컨트랙트는 단일 배열 인자(BatchCallArg[]) 형식을 사용합니다.
+      // Old style: executeBatch(address[] dest, uint256[] value, bytes[] func)
+      // @deprecated This branch is kept for backward compatibility with older ZkapAccount contracts.
+      //             New contracts use the single array argument (BatchCallArg[]) format.
       return {
         destList: parsedTx.args[0],
         valueList: parsedTx.args[1],
@@ -131,11 +131,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   private async estimateCallGasLimit(): Promise<string> {
-    // sender 주소에 코드가 있는지 확인하여 배포 여부를 판단
+    // Check if code exists at the sender address to determine whether it is deployed
     const code = await this.provider.getCode(this.userOp.sender as string);
 
     if (code !== "0x") {
-      // 지갑이 이미 배포된 경우
+      // Wallet is already deployed
       const callGasLimit = await this.provider.estimateGas({
         from: this.entryPoint,
         to: this.userOp.sender,
@@ -144,18 +144,18 @@ export class ZkapBuilder extends BaseAccountBuilder {
       });
       return ethers.toBeHex(callGasLimit + ZkapBuilder.GAS_BUFFER);
     } else {
-      // 지갑이 생성되어 있지 않고 initCode가 없으면 잘못된 시나리오
+      // Wallet is not deployed and no initCode provided — invalid scenario
       if (!this.userOp.initCode || this.userOp.initCode === "0x") {
         throw new Error("Wallet not deployed and no initCode provided");
       }
 
-      // initCode는 있지만 callData가 없는 경우 (지갑 생성만)
+      // initCode present but no callData (wallet creation only)
       if (!this.userOp.callData || this.userOp.callData === "0x") {
-        const WALLET_CREATION_ONLY_CALL_GAS = 1000n; // 지갑 생성만 할 때 최소 callGasLimit
+        const WALLET_CREATION_ONLY_CALL_GAS = 1000n; // minimum callGasLimit for wallet creation only
         return ethers.toBeHex(WALLET_CREATION_ONLY_CALL_GAS);
       }
 
-      // initCode와 callData가 모두 있는 경우
+      // Both initCode and callData are present
       const callData = this.userOp.callData as string;
       const iface = new ethers.Interface(ZkapAccountABI);
 
@@ -180,7 +180,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
             const { destList, valueList, funcList } = this.normalizeExecuteBatchArgs(parsedTx);
 
             if (destList.length === 0) {
-              return ethers.toBeHex(ZkapBuilder.GAS_BUFFER); // 실행할 것이 없으면 버퍼만 반환
+              return ethers.toBeHex(ZkapBuilder.GAS_BUFFER); // nothing to execute, return buffer only
             }
 
             const estimationPromises = destList.map((d: string, i: number) =>
@@ -223,7 +223,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
           }
 
           default:
-            // 지원하지 않는 함수일 경우, 에러를 던져 수동 처리를 유도합니다.
+            // Unsupported function: throw error to require manual handling.
             throw new Error(
               `Unsupported function for gas estimation: ${parsedTx.name}`
             );
@@ -248,20 +248,20 @@ export class ZkapBuilder extends BaseAccountBuilder {
     }
 
     const callData = this.userOp.callData as string;
-    // callData 가 ZkapAccount의 execute 함수 호출인지 executeBatch 함수 호출인지 판단
+    // Determine whether callData is a call to ZkapAccount's execute or executeBatch function
     const iface = new ethers.Interface(ZkapAccountABI);
     const parsedTx = iface.parseTransaction({ data: callData });
     if (parsedTx?.name !== "execute" && parsedTx?.name !== "executeBatch") {
       throw new Error(`Call data is not a valid ZkapAccount function call. Expected 'execute' or 'executeBatch', but found '${parsedTx?.name}'.`);
     }
 
-    // function transfer(address to, uint256 value)  함수 호출하는 callData 생성
+    // Build callData for the transfer(address to, uint256 value) function call
     const erc20TransferCallData = new ethers.Interface(
       ERC20ABI
     ).encodeFunctionData("transfer", [dest, value]);
 
     if (parsedTx?.name === "execute") {
-      // execute 함수 호출인 경우, 기존 excute 함수 호출 대신에 executeBatch 함수 호출하는 것으로 변경하고, ERC20 토큰을 paymaster account 에 전송하는 로직을 추가
+      // For an execute call: replace it with executeBatch and prepend the ERC20 transfer to the paymaster account
       const userRequiredDest = parsedTx?.args[0];
       const userRequiredValue = parsedTx?.args[1];
       const userRequiredFunc = parsedTx?.args[2];
@@ -288,11 +288,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   /**
-   * UserOperation의 가스 필드(nonce, callGasLimit, verificationGasLimit, preVerificationGas, maxFeePerGas 등)를 자동으로 채웁니다.
-   * Paymaster가 설정된 경우 paymasterData도 함께 채워집니다.
+   * Automatically fills gas fields of the UserOperation (nonce, callGasLimit, verificationGasLimit, preVerificationGas, maxFeePerGas, etc.).
+   * If a Paymaster is configured, paymasterData will also be populated.
    *
-   * @warning 이 메서드는 인스턴스당 한 번만 호출해야 합니다. 재호출 시 가스 추정값이 달라질 수 있습니다.
-   *          새 UserOp가 필요하면 새 ZkapBuilder 인스턴스를 생성하세요.
+   * @warning This method should only be called once per instance. Repeated calls may produce different gas estimates.
+   *          Create a new ZkapBuilder instance if a new UserOp is needed.
    */
   async autoFillUserOp(nonceKey?: bigint): Promise<this> {
     /* istanbul ignore next */
@@ -323,7 +323,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       throw new Error("Failed to get fee data from provider");
     }
     if (this.userOp.nonce === undefined) {
-      // nonce 값은 entryPoint 의 getNonce(sender, nonceKey) 값으로 설정
+      // Set nonce from entryPoint.getNonce(sender, nonceKey)
       const entryPointContract = new ethers.Contract(
         this.entryPoint,
         ["function getNonce(address,uint192) view returns(uint256)"],
@@ -343,7 +343,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       estimatedCallGasBigInt < MIN_CALL_GAS_LIMIT ? MIN_CALL_GAS_LIMIT : estimatedCallGasBigInt
     );
 
-    // preVerificationGas 계산에 packUserOp가 필요하므로 verificationGasLimit 임시값 설정
+    // Set a temporary verificationGasLimit since packUserOp is needed for preVerificationGas calculation
     if (!this.userOp.verificationGasLimit) {
       this.userOp.verificationGasLimit = ethers.toBeHex("1500000");
     }
@@ -364,14 +364,14 @@ export class ZkapBuilder extends BaseAccountBuilder {
     this.userOp.preVerificationGas = ethers.toBeHex(preVerificationGas);
     let verificationGasLimit = 25000n;
 
-    // verification 할 때 필요한 gas 계산 -> 각 키 타입에 따라 필요한 gas 를 사전에 정의한 값으로 설정
+    // Calculate gas required for verification -> use predefined values per key type
     if (this.userOp.initCode !== "0x" && this.userOp.initCode !== undefined) {
       const zkapFactory = ethers.dataSlice(this.userOp.initCode, 0, 20);
       const callData = ethers.dataSlice(this.userOp.initCode, 20);
       const walletCreationGasLimit = await this.provider.estimateGas({
         to: zkapFactory,
         data: callData,
-        from: this.entryPoint,  // EntryPoint가 factory를 호출하므로
+        from: this.entryPoint,  // EntryPoint calls the factory
       });
 
       verificationGasLimit += BigInt(walletCreationGasLimit);
@@ -400,7 +400,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
     this.userOp.verificationGasLimit = ethers.toBeHex(verificationGasLimit);
 
-    // Paymaster가 설정되어 있으면 paymaster 관련 데이터 자동 채우기
+    // If paymaster is configured, auto-populate paymaster-related data
     if (this.paymasterService) {
       const MAX_PAYMASTER_PASSES = 3;
       for (let pass = 0; pass < MAX_PAYMASTER_PASSES; pass++) {
@@ -408,7 +408,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
         const newPvg = this.calculatePreVerificationGas(this.userOp as UserOperation);
         const newPvgHex = ethers.toBeHex(newPvg);
         if (newPvgHex === this.userOp.preVerificationGas) {
-          break; // preVerificationGas가 수렴됨
+          break; // preVerificationGas has converged
         }
         this.userOp.preVerificationGas = newPvgHex;
       }
@@ -418,8 +418,8 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   /**
-   * Paymaster 관련 데이터를 자동으로 채웁니다.
-   * PaymasterService가 설정되어 있을 때만 호출됩니다.
+   * Automatically populates paymaster-related data.
+   * Only called when PaymasterService is configured.
    */
   private async autoFillPaymasterData(): Promise<void> {
     /* istanbul ignore next */
@@ -430,7 +430,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       );
     }
 
-    // Paymaster 검증 및 PostOp 가스 한도 설정
+    // Set paymaster verification and PostOp gas limits
     this.userOp.paymasterVerificationGasLimit = ethers.toBeHex(
       this.paymasterService.estimatePaymasterVerificationGasLimit()
     );
@@ -438,15 +438,15 @@ export class ZkapBuilder extends BaseAccountBuilder {
       this.paymasterService.estimatePaymasterPostOpGasLimit()
     );
 
-    // Paymaster 데이터 가져오기
+    // Fetch paymaster data
     const userOp = this.getUserOp();
     const paymasterData = await this.paymasterService.getPaymasterData(userOp);
     this.setPaymasterData(paymasterData);
   }
 
   /**
-   * Paymaster 설정을 변경합니다.
-   * @param paymaster Paymaster 설정
+   * Updates the paymaster configuration.
+   * @param paymaster Paymaster configuration
    */
   setPaymasterConfig(paymaster: PaymasterServiceConfig): this {
     const paymasterServiceConfig: PaymasterServiceConfig = {
@@ -462,7 +462,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   /**
-   * Paymaster 설정을 제거합니다 (대납 기능 비활성화).
+   * Removes the paymaster configuration (disables gas sponsorship).
    */
   removePaymasterConfig(): this {
     this.paymasterService = undefined;
@@ -473,6 +473,13 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Sets the initCode for deploying the wallet on first use.
+   * Only needed when the wallet has not been deployed yet.
+   * @param zkapFactory Address of the ZkapFactory contract
+   * @param salt Deterministic salt (use `WalletHelper.computeSalt(aud, sub)`)
+   * @param keys Encoded master key and tx key
+   */
   setInitCode(
     zkapFactory: string,
     salt: ethers.BigNumberish,
@@ -496,11 +503,20 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Sets the initCode field directly as a raw hex string.
+   * Prefer `setInitCode()` unless you are constructing initCode manually.
+   */
   setRawInitCode(initCode: string): this {
     this.userOp.initCode = initCode;
     return this;
   }
 
+  /**
+   * Encodes and sets the UserOperation signature.
+   * @param keyIndexList Indices of the keys used to sign (e.g. [0] for the first key)
+   * @param keySignatureList Hex-encoded signatures returned by `signer.signUserOpHash()`
+   */
   setSignature(keyIndexList: number[], keySignatureList: string[]): this {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
 
@@ -512,11 +528,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   /**
-   * tx key 업데이트 callData를 설정합니다.
-   * @param encoded 인코딩된 키 데이터
-   * @warning 이 메서드는 signerKeyTypes를 keyZkOAuthRS256으로 강제 설정합니다.
-   *          이전에 setSignerKeyTypes()로 설정한 값은 무효화됩니다.
-   *          키 업데이트 트랜잭션은 항상 ZK-OAuth RS256 서명이 필요합니다.
+   * Sets the callData for a tx key update.
+   * @param encoded Encoded key data
+   * @warning This method forcibly sets signerKeyTypes to keyZkOAuthRS256.
+   *          Any value previously set via setSignerKeyTypes() will be overridden.
+   *          Key update transactions always require a ZK-OAuth RS256 signature.
    */
   setUpdateTxKeyCallData(encoded: string): this {
     if (!this.userOp.sender) {
@@ -525,18 +541,18 @@ export class ZkapBuilder extends BaseAccountBuilder {
     const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const callData = callDataBuilder.encode("updateTxKey", [encoded]);
     this.setCallDataInternal(callData);
-    // 이 메서드는 키 업데이트 트랜잭션 전용이므로 signerKeyTypes를 keyZkOAuthRS256으로 강제 덮어씁니다.
-    // 이전에 setSignerKeyTypes()로 설정한 값은 무효화됩니다.
+    // This method is dedicated to key update transactions, so it forcibly overrides signerKeyTypes to keyZkOAuthRS256.
+    // Any value previously set via setSignerKeyTypes() will be invalidated.
     this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
     return this;
   }
 
   /**
-   * master key 업데이트 callData를 설정합니다.
-   * @param encoded 인코딩된 키 데이터
-   * @warning 이 메서드는 signerKeyTypes를 keyZkOAuthRS256으로 강제 설정합니다.
-   *          이전에 setSignerKeyTypes()로 설정한 값은 무효화됩니다.
-   *          키 업데이트 트랜잭션은 항상 ZK-OAuth RS256 서명이 필요합니다.
+   * Sets the callData for a master key update.
+   * @param encoded Encoded key data
+   * @warning This method forcibly sets signerKeyTypes to keyZkOAuthRS256.
+   *          Any value previously set via setSignerKeyTypes() will be overridden.
+   *          Key update transactions always require a ZK-OAuth RS256 signature.
    */
   setUpdateMasterKeyCallData(encoded: string): this {
     if (!this.userOp.sender) {
@@ -545,19 +561,19 @@ export class ZkapBuilder extends BaseAccountBuilder {
     const callDataBuilder = new CallDataBuilder(ZkapAccountABI);
     const callData = callDataBuilder.encode("updateMasterKey", [encoded]);
     this.setCallDataInternal(callData);
-    // 이 메서드는 키 업데이트 트랜잭션 전용이므로 signerKeyTypes를 keyZkOAuthRS256으로 강제 덮어씁니다.
-    // 이전에 setSignerKeyTypes()로 설정한 값은 무효화됩니다.
+    // This method is dedicated to key update transactions, so it forcibly overrides signerKeyTypes to keyZkOAuthRS256.
+    // Any value previously set via setSignerKeyTypes() will be invalidated.
     this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
     return this;
   }
 
   /**
-   * master key와 tx key를 동시에 업데이트하는 callData를 설정합니다.
-   * @param encodedMasterKey 인코딩된 master key 데이터
-   * @param encodedTxKey 인코딩된 tx key 데이터
-   * @warning 이 메서드는 signerKeyTypes를 keyZkOAuthRS256으로 강제 설정합니다.
-   *          이전에 setSignerKeyTypes()로 설정한 값은 무효화됩니다.
-   *          키 업데이트 트랜잭션은 항상 ZK-OAuth RS256 서명이 필요합니다.
+   * Sets the callData for simultaneously updating both master key and tx key.
+   * @param encodedMasterKey Encoded master key data
+   * @param encodedTxKey Encoded tx key data
+   * @warning This method forcibly sets signerKeyTypes to keyZkOAuthRS256.
+   *          Any value previously set via setSignerKeyTypes() will be overridden.
+   *          Key update transactions always require a ZK-OAuth RS256 signature.
    */
   setUpdateKeysCallData(keys: { encodedMasterKey: string; encodedTxKey: string }): this {
     const { encodedMasterKey, encodedTxKey } = keys;
@@ -570,16 +586,16 @@ export class ZkapBuilder extends BaseAccountBuilder {
       encodedTxKey,
     ]);
     this.setCallDataInternal(callData);
-    // 이 메서드는 키 업데이트 트랜잭션 전용이므로 signerKeyTypes를 keyZkOAuthRS256으로 강제 덮어씁니다.
-    // 이전에 setSignerKeyTypes()로 설정한 값은 무효화됩니다.
+    // This method is dedicated to key update transactions, so it forcibly overrides signerKeyTypes to keyZkOAuthRS256.
+    // Any value previously set via setSignerKeyTypes() will be invalidated.
     this.signerKeyTypes = [PrimitiveAccountKeyTypes.keyZkOAuthRS256];
     return this;
   }
 
   /**
-   * preVerificationGas 추정을 위한 더미 서명을 생성합니다.
-   * 실제 서명 구조(encode(["uint8[]", "bytes[]"], ...))를 모방하여
-   * 정확한 calldataCost 추정이 가능하도록 합니다.
+   * Creates a dummy signature for preVerificationGas estimation.
+   * Mimics the real signature structure (encode(["uint8[]", "bytes[]"], ...))
+   * to enable accurate calldataCost estimation.
    */
   private createDummySignature(): string {
     const keyTypes = this.signerKeyTypes ?? [PrimitiveAccountKeyTypes.keyWebAuthn];
@@ -593,21 +609,21 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   /**
-   * 내부용: signerKeyTypes 검증 없이 callData를 설정합니다.
-   * setExecuteCallData, setExecuteBatchCallData 등 내부 메서드에서 사용합니다.
+   * Internal use only: sets callData without validating signerKeyTypes.
+   * Used by internal methods such as setExecuteCallData and setExecuteBatchCallData.
    */
   private setCallDataInternal(callData: string): void {
     this.userOp.callData = callData;
   }
 
   /**
-   * execute callData를 설정합니다.
-   * @param contractAddress 대상 컨트랙트 주소
-   * @param value 전송할 ETH (wei)
-   * @param data calldata (ETH 전송 시 '0x')
-   * @param signerKeyTypes 서명 키 타입 배열 (미지정 시 keyWebAuthn 기본값).
-   *        다른 키 타입이 필요하면 명시적으로 전달하거나, 이후 setSignerKeyTypes()로 오버라이드 가능.
-   * @warning 이 메서드는 signerKeyTypes를 설정합니다. 이전에 setSignerKeyTypes()로 설정한 값은 덮어씌워집니다.
+   * Sets the execute callData.
+   * @param contractAddress Target contract address
+   * @param value ETH to send (in wei)
+   * @param data calldata ('0x' for plain ETH transfers)
+   * @param signerKeyTypes Array of signer key types (defaults to keyWebAuthn if not specified).
+   *        Pass explicitly or override later with setSignerKeyTypes() if a different key type is needed.
+   * @warning This method sets signerKeyTypes. Any value previously set via setSignerKeyTypes() will be overwritten.
    */
   setExecuteCallData(
     contractAddress: string,
@@ -628,13 +644,13 @@ export class ZkapBuilder extends BaseAccountBuilder {
   }
 
   /**
-   * executeBatch callData를 설정합니다.
-   * @param contractAddresses 대상 컨트랙트 주소 배열
-   * @param values 전송할 ETH 배열 (wei)
-   * @param data calldata 배열
-   * @param signerKeyTypes 서명 키 타입 배열 (미지정 시 keyWebAuthn 기본값).
-   *        다른 키 타입이 필요하면 명시적으로 전달하거나, 이후 setSignerKeyTypes()로 오버라이드 가능.
-   * @warning 이 메서드는 signerKeyTypes를 설정합니다. 이전에 setSignerKeyTypes()로 설정한 값은 덮어씌워집니다.
+   * Sets the executeBatch callData.
+   * @param contractAddresses Array of target contract addresses
+   * @param values Array of ETH amounts to send (in wei)
+   * @param data Array of calldata
+   * @param signerKeyTypes Array of signer key types (defaults to keyWebAuthn if not specified).
+   *        Pass explicitly or override later with setSignerKeyTypes() if a different key type is needed.
+   * @warning This method sets signerKeyTypes. Any value previously set via setSignerKeyTypes() will be overwritten.
    */
   setExecuteBatchCallData(
     contractAddresses: string[],
@@ -654,6 +670,10 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Sets arbitrary callData directly. Requires `setSignerKeyTypes()` to be called first.
+   * Prefer `setExecuteCallData()` or `setExecuteBatchCallData()` for standard transfers.
+   */
   setCallData(callData: string): this {
     if (!this.signerKeyTypes || this.signerKeyTypes.length === 0) {
       throw new Error(
@@ -664,6 +684,11 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Sets the key types used to sign this UserOperation.
+   * Must match the key type(s) registered on the wallet.
+   * @param keyTypes Array of `PrimitiveAccountKeyTypes` values (e.g. `[keyWebAuthn]`)
+   */
   setSignerKeyTypes(keyTypes: number[]): this {
     if (!Array.isArray(keyTypes) || keyTypes.length === 0) {
       throw new Error("keyTypes must be a non-empty array");
@@ -685,6 +710,10 @@ export class ZkapBuilder extends BaseAccountBuilder {
     return this;
   }
 
+  /**
+   * Returns the UserOperation hash scoped to the paymaster context.
+   * Used internally by PaymasterService; not needed for typical signing flows.
+   */
   getUserOpHashForPaymaster(): string {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
 
@@ -692,7 +721,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       this.encodeUserOpForPaymaster(this.getPackedUserOp())
     );
 
-    // entryPoint를 domain separator에 포함시켜 다른 EntryPoint로의 replay 방지
+    // Include entryPoint in domain separator to prevent replay attacks against different EntryPoints
     const enc = defaultAbiCoder.encode(
       ["bytes32", "address", "uint256"],
       [userOpHash, this.entryPoint, this.chainId]

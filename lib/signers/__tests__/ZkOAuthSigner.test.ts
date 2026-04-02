@@ -1,8 +1,8 @@
 /**
- * ZkPasskeySigner 테스트
+ * ZkOAuthSigner tests
  *
- * OAuth OIDC를 사용한 ZK 증명 기반 서명 Signer
- * Google/Kakao OAuth 공개키 가져오기, ZK 증명 서버 통신, 스마트 컨트랙트 상호작용
+ * Signer that signs using ZK proofs with OAuth OIDC
+ * Fetches Google/Kakao OAuth public keys, communicates with the ZK proof server, and interacts with smart contracts
  */
 
 // Mock ABIs first (before any imports)
@@ -61,7 +61,7 @@ jest.mock('ethers', () => ({
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
-import { ZkPasskeySigner, clearJwksCache } from '../ZkPasskeySigner';
+import { ZkOAuthSigner, clearJwksCache } from '../ZkOAuthSigner';
 import { PrimitiveAccountKeyTypes } from '../../types/AccountKey';
 
 // Helper to create mock JWT
@@ -103,7 +103,7 @@ function createProofResponse() {
   };
 }
 
-describe('ZkPasskeySigner', () => {
+describe('ZkOAuthSigner', () => {
   const mockProofServerUrl = 'http://localhost:3000';
   const mockEnUrl = 'http://localhost:8545';
   const mockZkapAddress = '0x' + '11'.repeat(20);
@@ -119,7 +119,7 @@ describe('ZkPasskeySigner', () => {
 
   describe('constructor', () => {
     it('should set keyTypes to keyZkOAuthRS256', () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -136,7 +136,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw when socialServices and idTokenGenerators length mismatch', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           mockProofServerUrl,
           mockEnUrl,
           mockZkapAddress,
@@ -151,7 +151,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw when socialServices.length > 3', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           mockProofServerUrl,
           mockEnUrl,
           mockZkapAddress,
@@ -165,7 +165,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should accept multiple social services matching zkapN', () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -180,7 +180,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when zkapK > 1 (single-proof signer limitation)', () => {
-      expect(() => new ZkPasskeySigner(
+      expect(() => new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -189,12 +189,12 @@ describe('ZkPasskeySigner', () => {
         mockPoseidonTreeAddress,
         2,
         3
-      )).toThrow('ZkPasskeySigner currently supports only zkapK=1');
+      )).toThrow('ZkOAuthSigner currently supports only zkapK=1');
     });
 
     it('should throw when socialServices.length !== zkapN (H-1)', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           mockProofServerUrl,
           mockEnUrl,
           mockZkapAddress,
@@ -209,7 +209,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw when proofServerUrl uses HTTP with non-localhost hostname', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           'http://remoteserver.com:3000',
           mockEnUrl,
           mockZkapAddress,
@@ -223,29 +223,29 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should allow HTTP for RFC1918 private addresses', () => {
-      expect(() => new ZkPasskeySigner('http://10.0.2.2:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
-      expect(() => new ZkPasskeySigner('http://192.168.1.10:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
-      expect(() => new ZkPasskeySigner('http://172.16.0.1:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+      expect(() => new ZkOAuthSigner('http://10.0.2.2:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+      expect(() => new ZkOAuthSigner('http://192.168.1.10:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+      expect(() => new ZkOAuthSigner('http://172.16.0.1:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
     });
 
     it('should allow HTTP for .local domains', () => {
-      expect(() => new ZkPasskeySigner('http://myserver.local:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+      expect(() => new ZkOAuthSigner('http://myserver.local:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
     });
 
     it('should allow HTTP for IPv6 loopback addresses', () => {
       // [::1] is the bracketed form used in URLs
-      expect(() => new ZkPasskeySigner('http://[::1]:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+      expect(() => new ZkOAuthSigner('http://[::1]:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
     });
 
     it('should allow HTTP for IPv4-mapped IPv6 loopback', () => {
       // Node.js normalizes ::ffff:127.0.0.1 → ::ffff:7f00:1 in URL.hostname
-      expect(() => new ZkPasskeySigner('http://[::ffff:7f00:1]:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
+      expect(() => new ZkOAuthSigner('http://[::ffff:7f00:1]:3000', mockEnUrl, mockZkapAddress, ['google'], [mockIdTokenGenerator], mockPoseidonTreeAddress, 1, 1)).not.toThrow();
     });
   });
 
   describe('init', () => {
     it('should initialize contracts and fetch anchor', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -263,7 +263,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should return cached initPromise when called twice (idempotent)', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -286,7 +286,7 @@ describe('ZkPasskeySigner', () => {
         keyId: BigInt(0),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -305,7 +305,7 @@ describe('ZkPasskeySigner', () => {
 
   describe('prepareIdToken', () => {
     it('should prepare idToken for given index', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -325,7 +325,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should pass raw userOpHash (not EIP-191 hash) to idTokenGenerator', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -344,7 +344,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when index is out of range', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -360,7 +360,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when idTokenGenerator is undefined', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -377,7 +377,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw when idToken is undefined', async () => {
       const failingGenerator = jest.fn().mockResolvedValue(undefined);
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -393,7 +393,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should initialize if not already initialized', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -414,7 +414,7 @@ describe('ZkPasskeySigner', () => {
       const generator1 = jest.fn().mockResolvedValue(createMockJwt('kid1'));
       const generator2 = jest.fn().mockResolvedValue(createMockJwt('kid2'));
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -432,7 +432,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when concurrent prepareIdToken calls are made', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -457,7 +457,7 @@ describe('ZkPasskeySigner', () => {
   describe('signUserOpHash', () => {
     it('should throw when idTokens is not prepared (selector=true slot)', async () => {
       // zkapK=1 means selector[0]=true, so idTokens[0] must be set
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -473,7 +473,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when idTokens is undefined', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -493,7 +493,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when userOpHash format is invalid in signUserOpHash', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -513,7 +513,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when signUserOpHash is called with different hash than prepared', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -546,7 +546,7 @@ describe('ZkPasskeySigner', () => {
         });
 
       // zkapK=1, zkapN=1: selector=[true,false,false] → slot 0 is active, JWKS is fetched
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -577,7 +577,7 @@ describe('ZkPasskeySigner', () => {
 
       const kakaoGenerator = jest.fn().mockResolvedValue(createMockJwt('kakao-kid'));
       // zkapK=1, zkapN=1: selector=[true,false,false] → slot 0 is active, JWKS is fetched
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -596,7 +596,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw for invalid social service', () => {
       const invalidGenerator = jest.fn().mockResolvedValue(createMockJwt());
-      expect(() => new ZkPasskeySigner(
+      expect(() => new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -609,7 +609,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when selector is not properly initialized', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -633,7 +633,7 @@ describe('ZkPasskeySigner', () => {
       const generator0 = jest.fn().mockResolvedValue(createMockJwt('kid0'));
       const generator1 = jest.fn().mockResolvedValue(createMockJwt('kid1'));
       // zkapN=2, zkapK=1: selector=[true, false] — slot 0 requires token, slot 1 does not
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -655,7 +655,7 @@ describe('ZkPasskeySigner', () => {
 
   describe('getSignatures (private, tested via casting)', () => {
     it('should throw when poseidonMerkleTreeDirectory not initialized', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -678,7 +678,7 @@ describe('ZkPasskeySigner', () => {
         json: () => Promise.resolve(createProofResponse()),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -714,7 +714,7 @@ describe('ZkPasskeySigner', () => {
         json: () => Promise.resolve(createProofResponse()),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -742,7 +742,7 @@ describe('ZkPasskeySigner', () => {
         json: () => Promise.resolve(createProofResponse()),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -765,7 +765,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when idTokens.length is 0', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -788,7 +788,7 @@ describe('ZkPasskeySigner', () => {
         status: 502,
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -806,7 +806,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when jwtPks length does not match idTokens length', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -824,7 +824,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when idTokens.length > 3', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -850,7 +850,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -876,7 +876,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -907,7 +907,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -938,7 +938,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -964,7 +964,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -988,7 +988,7 @@ describe('ZkPasskeySigner', () => {
         text: () => Promise.resolve('{"error":"invalid JWT signature"}'),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1017,7 +1017,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1046,7 +1046,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1078,7 +1078,7 @@ describe('ZkPasskeySigner', () => {
 
       const googleGenerator = jest.fn().mockResolvedValue(createMockJwt('google-kid'));
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1110,7 +1110,7 @@ describe('ZkPasskeySigner', () => {
 
       const kakaoGenerator = jest.fn().mockResolvedValue(createMockJwt('kakao-kid'));
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1135,7 +1135,7 @@ describe('ZkPasskeySigner', () => {
         json: () => Promise.resolve({ notKeys: [] }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1159,7 +1159,7 @@ describe('ZkPasskeySigner', () => {
       });
 
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1182,7 +1182,7 @@ describe('ZkPasskeySigner', () => {
       });
 
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1206,7 +1206,7 @@ describe('ZkPasskeySigner', () => {
 
       const kakaoGenerator = jest.fn().mockResolvedValue(createMockJwt('kakao-kid'));
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1230,7 +1230,7 @@ describe('ZkPasskeySigner', () => {
 
       const kakaoGenerator = jest.fn().mockResolvedValue(createMockJwt('kakao-kid'));
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1251,7 +1251,7 @@ describe('ZkPasskeySigner', () => {
 
       const kakaoGenerator = jest.fn().mockResolvedValue(createMockJwt('kakao-kid'));
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1286,7 +1286,7 @@ describe('ZkPasskeySigner', () => {
 
       const cachedKidGenerator = jest.fn().mockResolvedValue(createMockJwt('cached-kid'));
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer1 = new ZkPasskeySigner(
+      const signer1 = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1309,7 +1309,7 @@ describe('ZkPasskeySigner', () => {
       expect(fetchCountAfterFirst).toBe(1);
 
       // Second sign with a new signer instance and different hash — JWKS should be cached in module cache
-      const signer2 = new ZkPasskeySigner(
+      const signer2 = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1338,7 +1338,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1362,7 +1362,7 @@ describe('ZkPasskeySigner', () => {
         }),
       });
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1395,7 +1395,7 @@ describe('ZkPasskeySigner', () => {
           json: () => Promise.resolve(createProofResponse()),
         });
 
-      const signer1 = new ZkPasskeySigner(
+      const signer1 = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1427,7 +1427,7 @@ describe('ZkPasskeySigner', () => {
           json: () => Promise.resolve(createProofResponse()),
         });
 
-      const signer2 = new ZkPasskeySigner(
+      const signer2 = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1463,7 +1463,7 @@ describe('ZkPasskeySigner', () => {
         });
 
       // zkapK=1: selector[0]=true → JWKS fetch is performed for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1489,7 +1489,7 @@ describe('ZkPasskeySigner', () => {
     it('should reject full signing flow setup when zkapK > 1', () => {
       const googleGenerator = jest.fn().mockResolvedValue(createMockJwt('google-kid'));
       const kakaoGenerator = jest.fn().mockResolvedValue(createMockJwt('kakao-kid'));
-      expect(() => new ZkPasskeySigner(
+      expect(() => new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1498,7 +1498,7 @@ describe('ZkPasskeySigner', () => {
         mockPoseidonTreeAddress,
         2,
         2
-      )).toThrow('ZkPasskeySigner currently supports only zkapK=1');
+      )).toThrow('ZkOAuthSigner currently supports only zkapK=1');
     });
 
     it('should skip merkle path lookup for selector=false slots and return dummy values', async () => {
@@ -1518,7 +1518,7 @@ describe('ZkPasskeySigner', () => {
       const googleGenerator = jest.fn().mockResolvedValue(createMockJwt('google-kid'));
       const kakaoGenerator = jest.fn().mockResolvedValue(createMockJwt('kakao-kid'));
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1545,7 +1545,7 @@ describe('ZkPasskeySigner', () => {
 
   describe('edge cases', () => {
     it('should throw when zkapK = 0', () => {
-      expect(() => new ZkPasskeySigner(
+      expect(() => new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1558,7 +1558,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should throw when zkapK = zkapN > 1', () => {
-      expect(() => new ZkPasskeySigner(
+      expect(() => new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1567,14 +1567,14 @@ describe('ZkPasskeySigner', () => {
         mockPoseidonTreeAddress,
         3,
         3
-      )).toThrow('ZkPasskeySigner currently supports only zkapK=1');
+      )).toThrow('ZkOAuthSigner currently supports only zkapK=1');
     });
   });
 
   describe('M-2: zkapK/zkapN constructor validation', () => {
     it('should throw when zkapN <= 0', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           mockProofServerUrl,
           mockEnUrl,
           mockZkapAddress,
@@ -1589,7 +1589,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw when zkapN is negative', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           mockProofServerUrl,
           mockEnUrl,
           mockZkapAddress,
@@ -1604,7 +1604,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw when zkapN > 3', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           mockProofServerUrl,
           mockEnUrl,
           mockZkapAddress,
@@ -1619,7 +1619,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw when zkapK > zkapN', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           mockProofServerUrl,
           mockEnUrl,
           mockZkapAddress,
@@ -1634,7 +1634,7 @@ describe('ZkPasskeySigner', () => {
 
     it('should throw when zkapK is negative', () => {
       expect(() => {
-        new ZkPasskeySigner(
+        new ZkOAuthSigner(
           mockProofServerUrl,
           mockEnUrl,
           mockZkapAddress,
@@ -1653,7 +1653,7 @@ describe('ZkPasskeySigner', () => {
       // First call fails
       mockMasterKeyList.mockRejectedValueOnce(new Error('RPC failed'));
 
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1686,7 +1686,7 @@ describe('ZkPasskeySigner', () => {
       const invalidJwtGenerator = jest.fn().mockResolvedValue('header.payload');
 
       // zkapK=1: selector[0]=true → decodeJwtHeader is called for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1712,7 +1712,7 @@ describe('ZkPasskeySigner', () => {
       const noKidGenerator = jest.fn().mockResolvedValue(noKidJwt);
 
       // zkapK=1: selector[0]=true → decodeJwtHeader is called for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1734,7 +1734,7 @@ describe('ZkPasskeySigner', () => {
       const wrongAlgGenerator = jest.fn().mockResolvedValue(wrongAlgJwt);
 
       // zkapK=1: selector[0]=true → decodeJwtHeader is called for slot 0
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1754,7 +1754,7 @@ describe('ZkPasskeySigner', () => {
 
   describe('destroy', () => {
     it('should clear all sensitive state fields', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1784,7 +1784,7 @@ describe('ZkPasskeySigner', () => {
     });
 
     it('should prevent further signing after destroy', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,
@@ -1807,7 +1807,7 @@ describe('ZkPasskeySigner', () => {
 
   describe('prepareIdToken - userOpHash change error', () => {
     it('should throw when userOpHash changes between prepareIdToken calls', async () => {
-      const signer = new ZkPasskeySigner(
+      const signer = new ZkOAuthSigner(
         mockProofServerUrl,
         mockEnUrl,
         mockZkapAddress,

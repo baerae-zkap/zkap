@@ -1,7 +1,7 @@
 /**
- * ZkapAccount 테스트
+ * ZkapAccount tests
  *
- * ZKAP 스마트 계정 구현
+ * ZKAP smart account implementation
  */
 
 // Mock ethers before imports

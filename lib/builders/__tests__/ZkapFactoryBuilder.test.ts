@@ -1,7 +1,7 @@
 /**
- * ZkapFactoryBuilder 테스트
+ * ZkapFactoryBuilder tests
  *
- * ZkapAccountFactory 컨트랙트와 상호작용하여 계정 주소를 계산하는 빌더
+ * Builder that interacts with the ZkapAccountFactory contract to compute account addresses
  */
 
 // Mock ethers before imports

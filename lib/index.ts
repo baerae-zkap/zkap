@@ -1,15 +1,15 @@
-// 타입 정의
+// Type definitions
 export * from "./types/UserOperation";
 export * from "./types/AccountKey";
 export * from "./types/jwk";
 export * from "./types/Swap";
 export * from "./types/abi";
 
-// Account 관련 클래스
+// Account classes
 export { BaseAccount } from "./account/BaseAccount";
 export { ZkapAccount } from "./account/ZkapAccount";
 
-// Builder 관련 클래스
+// Builder classes
 export { BaseAccountBuilder } from "./builders/BaseAccountBuilder";
 export { AccountKeyBuilder } from "./builders/AccountKeyBuilder";
 export { ZkapBuilder } from "./builders/ZkapBuilder";
@@ -19,17 +19,17 @@ export { ZkapCreator } from "./builders/ZkapCreator";
 export { ZkapFactoryBuilder } from "./builders/ZkapFactoryBuilder";
 export { OneInchAggregator } from "./builders/aggregators/OneInchAggregator";
 
-// Signer 관련 클래스
+// Signer classes
 export { AddressKeySigner } from "./signers/AddressKeySigner";
 export { PasskeySigner } from "./signers/PasskeySigner";
-export { ZkPasskeySigner, clearJwksCache } from "./signers/ZkPasskeySigner";
+export { ZkOAuthSigner } from "./signers/ZkOAuthSigner";
 export { ZkOidcSigner } from "./signers/ZkOidcSigner";
 
-// Paymaster 서비스
+// Paymaster service
 export { PaymasterService, PaymasterMode } from "./utils/PaymasterService";
 export type { PaymasterServiceConfig, PaymasterDataResponse } from "./utils/PaymasterService";
 
-// 유틸리티 함수 및 인터페이스
+// Utility functions and interfaces
 export * from "./utils/crypto";
 export * from "./utils/signature";
 export * from "./utils/base64url";

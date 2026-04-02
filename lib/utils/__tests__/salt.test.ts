@@ -1,5 +1,5 @@
 /**
- * salt utility 테스트
+ * salt utility tests
  *
  * - computeSalt(aud, sub): keccak256(abi.encode(string, string)) → 0x hex
  */

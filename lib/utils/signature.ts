@@ -14,7 +14,7 @@ export function unwrapSignature(sigBuffer: Uint8Array) {
   if (rLength > sigBuffer.length - 4) {
     throw new Error("Invalid r length in DER signature");
   }
-  // s INTEGER 태그 검증
+  // Validate s INTEGER tag
   const sTagOffset = 4 + rLength;
   if (sTagOffset + 1 >= sigBuffer.length) {
     throw new Error("DER signature too short for s component");
@@ -26,9 +26,9 @@ export function unwrapSignature(sigBuffer: Uint8Array) {
   if (sTagOffset + 2 + sLength > sigBuffer.length) {
     throw new Error("Invalid s length in DER signature");
   }
-  // r과 s를 32바이트로 right-align
-  // DER에서 leading 0x00 sign byte가 추가되거나(MSB=1) 앞 0이 생략될 수 있으므로
-  // 항상 32바이트 버퍼에 우측 정렬하여 반환
+  // Right-align r and s to 32 bytes
+  // DER may add a leading 0x00 sign byte (when MSB=1) or omit leading zeros,
+  // so always right-align into a 32-byte buffer before returning
   const rRaw = sigBuffer.slice(4, 4 + rLength);
   const sRaw = sigBuffer.slice(sTagOffset + 2, sTagOffset + 2 + sLength);
   const r = new Uint8Array(32);

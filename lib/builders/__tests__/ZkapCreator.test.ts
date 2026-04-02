@@ -1,7 +1,7 @@
 /**
- * ZkapCreator 테스트
+ * ZkapCreator tests
  *
- * ZkapBuilder를 확장하여 새 ZKAP 계정 생성 기능 제공
+ * Extends ZkapBuilder to provide new ZKAP account creation functionality
  */
 
 // Mock ZkapFactoryBuilder before imports
