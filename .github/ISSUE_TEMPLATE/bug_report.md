@@ -5,7 +5,7 @@ labels: bug
 ---
 
 **Package version**
-`@baerae-zkap/zkap` v<!-- e.g. 0.1.0 -->
+`@baerae/zkap` v<!-- e.g. 0.1.0 -->
 
 **Node.js version**
 <!-- e.g. v20.10.0 -->

@@ -1,6 +1,6 @@
-# @baerae-zkap/zkap
+# @baerae/zkap
 
-[![npm version](https://img.shields.io/npm/v/@baerae-zkap/zkap)](https://www.npmjs.com/package/@baerae-zkap/zkap)
+[![npm version](https://img.shields.io/npm/v/@baerae/zkap)](https://www.npmjs.com/package/@baerae/zkap)
 [![CI](https://github.com/baerae-zkap/zkap/actions/workflows/dev-pr-ci.yml/badge.svg)](https://github.com/baerae-zkap/zkap/actions)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
@@ -18,7 +18,7 @@ TypeScript SDK for [ZKAP](https://zkap.app) smart wallets — ERC-4337 account a
 ## Installation
 
 ```bash
-npm install @baerae-zkap/zkap
+npm install @baerae/zkap
 ```
 
 Requires Node.js >= 18.
@@ -33,7 +33,7 @@ Requires Node.js >= 18.
 ### 1. Discover supported chains
 
 ```typescript
-import { ChainRegistry } from '@baerae-zkap/zkap';
+import { ChainRegistry } from '@baerae/zkap';
 
 const registry = new ChainRegistry();
 const chains = await registry.getSupportedChains();
@@ -51,7 +51,7 @@ import {
   ZkapBundlerProvider,
   WalletHelper,
   AddressKeySigner,
-} from '@baerae-zkap/zkap';
+} from '@baerae/zkap';
 
 const CHAIN_ID = 11155111; // use a chainId from getSupportedChains()
 const WALLET_ADDRESS = '0xYourZkapWalletAddress';
@@ -96,7 +96,7 @@ console.log('Wallet address:', address);
 Signs with one or more EOA private keys. Useful for testing or server-side flows.
 
 ```typescript
-import { AddressKeySigner } from '@baerae-zkap/zkap';
+import { AddressKeySigner } from '@baerae/zkap';
 
 const signer = new AddressKeySigner([privateKey]);
 ```
@@ -107,7 +107,7 @@ Signs with a WebAuthn credential. Provide a `verifyWithPasskey` callback that ca
 `navigator.credentials.get` and returns the assertion response.
 
 ```typescript
-import { PasskeySigner } from '@baerae-zkap/zkap';
+import { PasskeySigner } from '@baerae/zkap';
 
 const signer = new PasskeySigner(
   credentialId,
@@ -140,7 +140,7 @@ revealed on-chain — the proof shows they hold a valid token without exposing i
 > Supported providers: `"google"` and `"kakao"` only. Currently `zkapK=1` (single-provider).
 
 ```typescript
-import { ZkOAuthSigner } from '@baerae-zkap/zkap';
+import { ZkOAuthSigner } from '@baerae/zkap';
 
 const chainConfig = await registry.getChainConfig(CHAIN_ID);
 
@@ -181,7 +181,7 @@ Both send methods return `{ userOpHash: string; receipt: Promise<UserOpReceipt> 
 For direct control over UserOperation construction:
 
 ```typescript
-import { ZkapBuilder, BundlerClient, ZkapBundlerProvider } from '@baerae-zkap/zkap';
+import { ZkapBuilder, BundlerClient, ZkapBundlerProvider } from '@baerae/zkap';
 
 const chainConfig = await registry.getChainConfig(CHAIN_ID);
 
@@ -212,7 +212,7 @@ const receipt = await bundlerClient.waitForReceipt(submittedHash);
 Pass a `paymaster` config to `ZkapBuilder` to sponsor gas or accept ERC-20 payment:
 
 ```typescript
-import { ZkapBuilder, PaymasterMode } from '@baerae-zkap/zkap';
+import { ZkapBuilder, PaymasterMode } from '@baerae/zkap';
 
 const builder = new ZkapBuilder({
   chainId: CHAIN_ID,
@@ -234,7 +234,7 @@ const builder = new ZkapBuilder({
 ZKAP API (`https://api.zkap.app`). Results are cached for 5 minutes by default.
 
 ```typescript
-import { ChainRegistry } from '@baerae-zkap/zkap';
+import { ChainRegistry } from '@baerae/zkap';
 
 // Default API endpoint
 const registry = new ChainRegistry();
@@ -254,7 +254,7 @@ registry.refresh(); // clear cache and force re-fetch
 ## Bundler Providers
 
 ```typescript
-import { ZkapBundlerProvider, Erc4337BundlerProvider, BundlerClient } from '@baerae-zkap/zkap';
+import { ZkapBundlerProvider, Erc4337BundlerProvider, BundlerClient } from '@baerae/zkap';
 
 // ZKAP hosted bundler (default: https://bundler.zkap.app)
 const provider = new ZkapBundlerProvider();
