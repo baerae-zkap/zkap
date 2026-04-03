@@ -13,7 +13,6 @@ import ZkapTimelockController from "./ZkapTimelockController.json";
 interface HardhatArtifact {
   _format: string;
   contractName: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   abi: any[];
 }
 
