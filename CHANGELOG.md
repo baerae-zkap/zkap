@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-03-31
 
-First public open-source release on [npmjs.com](https://www.npmjs.com/package/@baerae-zkap/zkap-aa).
+First public open-source release on [npmjs.com](https://www.npmjs.com/package/@baerae-zkap/zkap).
 
 ### BREAKING CHANGES
 
