@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # required for npm OIDC Trusted Publishing
 
 jobs:
   release:
@@ -81,9 +82,9 @@ jobs:
         run: npm publish --dry-run
 
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Uses OIDC Trusted Publishing — no NPM_TOKEN secret needed.
+        # Configure at: https://www.npmjs.com/settings/baerae-zkap/tokens (Trusted Publishers tab)
         run: |
           npm pkg delete scripts.prepare 2>/dev/null || true
           echo "Publishing v${{ steps.version.outputs.value }} to npmjs.com"
-          npm publish --access public --tag latest
+          npm publish --access public --tag latest --provenance
