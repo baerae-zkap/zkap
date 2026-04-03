@@ -31,7 +31,29 @@ function findByte(bytes: Uint8Array, value: number, fromIndex: number): number {
   return -1;
 }
 
+/**
+ * Signs UserOperation hashes using a WebAuthn passkey (secp256r1 / P-256 ECDSA).
+ *
+ * This signer bridges the browser WebAuthn API and the on-chain WebAuthn verifier.
+ * It encodes the authenticator response (signature, authenticatorData, clientDataJSON)
+ * into the ABI format expected by the ZKAP account contract.
+ *
+ * @example
+ * ```ts
+ * const signer = new PasskeySigner(credentialId, async (id, challenge) => {
+ *   const assertion = await navigator.credentials.get({
+ *     publicKey: { challenge: base64url.decode(challenge), allowCredentials: [{ id, type: "public-key" }] },
+ *   });
+ *   return { response: assertion.response };
+ * });
+ * const signatures = await signer.signUserOpHash(userOpHash);
+ * ```
+ */
 export class PasskeySigner implements IUserOpSigner {
+  /**
+   * Account key type identifiers handled by this signer.
+   * Always `[PrimitiveAccountKeyTypes.keyWebAuthn]`.
+   */
   public readonly keyTypes: number[] = [PrimitiveAccountKeyTypes.keyWebAuthn];
   private credentialId: string;
   private verifyWithPasskey: (
@@ -44,6 +66,14 @@ export class PasskeySigner implements IUserOpSigner {
       clientDataJSON: string;
     };
   }>;
+
+  /**
+   * Creates a `PasskeySigner` backed by a caller-supplied WebAuthn assertion function.
+   *
+   * @param credentialId - The base64url-encoded credential ID of the registered passkey.
+   * @param verifyWithPasskey - An async function that invokes the WebAuthn `get()` ceremony
+   *   and returns the raw authenticator response fields as base64url strings.
+   */
   constructor(
     credentialId: string,
     verifyWithPasskey: (
@@ -61,6 +91,17 @@ export class PasskeySigner implements IUserOpSigner {
     this.verifyWithPasskey = verifyWithPasskey;
   }
 
+  /**
+   * Signs the UserOperation hash via the WebAuthn passkey and returns an ABI-encoded signature.
+   *
+   * The challenge is derived from the hash and passed to the `verifyWithPasskey` callback.
+   * The resulting authenticator response is normalized (low-S), then ABI-encoded with
+   * the field offsets required by the on-chain WebAuthn verifier.
+   *
+   * @param userOpHash - The 32-byte hex hash of the packed UserOperation.
+   * @returns A single-element array containing the ABI-encoded WebAuthn signature payload.
+   * @throws If the authenticator response is missing required fields (`type`, `challenge`, `origin`).
+   */
   async signUserOpHash(userOpHash: string): Promise<string[]> {
     // raw 32 bytes → base64URL (matches contract's Base64.encodeURL(abi.encodePacked(bytes32(msgHash))))
     const challenge = toURLEncode(ethers.encodeBase64(ethers.getBytes(userOpHash)));
