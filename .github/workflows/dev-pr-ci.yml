@@ -6,12 +6,31 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  dev-pr-ci:
-    uses: baerae-zkap/zkap-workflows/.github/workflows/dev-pr-ci.yml@main
-    with:
-      package-manager: npm
-      use-private-packages: false
-    secrets: inherit
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx eslint "lib/**/*.ts"
+
+      - name: Test
+        run: npm run test:ci
+
+      - name: Build
+        run: npm run build
