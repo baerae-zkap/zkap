@@ -1,6 +1,6 @@
 {
   "name": "@baerae/zkap",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.",
   "keywords": [
     "erc-4337",
