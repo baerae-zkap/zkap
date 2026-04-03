@@ -82,11 +82,9 @@ jobs:
         run: npm publish --dry-run
 
       - name: Publish to npm
-        # TODO: Switch to OIDC Trusted Publishing after first publish.
-        # Configure at npmjs.com/package/@baerae/zkap/access, then remove NODE_AUTH_TOKEN.
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Uses OIDC Trusted Publishing — no NPM_TOKEN secret needed.
+        # Configured at: npmjs.com/package/@baerae/zkap/access
         run: |
           npm pkg delete scripts.prepare 2>/dev/null || true
           echo "Publishing v${{ steps.version.outputs.value }} to npmjs.com"
-          npm publish --access public --tag latest
+          npm publish --access public --tag latest --provenance
