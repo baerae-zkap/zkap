@@ -1,13 +1,33 @@
 name: SDK Develop Merged CI
+
 on:
   push:
     branches: [develop]
+
 permissions:
   contents: read
-  id-token: write
+
 jobs:
-  sdk-dev-merged-ci:
-    uses: baerae-zkap/zkap-workflows/.github/workflows/sdk-dev-merged-ci.yml@main
-    with:
-      package-manager: npm
-    secrets: inherit
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm run test:ci
+
+      - name: Build
+        run: npm run build
