@@ -12,12 +12,11 @@ dist.tar.gz
 # Examples env files — never commit real credentials
 examples/**/.env
 
-# Claude Code settings (personal, not project-specific)
-.claude/settings.json
-.claude/settings.local.json
-.claude/cache/
-.claude/commands/
-.claude/hooks/
+# Claude Code (personal, not project-specific)
+.claude/
 
 # Oh-My-Claudecode (session and state)
 .omc/
+
+# pnpm lockfile (npm is the primary package manager)
+pnpm-lock.yaml
