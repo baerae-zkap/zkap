@@ -1,5 +1,5 @@
 {
-  "name": "@baerae-zkap/zkap",
+  "name": "@baerae/zkap",
   "version": "0.1.0",
   "description": "A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.",
   "keywords": [

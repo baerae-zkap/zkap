@@ -1,4 +1,4 @@
-# Contributing to @baerae-zkap/zkap
+# Contributing to @baerae/zkap
 
 Thanks for your interest in contributing.
 
