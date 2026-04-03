@@ -5,21 +5,73 @@ import { BundlerError } from "./types";
 const DEFAULT_POLL_INTERVAL = 2000;
 const DEFAULT_TIMEOUT = 60000;
 
+/**
+ * High-level client for submitting ERC-4337 UserOperations and tracking their
+ * on-chain status via a {@link BundlerProvider}.
+ *
+ * @example
+ * ```ts
+ * const provider = new ZkapBundlerProvider();
+ * const client = new BundlerClient(provider);
+ *
+ * const userOpHash = await client.submitUserOp(packedUserOp, entryPoint);
+ * const receipt = await client.waitForReceipt(userOpHash);
+ * console.log(receipt.success); // true
+ * ```
+ */
 export class BundlerClient {
   private readonly provider: BundlerProvider;
 
+  /**
+   * @param provider - The bundler transport to use for all network calls.
+   */
   constructor(provider: BundlerProvider) {
     this.provider = provider;
   }
 
+  /**
+   * Submit a packed UserOperation to the bundler mempool.
+   *
+   * @param userOp - The fully constructed and signed packed UserOperation.
+   * @param entryPoint - Address of the ERC-4337 EntryPoint contract.
+   * @returns The UserOperation hash assigned by the bundler.
+   * @throws {@link BundlerError} if the bundler rejects the operation or a network error occurs.
+   */
   async submitUserOp(userOp: PackedUserOperation, entryPoint: string): Promise<string> {
     return this.provider.submitUserOp(userOp, entryPoint);
   }
 
+  /**
+   * Query the current status of a submitted UserOperation.
+   *
+   * @param userOpHash - The hash returned by {@link submitUserOp}.
+   * @returns The current {@link UserOpStatus}.
+   * @throws {@link BundlerError} on network failure.
+   */
   async getStatus(userOpHash: string): Promise<UserOpStatus> {
     return this.provider.getStatus(userOpHash);
   }
 
+  /**
+   * Poll the bundler until the UserOperation is finalized, then return its receipt.
+   *
+   * Polls at `pollInterval` ms intervals until the operation reaches `"included"` or
+   * `"failed"` status, or until `timeout` ms elapse.
+   *
+   * @param userOpHash - The hash returned by {@link submitUserOp}.
+   * @param options.pollInterval - Milliseconds between status polls (default: 2000).
+   * @param options.timeout - Maximum milliseconds to wait before throwing (default: 60000).
+   * @returns The {@link UserOpReceipt} once the operation is finalized.
+   * @throws {@link BundlerError} with code `"BUNDLER_TIMEOUT"` if the deadline is exceeded.
+   *
+   * @example
+   * ```ts
+   * const receipt = await client.waitForReceipt(userOpHash, {
+   *   pollInterval: 1000,
+   *   timeout: 30000,
+   * });
+   * ```
+   */
   async waitForReceipt(
     userOpHash: string,
     options?: { pollInterval?: number; timeout?: number }

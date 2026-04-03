@@ -25,13 +25,38 @@ function classifyBundlerError(message: string): BundlerError {
 // ---------------------------------------------------------------------------
 // ZkapBundlerProvider — uses ZKAP Server custom endpoints
 // ---------------------------------------------------------------------------
+/**
+ * {@link BundlerProvider} implementation that communicates with the ZKAP bundler
+ * via ZKAP Server's proprietary REST endpoints.
+ *
+ * Use this provider when submitting UserOperations through the ZKAP platform.
+ * For standard ERC-4337 JSON-RPC bundlers, use {@link Erc4337BundlerProvider} instead.
+ *
+ * @example
+ * ```ts
+ * const provider = new ZkapBundlerProvider({ baseUrl: "https://api.zkap.app" });
+ * const client = new BundlerClient(provider);
+ * ```
+ */
 export class ZkapBundlerProvider implements BundlerProvider {
   private readonly baseUrl: string;
 
+  /**
+   * @param config.baseUrl - Base URL of the ZKAP API server (default: `"https://api.zkap.app"`).
+   *   Trailing slashes are stripped automatically.
+   */
   constructor(config?: { baseUrl?: string }) {
     this.baseUrl = (config && config.baseUrl) ? config.baseUrl.replace(/\/$/, "") : "https://api.zkap.app";
   }
 
+  /**
+   * Submit a packed UserOperation via the ZKAP direct-submit endpoint.
+   *
+   * @param userOp - The fully constructed and signed packed UserOperation.
+   * @param _entryPoint - Unused by this provider; the ZKAP server resolves the EntryPoint internally.
+   * @returns The UserOperation hash assigned by the bundler.
+   * @throws {@link BundlerError} on network failure or if the bundler rejects the operation.
+   */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async submitUserOp(userOp: PackedUserOperation, _entryPoint: string): Promise<string> {
     const url = `${this.baseUrl}/api/v1/bundler/submit-direct`;
@@ -62,6 +87,13 @@ export class ZkapBundlerProvider implements BundlerProvider {
     return data.userOpHash as string;
   }
 
+  /**
+   * Query the status of a UserOperation from the ZKAP status endpoint.
+   *
+   * @param userOpHash - The hash returned by {@link submitUserOp}.
+   * @returns The current {@link UserOpStatus}.
+   * @throws {@link BundlerError} on network failure.
+   */
   async getStatus(userOpHash: string): Promise<UserOpStatus> {
     const url = `${this.baseUrl}/api/v1/bundler/status/${userOpHash}`;
     let res: Response;
@@ -92,6 +124,13 @@ export class ZkapBundlerProvider implements BundlerProvider {
     return "not_found";
   }
 
+  /**
+   * Retrieve the execution receipt for a finalized UserOperation from the ZKAP status endpoint.
+   *
+   * @param userOpHash - The hash returned by {@link submitUserOp}.
+   * @returns The {@link UserOpReceipt}, or `null` if the operation is not yet finalized or the
+   *   request fails.
+   */
   async getReceipt(userOpHash: string): Promise<UserOpReceipt | null> {
     const url = `${this.baseUrl}/api/v1/bundler/status/${userOpHash}`;
     let res: Response;
@@ -123,10 +162,26 @@ export class ZkapBundlerProvider implements BundlerProvider {
 // ---------------------------------------------------------------------------
 // Erc4337BundlerProvider — uses standard ERC-4337 JSON-RPC
 // ---------------------------------------------------------------------------
+/**
+ * {@link BundlerProvider} implementation that communicates with any standard
+ * ERC-4337 JSON-RPC bundler (e.g. Stackup, Pimlico, Alchemy).
+ *
+ * Uses `eth_sendUserOperation` and `eth_getUserOperationReceipt` as defined in
+ * the ERC-4337 specification.
+ *
+ * @example
+ * ```ts
+ * const provider = new Erc4337BundlerProvider({ rpcUrl: "https://your-bundler-rpc" });
+ * const client = new BundlerClient(provider);
+ * ```
+ */
 export class Erc4337BundlerProvider implements BundlerProvider {
   private readonly rpcUrl: string;
   private reqId = 0;
 
+  /**
+   * @param config.rpcUrl - JSON-RPC endpoint URL of the ERC-4337 bundler.
+   */
   constructor(config: { rpcUrl: string }) {
     this.rpcUrl = config.rpcUrl;
   }
@@ -156,11 +211,27 @@ export class Erc4337BundlerProvider implements BundlerProvider {
     return json.result;
   }
 
+  /**
+   * Submit a packed UserOperation via `eth_sendUserOperation`.
+   *
+   * @param userOp - The fully constructed and signed packed UserOperation.
+   * @param entryPoint - Address of the ERC-4337 EntryPoint contract.
+   * @returns The UserOperation hash assigned by the bundler.
+   * @throws {@link BundlerError} if the bundler rejects the operation or a network error occurs.
+   */
   async submitUserOp(userOp: PackedUserOperation, entryPoint: string): Promise<string> {
     const result = await this.rpcCall("eth_sendUserOperation", [userOp, entryPoint]);
     return result as string;
   }
 
+  /**
+   * Query the status of a UserOperation via `eth_getUserOperationReceipt`.
+   *
+   * @param userOpHash - The hash returned by {@link submitUserOp}.
+   * @returns `"included"` if the receipt indicates success, `"failed"` if reverted,
+   *   or `"not_found"` if the bundler has no record yet.
+   * @throws {@link BundlerError} on network failure.
+   */
   async getStatus(userOpHash: string): Promise<UserOpStatus> {
     const receipt = await this.rpcCall("eth_getUserOperationReceipt", [userOpHash]) as UserOpReceipt | null;
     if (!receipt) return "not_found";
@@ -168,6 +239,13 @@ export class Erc4337BundlerProvider implements BundlerProvider {
     return "failed";
   }
 
+  /**
+   * Retrieve the execution receipt via `eth_getUserOperationReceipt`.
+   *
+   * @param userOpHash - The hash returned by {@link submitUserOp}.
+   * @returns The normalized {@link UserOpReceipt}, or `null` if not yet available.
+   * @throws {@link BundlerError} on network failure.
+   */
   async getReceipt(userOpHash: string): Promise<UserOpReceipt | null> {
     const raw = await this.rpcCall("eth_getUserOperationReceipt", [userOpHash]) as Record<string, unknown> | null;
     if (!raw) return null;

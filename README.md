@@ -25,6 +25,11 @@ Requires Node.js >= 18.
 
 ## Quick Start
 
+> **Prerequisites:** ZKAP wallets are ERC-4337 smart contract wallets. You need a wallet address before you can send UserOps.
+> - **OAuth flow (Google / Kakao):** derive your address with `helper.deriveAddress({ aud, sub, chainId })` — see step 3 below.
+> - **EOA flow (testing):** use `ZkapCreator` to deploy a new wallet with a private key as the master key, or contact the team to provision a testnet wallet.
+> - The first UserOp sent to a counterfactual address will automatically deploy the wallet on-chain via `initCode`.
+
 ### 1. Discover supported chains
 
 ```typescript

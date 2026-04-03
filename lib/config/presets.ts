@@ -9,8 +9,35 @@
 
 import type { ZkapProviderConfigOptions } from "./ZkapProviderConfig";
 
+/**
+ * Identifies one of the built-in ZKAP provider configuration presets.
+ *
+ * - `"embedded-zkap"` — preset for apps integrating the embedded ZKAP wallet.
+ * - `"zkap-web3"` — preset for the zkap-web3 product integration.
+ *
+ * Pass one of these values to `ZkapProviderConfig.fromPreset()` to obtain
+ * the corresponding {@link ZkapProviderConfigOptions} without manual
+ * configuration.
+ *
+ * @example
+ * const config = ZkapProviderConfig.fromPreset("embedded-zkap");
+ */
 export type ProviderPreset = "embedded-zkap" | "zkap-web3";
 
+/**
+ * Registry of built-in {@link ZkapProviderConfigOptions} keyed by
+ * {@link ProviderPreset}.
+ *
+ * Each entry supplies the OAuth `clientId` values and their
+ * Poseidon-hashed `hAud` counterparts that the on-chain ZK verifier
+ * uses to authenticate tokens. The `hAudLists` and `hAudLists1` fields
+ * are Poseidon hashes of the complete audience list Merkle tree, used
+ * as public inputs in the ZK proof.
+ *
+ * @internal
+ * This object is consumed by `ZkapProviderConfig.fromPreset()`. External
+ * developers should not import it directly; use `ZkapProviderConfig` instead.
+ */
 export const PRESETS: Record<ProviderPreset, ZkapProviderConfigOptions> = {
   "embedded-zkap": {
     providers: {

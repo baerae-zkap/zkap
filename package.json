@@ -2,6 +2,21 @@
   "name": "@baerae-zkap/zkap-aa",
   "version": "0.1.0",
   "description": "A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.",
+  "keywords": [
+    "erc-4337",
+    "account-abstraction",
+    "smart-wallet",
+    "useroperation",
+    "bundler",
+    "zk",
+    "zkap",
+    "passkey",
+    "webauthn",
+    "zk-oidc",
+    "typescript",
+    "sdk",
+    "ethers"
+  ],
   "engines": {
     "node": ">=18"
   },
