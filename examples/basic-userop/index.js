@@ -24,7 +24,7 @@ const {
   ZkapBundlerProvider,
   WalletHelper,
   AddressKeySigner,
-} = require('@baerae/zkap');
+} = require('@baerae/zkap-aa');
 
 const registry = new ChainRegistry();
 const bundlerClient = new BundlerClient(new ZkapBundlerProvider());

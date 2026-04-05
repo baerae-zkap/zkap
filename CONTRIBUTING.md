@@ -1,11 +1,11 @@
-# Contributing to @baerae/zkap
+# Contributing to @baerae/zkap-aa
 
 Thanks for your interest in contributing.
 
 ## Getting started
 
 ```bash
-git clone https://github.com/baerae-zkap/zkap.git
+git clone https://github.com/baerae-zkap/zkap-aa-sdk.git
 cd zkap-aa
 npm install
 ```
@@ -94,6 +94,6 @@ docs(readme): add ZkOAuthSigner quick start example
 
 ## Reporting issues
 
-Open a GitHub issue: [baerae-zkap/zkap-aa/issues](https://github.com/baerae-zkap/zkap/issues)
+Open a GitHub issue: [baerae-zkap/zkap-aa-sdk/issues](https://github.com/baerae-zkap/zkap-aa-sdk/issues)
 
 For security vulnerabilities, see [SECURITY.md](SECURITY.md) instead.

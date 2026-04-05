@@ -23,7 +23,7 @@ within 14 days for critical issues.
 
 ## Scope
 
-This policy covers the `@baerae/zkap` npm package — the TypeScript SDK code in this repository.
+This policy covers the `@baerae/zkap-aa` npm package — the TypeScript SDK code in this repository.
 
 Out of scope: the ZKAP smart contracts, the ZKAP API (`api.zkap.app`), and the hosted bundler.
 For issues with those services, contact the team directly at security@baerae.com and note which service is affected.

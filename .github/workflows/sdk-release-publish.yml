@@ -86,7 +86,7 @@ jobs:
 
       - name: Publish to npm
         # Uses OIDC Trusted Publishing — no NPM_TOKEN secret needed.
-        # Configured at: npmjs.com/package/@baerae/zkap/access
+        # Configured at: npmjs.com/package/@baerae/zkap-aa/access
         # NODE_AUTH_TOKEN must be unset to avoid conflicting with OIDC flow.
         env:
           NODE_AUTH_TOKEN: ''
