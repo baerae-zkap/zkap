@@ -1,7 +1,7 @@
 {
-  "name": "@baerae/zkap",
-  "version": "0.1.1",
-  "description": "A TypeScript SDK for interacting with ZKAP Abstract Account contracts easily.",
+  "name": "@baerae/zkap-aa",
+  "version": "0.1.2",
+  "description": "ZKAP Account Abstraction SDK — ERC-4337 smart wallet, passkey, zk-oidc signers.",
   "keywords": [
     "erc-4337",
     "account-abstraction",
@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/baerae-zkap/zkap.git"
+    "url": "git+https://github.com/baerae-zkap/zkap-aa-sdk.git"
   },
   "author": {
     "name": "baerae-zkap",
@@ -44,9 +44,9 @@
     "access": "public"
   },
   "bugs": {
-    "url": "https://github.com/baerae-zkap/zkap/issues"
+    "url": "https://github.com/baerae-zkap/zkap-aa-sdk/issues"
   },
-  "homepage": "https://github.com/baerae-zkap/zkap#readme",
+  "homepage": "https://github.com/baerae-zkap/zkap-aa-sdk#readme",
   "files": [
     "dist/lib/",
     "dist/esm/",
@@ -56,8 +56,10 @@
   ],
   "dependencies": {
     "@levischuck/tiny-cbor": "^0.3.2",
-    "ethers": "^6.16.0",
     "jwt-decode": "^4.0.0"
+  },
+  "peerDependencies": {
+    "ethers": "^6.0.0"
   },
   "main": "dist/lib/index.js",
   "module": "dist/esm/index.js",
