@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import type { UserOperation, PackedUserOperation } from "../types/UserOperation";
+import type { UserOperation, PackedUserOperation, PimlicoUserOperation } from "../types/UserOperation";
 
 // ---------------------------------------------------------------------------
 // Pack / Unpack UserOperation
@@ -8,6 +8,12 @@ import type { UserOperation, PackedUserOperation } from "../types/UserOperation"
 function padTo16Bytes(hex: string): string {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
   return clean.padStart(32, "0"); // 16 bytes = 32 hex chars
+}
+
+/** Strip leading zeros from a hex string to produce minimal encoding (JSON-RPC convention). */
+function toMinimalHex(hex: string): string {
+  const stripped = hex.replace(/^0x0+/, "0x");
+  return stripped === "0x" ? "0x0" : stripped;
 }
 
 /**
@@ -96,6 +102,88 @@ export function unpackUserOperation(packed: PackedUserOperation): UserOperation 
     paymasterPostOpGasLimit,
     signature: packed.signature,
   };
+}
+
+/**
+ * Convert a PackedUserOperation to Pimlico v0.7/v0.8 JSON-RPC format.
+ *
+ * Pimlico bundlers expect an unpacked format with separate `factory` and `factoryData`
+ * fields instead of the combined `initCode` field used in the on-chain packed format.
+ *
+ * @param packed - The packed UserOperation (on-chain format)
+ * @returns The UserOperation in Pimlico JSON-RPC format
+ *
+ * @example
+ * ```ts
+ * const packed = packUserOperation(userOp);
+ * const pimlicoFormat = toPimlicoFormat(packed);
+ * // Submit to Pimlico bundler
+ * await fetch(pimlicoUrl, {
+ *   method: 'POST',
+ *   body: JSON.stringify({
+ *     jsonrpc: '2.0',
+ *     method: 'eth_sendUserOperation',
+ *     params: [pimlicoFormat, entryPoint],
+ *   }),
+ * });
+ * ```
+ */
+export function toPimlicoFormat(packed: PackedUserOperation): PimlicoUserOperation {
+  const unpacked = unpackUserOperation(packed);
+
+  // Validate and split initCode into factory (20 bytes) and factoryData (rest)
+  let factory: string | undefined;
+  let factoryData: string | undefined;
+  const initCode = unpacked.initCode;
+  if (initCode && initCode !== "0x") {
+    if (initCode.length < 42) {
+      throw new Error(
+        `Invalid initCode: expected at least 20-byte address (42 hex chars with 0x prefix), got ${initCode.length} chars`
+      );
+    }
+    factory = "0x" + initCode.slice(2, 42);
+    factoryData = initCode.length > 42 ? "0x" + initCode.slice(42) : "0x";
+  }
+
+  // Validate paymasterAndData: if paymaster is present, gas fields must also be present
+  const paymasterHex = packed.paymasterAndData.replace("0x", "");
+  const hasPaymaster =
+    unpacked.paymaster &&
+    unpacked.paymaster !== "0x" &&
+    unpacked.paymaster.toLowerCase() !== ethers.ZeroAddress;
+  if (hasPaymaster && paymasterHex.length < 104) {
+    throw new Error(
+      `Invalid paymasterAndData: has paymaster address but missing gas fields (expected ≥104 hex chars, got ${paymasterHex.length})`
+    );
+  }
+
+  const result: PimlicoUserOperation = {
+    sender: unpacked.sender,
+    nonce: toMinimalHex(unpacked.nonce),
+    callData: unpacked.callData,
+    callGasLimit: toMinimalHex(unpacked.callGasLimit),
+    verificationGasLimit: toMinimalHex(unpacked.verificationGasLimit),
+    preVerificationGas: toMinimalHex(unpacked.preVerificationGas),
+    maxFeePerGas: toMinimalHex(unpacked.maxFeePerGas),
+    maxPriorityFeePerGas: toMinimalHex(unpacked.maxPriorityFeePerGas),
+    signature: unpacked.signature,
+  };
+
+  // Add factory fields only if deploying
+  if (factory) {
+    result.factory = factory;
+    result.factoryData = factoryData;
+  }
+
+  // Add paymaster fields only if using paymaster
+  if (hasPaymaster) {
+    result.paymaster = unpacked.paymaster;
+    result.paymasterVerificationGasLimit = toMinimalHex(unpacked.paymasterVerificationGasLimit);
+    result.paymasterPostOpGasLimit = toMinimalHex(unpacked.paymasterPostOpGasLimit);
+    result.paymasterData = unpacked.paymasterData;
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

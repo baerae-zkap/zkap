@@ -1,6 +1,7 @@
-import type { PackedUserOperation } from "../types/UserOperation";
+import type { PackedUserOperation, PimlicoUserOperation } from "../types/UserOperation";
 import type { BundlerProvider, UserOpReceipt, UserOpStatus } from "./types";
 import { BundlerError } from "./types";
+import { toPimlicoFormat } from "../utils/userOpUtils";
 
 // ---------------------------------------------------------------------------
 // Helper: classify bundler error codes from error messages
@@ -162,6 +163,24 @@ export class ZkapBundlerProvider implements BundlerProvider {
 // ---------------------------------------------------------------------------
 // Erc4337BundlerProvider — uses standard ERC-4337 JSON-RPC
 // ---------------------------------------------------------------------------
+
+/**
+ * Configuration options for {@link Erc4337BundlerProvider}.
+ */
+export interface Erc4337BundlerProviderConfig {
+  /** JSON-RPC endpoint URL of the ERC-4337 bundler. */
+  rpcUrl: string;
+  /**
+   * When `true`, converts PackedUserOperation to Pimlico v0.7/v0.8 format
+   * before sending. The Pimlico format uses separate `factory`/`factoryData`
+   * fields instead of `initCode`, and individual gas/paymaster fields instead
+   * of packed bytes32 values.
+   *
+   * @default false
+   */
+  usePimlicoFormat?: boolean;
+}
+
 /**
  * {@link BundlerProvider} implementation that communicates with any standard
  * ERC-4337 JSON-RPC bundler (e.g. Stackup, Pimlico, Alchemy).
@@ -171,19 +190,27 @@ export class ZkapBundlerProvider implements BundlerProvider {
  *
  * @example
  * ```ts
+ * // Standard bundler (packed format)
  * const provider = new Erc4337BundlerProvider({ rpcUrl: "https://your-bundler-rpc" });
- * const client = new BundlerClient(provider);
+ *
+ * // Pimlico bundler (unpacked format with factory/factoryData)
+ * const pimlicoProvider = new Erc4337BundlerProvider({
+ *   rpcUrl: "https://public.pimlico.io/v2/421614/rpc",
+ *   usePimlicoFormat: true,
+ * });
  * ```
  */
 export class Erc4337BundlerProvider implements BundlerProvider {
   private readonly rpcUrl: string;
+  private readonly usePimlicoFormat: boolean;
   private reqId = 0;
 
   /**
-   * @param config.rpcUrl - JSON-RPC endpoint URL of the ERC-4337 bundler.
+   * @param config - Provider configuration options.
    */
-  constructor(config: { rpcUrl: string }) {
+  constructor(config: Erc4337BundlerProviderConfig) {
     this.rpcUrl = config.rpcUrl;
+    this.usePimlicoFormat = config.usePimlicoFormat ?? false;
   }
 
   private async rpcCall(method: string, params: unknown[]): Promise<unknown> {
@@ -214,13 +241,22 @@ export class Erc4337BundlerProvider implements BundlerProvider {
   /**
    * Submit a packed UserOperation via `eth_sendUserOperation`.
    *
+   * When `usePimlicoFormat` is enabled, the packed UserOperation is automatically
+   * converted to Pimlico's expected format (with `factory`/`factoryData` instead
+   * of `initCode`) before submission.
+   *
    * @param userOp - The fully constructed and signed packed UserOperation.
    * @param entryPoint - Address of the ERC-4337 EntryPoint contract.
    * @returns The UserOperation hash assigned by the bundler.
    * @throws {@link BundlerError} if the bundler rejects the operation or a network error occurs.
    */
   async submitUserOp(userOp: PackedUserOperation, entryPoint: string): Promise<string> {
-    const result = await this.rpcCall("eth_sendUserOperation", [userOp, entryPoint]);
+    // Convert to Pimlico format if enabled
+    const opToSend: PackedUserOperation | PimlicoUserOperation = this.usePimlicoFormat
+      ? toPimlicoFormat(userOp)
+      : userOp;
+
+    const result = await this.rpcCall("eth_sendUserOperation", [opToSend, entryPoint]);
     return result as string;
   }
 

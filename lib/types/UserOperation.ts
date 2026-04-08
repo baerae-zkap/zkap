@@ -112,3 +112,73 @@ export interface PackedUserOperation {
   /** Signature over the PackedUserOperation hash, validated by the account. */
   signature: string;
 }
+
+/**
+ * Pimlico v0.7/v0.8 JSON-RPC format for UserOperations.
+ *
+ * Unlike {@link PackedUserOperation}, this format:
+ * - Uses separate `factory` and `factoryData` fields instead of `initCode`
+ * - Uses individual gas fields instead of packed `accountGasLimits` and `gasFees`
+ * - Uses individual paymaster fields instead of packed `paymasterAndData`
+ *
+ * This format is required when submitting UserOperations to Pimlico bundlers
+ * via their standard ERC-4337 JSON-RPC interface.
+ *
+ * @example
+ * ```ts
+ * const pimlicoOp: PimlicoUserOperation = {
+ *   sender: "0xAbCd...",
+ *   nonce: "0x1",
+ *   factory: "0x1234...",       // Optional: only for account deployment
+ *   factoryData: "0x...",       // Optional: only for account deployment
+ *   callData: "0x...",
+ *   callGasLimit: "0x5208",
+ *   verificationGasLimit: "0x186a0",
+ *   preVerificationGas: "0xc350",
+ *   maxFeePerGas: "0x3b9aca00",
+ *   maxPriorityFeePerGas: "0x3b9aca00",
+ *   signature: "0x...",
+ * };
+ * ```
+ */
+export interface PimlicoUserOperation {
+  /** The smart-account address that is sending this operation. */
+  sender: string;
+  /** Anti-replay nonce for the account (hex string). */
+  nonce: string;
+  /**
+   * Factory contract address used to deploy the account.
+   * Only present when the account is being deployed (first UserOp).
+   */
+  factory?: string;
+  /**
+   * Calldata passed to the factory's `createAccount` method.
+   * Only present when the account is being deployed (first UserOp).
+   */
+  factoryData?: string;
+  /** ABI-encoded calldata forwarded to the account's `execute` function. */
+  callData: string;
+  /** Gas limit for the account's execution phase (hex string). */
+  callGasLimit: string;
+  /** Gas limit for the account's signature-verification phase (hex string). */
+  verificationGasLimit: string;
+  /** Gas overhead charged before on-chain execution begins (hex string). */
+  preVerificationGas: string;
+  /** Maximum total gas price the sender is willing to pay (hex string, wei). */
+  maxFeePerGas: string;
+  /** Maximum priority fee (tip) per gas unit (hex string, wei). */
+  maxPriorityFeePerGas: string;
+  /**
+   * Address of the paymaster that sponsors gas fees.
+   * Only present when using a paymaster.
+   */
+  paymaster?: string;
+  /** Gas limit for the paymaster's verification phase (hex string). */
+  paymasterVerificationGasLimit?: string;
+  /** Gas limit for the paymaster's post-operation hook (hex string). */
+  paymasterPostOpGasLimit?: string;
+  /** Arbitrary data passed to the paymaster's `validatePaymasterUserOp`. */
+  paymasterData?: string;
+  /** Signature over the UserOperation hash, validated by the account. */
+  signature: string;
+}
