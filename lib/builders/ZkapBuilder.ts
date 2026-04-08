@@ -319,7 +319,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice;
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? feeData.gasPrice;
     /* istanbul ignore next */
-    if (!maxFeePerGas || !maxPriorityFeePerGas) {
+    if (maxFeePerGas == null || maxPriorityFeePerGas == null) {
       throw new Error("Failed to get fee data from provider");
     }
     if (this.userOp.nonce === undefined) {
