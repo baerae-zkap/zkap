@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.2] - 2026-04-06
+## [0.1.2] - 2026-04-08
+
+### Added
+- **Pimlico bundler support** — `Erc4337BundlerProvider` now accepts `usePimlicoFormat: true` to convert packed UserOperations to Pimlico v0.7/v0.8 JSON-RPC format
+- **`PimlicoUserOperation` type** — unpacked format with separate `factory`/`factoryData` fields instead of `initCode`
+- **`toPimlicoFormat()` utility** — converts `PackedUserOperation` to Pimlico format with minimal hex encoding (JSON-RPC convention)
+- **`Erc4337BundlerProviderConfig` type** — typed configuration for `Erc4337BundlerProvider`
+- Input validation in `toPimlicoFormat()`: rejects malformed `initCode` (truncated address) and `paymasterAndData` (missing gas fields)
 
 ### Changed
 - Package renamed from `@baerae/zkap` to `@baerae/zkap-aa`
