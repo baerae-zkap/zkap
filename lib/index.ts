@@ -34,14 +34,18 @@ export * from "./utils/crypto";
 export * from "./utils/signature";
 export * from "./utils/base64url";
 export { IUserOpSigner } from "./utils/IUserOpSigner";
-export { packUserOperation, unpackUserOperation, createDummyPasskeySignature, createDummyZkSignature } from "./utils/userOpUtils";
+export { packUserOperation, unpackUserOperation, toPimlicoFormat, createDummyPasskeySignature, createDummyZkSignature } from "./utils/userOpUtils";
 export { computeSalt } from "./utils/salt";
 
 // Bundler client
 export { BundlerClient } from "./client/BundlerClient";
 export { ZkapBundlerProvider, Erc4337BundlerProvider } from "./client/BundlerProvider";
+export type { Erc4337BundlerProviderConfig } from "./client/BundlerProvider";
 export { BundlerError } from "./client/types";
 export type { BundlerProvider, BundlerErrorCode, UserOpStatus, UserOpReceipt } from "./client/types";
+
+// Pimlico format (for external bundler integration)
+export type { PimlicoUserOperation } from "./types/UserOperation";
 
 // Chain registry
 export { ChainRegistry } from "./registry/ChainRegistry";

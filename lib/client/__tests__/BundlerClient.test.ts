@@ -717,3 +717,175 @@ describe('classifyBundlerError (via Erc4337BundlerProvider)', () => {
       .rejects.toMatchObject({ code: 'BUNDLER_REJECTED', retryable: false });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Erc4337BundlerProvider with usePimlicoFormat
+// ---------------------------------------------------------------------------
+
+describe('Erc4337BundlerProvider with usePimlicoFormat', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it('sends packed format by default (usePimlicoFormat=false)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ jsonrpc: '2.0', id: 1, result: MOCK_USER_OP_HASH }),
+    });
+
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+    const userOp = makePackedUserOp({
+      initCode: '0x' + 'AA'.repeat(20) + 'deadbeef', // factory + factoryData
+    });
+
+    await provider.submitUserOp(userOp, MOCK_ENTRY_POINT);
+
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const sentUserOp = callBody.params[0];
+
+    // Should have packed fields
+    expect(sentUserOp).toHaveProperty('initCode');
+    expect(sentUserOp).toHaveProperty('accountGasLimits');
+    expect(sentUserOp).toHaveProperty('gasFees');
+    expect(sentUserOp).toHaveProperty('paymasterAndData');
+
+    // Should NOT have Pimlico fields
+    expect(sentUserOp).not.toHaveProperty('factory');
+    expect(sentUserOp).not.toHaveProperty('factoryData');
+    expect(sentUserOp).not.toHaveProperty('callGasLimit');
+    expect(sentUserOp).not.toHaveProperty('verificationGasLimit');
+  });
+
+  it('converts to Pimlico format when usePimlicoFormat=true', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ jsonrpc: '2.0', id: 1, result: MOCK_USER_OP_HASH }),
+    });
+
+    const provider = new Erc4337BundlerProvider({
+      rpcUrl: 'https://public.pimlico.io/v2/421614/rpc',
+      usePimlicoFormat: true,
+    });
+
+    const factoryAddr = '0x' + 'BB'.repeat(20);
+    const factoryCalldata = 'cafebabe';
+    const userOp = makePackedUserOp({
+      initCode: factoryAddr + factoryCalldata,
+    });
+
+    await provider.submitUserOp(userOp, MOCK_ENTRY_POINT);
+
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const sentUserOp = callBody.params[0];
+
+    // Should have Pimlico format fields
+    expect(sentUserOp).toHaveProperty('factory');
+    expect(sentUserOp).toHaveProperty('factoryData');
+    expect(sentUserOp).toHaveProperty('callGasLimit');
+    expect(sentUserOp).toHaveProperty('verificationGasLimit');
+    expect(sentUserOp).toHaveProperty('maxFeePerGas');
+    expect(sentUserOp).toHaveProperty('maxPriorityFeePerGas');
+
+    // Should NOT have packed fields
+    expect(sentUserOp).not.toHaveProperty('initCode');
+    expect(sentUserOp).not.toHaveProperty('accountGasLimits');
+    expect(sentUserOp).not.toHaveProperty('gasFees');
+    expect(sentUserOp).not.toHaveProperty('paymasterAndData');
+
+    // Verify factory/factoryData split
+    expect(sentUserOp.factory.toLowerCase()).toBe(factoryAddr.toLowerCase());
+    expect(sentUserOp.factoryData.toLowerCase()).toBe('0x' + factoryCalldata);
+  });
+
+  it('does not include factory/factoryData when initCode is empty (usePimlicoFormat=true)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ jsonrpc: '2.0', id: 1, result: MOCK_USER_OP_HASH }),
+    });
+
+    const provider = new Erc4337BundlerProvider({
+      rpcUrl: 'https://public.pimlico.io/v2/421614/rpc',
+      usePimlicoFormat: true,
+    });
+
+    const userOp = makePackedUserOp({ initCode: '0x' });
+
+    await provider.submitUserOp(userOp, MOCK_ENTRY_POINT);
+
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const sentUserOp = callBody.params[0];
+
+    // No factory fields for deployed account
+    expect(sentUserOp.factory).toBeUndefined();
+    expect(sentUserOp.factoryData).toBeUndefined();
+  });
+
+  it('includes paymaster fields when paymaster is set (usePimlicoFormat=true)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ jsonrpc: '2.0', id: 1, result: MOCK_USER_OP_HASH }),
+    });
+
+    const provider = new Erc4337BundlerProvider({
+      rpcUrl: 'https://public.pimlico.io/v2/421614/rpc',
+      usePimlicoFormat: true,
+    });
+
+    const paymasterAddr = '0x' + 'CC'.repeat(20);
+    const pmVerGas = '00'.repeat(15) + '01'; // 1 in 16 bytes
+    const pmPostGas = '00'.repeat(15) + '02'; // 2 in 16 bytes
+    const pmData = 'deadbeef';
+    const paymasterAndData = paymasterAddr + pmVerGas + pmPostGas + pmData;
+
+    const userOp = makePackedUserOp({ paymasterAndData });
+
+    await provider.submitUserOp(userOp, MOCK_ENTRY_POINT);
+
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const sentUserOp = callBody.params[0];
+
+    expect(sentUserOp.paymaster?.toLowerCase()).toBe(paymasterAddr.toLowerCase());
+    expect(sentUserOp).toHaveProperty('paymasterVerificationGasLimit');
+    expect(sentUserOp).toHaveProperty('paymasterPostOpGasLimit');
+    expect(sentUserOp.paymasterData?.toLowerCase()).toBe('0x' + pmData);
+  });
+
+  it('does not include paymaster fields when paymaster is zero address (usePimlicoFormat=true)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ jsonrpc: '2.0', id: 1, result: MOCK_USER_OP_HASH }),
+    });
+
+    const provider = new Erc4337BundlerProvider({
+      rpcUrl: 'https://public.pimlico.io/v2/421614/rpc',
+      usePimlicoFormat: true,
+    });
+
+    const userOp = makePackedUserOp({ paymasterAndData: '0x' });
+
+    await provider.submitUserOp(userOp, MOCK_ENTRY_POINT);
+
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const sentUserOp = callBody.params[0];
+
+    expect(sentUserOp.paymaster).toBeUndefined();
+    expect(sentUserOp.paymasterVerificationGasLimit).toBeUndefined();
+    expect(sentUserOp.paymasterPostOpGasLimit).toBeUndefined();
+    expect(sentUserOp.paymasterData).toBeUndefined();
+  });
+
+  it('returns userOpHash correctly when usePimlicoFormat=true', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ jsonrpc: '2.0', id: 1, result: MOCK_USER_OP_HASH }),
+    });
+
+    const provider = new Erc4337BundlerProvider({
+      rpcUrl: 'https://public.pimlico.io/v2/421614/rpc',
+      usePimlicoFormat: true,
+    });
+
+    const hash = await provider.submitUserOp(makePackedUserOp(), MOCK_ENTRY_POINT);
+    expect(hash).toBe(MOCK_USER_OP_HASH);
+  });
+});

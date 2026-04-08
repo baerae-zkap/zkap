@@ -11,6 +11,7 @@ import { ethers } from 'ethers';
 import {
   packUserOperation,
   unpackUserOperation,
+  toPimlicoFormat,
   createDummyPasskeySignature,
   createDummyZkSignature,
 } from '../userOpUtils';
@@ -314,6 +315,126 @@ describe('unpackUserOperation', () => {
     const unpacked = unpackUserOperation(packed);
     expect(unpacked.paymaster.toLowerCase()).toBe('0x' + 'cc'.repeat(20));
     expect(unpacked.paymasterData.toLowerCase()).toBe('0xdeadbeef');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toPimlicoFormat
+// ---------------------------------------------------------------------------
+
+describe('toPimlicoFormat', () => {
+  it('converts packed UserOp to Pimlico format with unpacked gas fields', () => {
+    const userOp = makeUserOp({
+      verificationGasLimit: '0x186a0',  // 100000
+      callGasLimit: '0x5208',           // 21000
+      maxPriorityFeePerGas: '0x77359400',
+      maxFeePerGas: '0x3b9aca00',
+    });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    // Should have individual gas fields, not packed accountGasLimits/gasFees
+    expect(pimlico).not.toHaveProperty('accountGasLimits');
+    expect(pimlico).not.toHaveProperty('gasFees');
+    expect(pimlico).not.toHaveProperty('paymasterAndData');
+    expect(pimlico).not.toHaveProperty('initCode');
+
+    expect(BigInt(pimlico.verificationGasLimit)).toBe(BigInt(100000));
+    expect(BigInt(pimlico.callGasLimit)).toBe(BigInt(21000));
+    expect(BigInt(pimlico.maxPriorityFeePerGas)).toBe(BigInt(2000000000));
+    expect(BigInt(pimlico.maxFeePerGas)).toBe(BigInt(1000000000));
+  });
+
+  it('does not include factory/factoryData when initCode is empty', () => {
+    const userOp = makeUserOp({ initCode: '0x' });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.factory).toBeUndefined();
+    expect(pimlico.factoryData).toBeUndefined();
+  });
+
+  it('splits initCode into factory (20 bytes) and factoryData (rest)', () => {
+    const factoryAddr = '0x' + 'AA'.repeat(20);
+    const factoryCalldata = 'deadbeefcafe';
+    const initCode = factoryAddr + factoryCalldata;
+
+    const userOp = makeUserOp({ initCode });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.factory?.toLowerCase()).toBe(factoryAddr.toLowerCase());
+    expect(pimlico.factoryData?.toLowerCase()).toBe('0x' + factoryCalldata.toLowerCase());
+  });
+
+  it('handles initCode with only factory address (no factoryData)', () => {
+    const factoryAddr = '0x' + 'BB'.repeat(20);
+    const initCode = factoryAddr; // exactly 42 chars (0x + 40)
+
+    const userOp = makeUserOp({ initCode });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.factory?.toLowerCase()).toBe(factoryAddr.toLowerCase());
+    expect(pimlico.factoryData).toBe('0x');
+  });
+
+  it('does not include paymaster fields when paymaster is ZeroAddress', () => {
+    const userOp = makeUserOp({
+      paymaster: '0x0000000000000000000000000000000000000000',
+    });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.paymaster).toBeUndefined();
+    expect(pimlico.paymasterVerificationGasLimit).toBeUndefined();
+    expect(pimlico.paymasterPostOpGasLimit).toBeUndefined();
+    expect(pimlico.paymasterData).toBeUndefined();
+  });
+
+  it('includes paymaster fields when paymaster is set', () => {
+    const paymasterAddr = '0x' + 'CC'.repeat(20);
+    const userOp = makeUserOp({
+      paymaster: paymasterAddr,
+      paymasterVerificationGasLimit: '0x6978', // 27000
+      paymasterPostOpGasLimit: '0x1388',       // 5000
+      paymasterData: '0xdeadbeef',
+    });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.paymaster?.toLowerCase()).toBe(paymasterAddr.toLowerCase());
+    expect(BigInt(pimlico.paymasterVerificationGasLimit!)).toBe(BigInt(27000));
+    expect(BigInt(pimlico.paymasterPostOpGasLimit!)).toBe(BigInt(5000));
+    expect(pimlico.paymasterData?.toLowerCase()).toBe('0xdeadbeef');
+  });
+
+  it('preserves sender, nonce, callData, preVerificationGas, signature', () => {
+    const userOp = makeUserOp({
+      sender: '0x' + 'DD'.repeat(20),
+      nonce: '0x42',
+      callData: '0xcafebabe',
+      preVerificationGas: '0x1000',
+      signature: '0xsignature',
+    });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.sender).toBe(userOp.sender);
+    expect(pimlico.nonce).toBe(userOp.nonce);
+    expect(pimlico.callData).toBe(userOp.callData);
+    expect(pimlico.preVerificationGas).toBe(userOp.preVerificationGas);
+    expect(pimlico.signature).toBe(userOp.signature);
+  });
+
+  it('handles initCode shorter than 42 chars as no factory', () => {
+    // Edge case: initCode that's not empty but too short to be valid
+    const userOp = makeUserOp({ initCode: '0x1234' }); // only 4 hex chars
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.factory).toBeUndefined();
+    expect(pimlico.factoryData).toBeUndefined();
   });
 });
 

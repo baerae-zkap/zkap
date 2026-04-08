@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import type { UserOperation, PackedUserOperation } from "../types/UserOperation";
+import type { UserOperation, PackedUserOperation, PimlicoUserOperation } from "../types/UserOperation";
 
 // ---------------------------------------------------------------------------
 // Pack / Unpack UserOperation
@@ -96,6 +96,76 @@ export function unpackUserOperation(packed: PackedUserOperation): UserOperation 
     paymasterPostOpGasLimit,
     signature: packed.signature,
   };
+}
+
+/**
+ * Convert a PackedUserOperation to Pimlico v0.7/v0.8 JSON-RPC format.
+ *
+ * Pimlico bundlers expect an unpacked format with separate `factory` and `factoryData`
+ * fields instead of the combined `initCode` field used in the on-chain packed format.
+ *
+ * @param packed - The packed UserOperation (on-chain format)
+ * @returns The UserOperation in Pimlico JSON-RPC format
+ *
+ * @example
+ * ```ts
+ * const packed = packUserOperation(userOp);
+ * const pimlicoFormat = toPimlicoFormat(packed);
+ * // Submit to Pimlico bundler
+ * await fetch(pimlicoUrl, {
+ *   method: 'POST',
+ *   body: JSON.stringify({
+ *     jsonrpc: '2.0',
+ *     method: 'eth_sendUserOperation',
+ *     params: [pimlicoFormat, entryPoint],
+ *   }),
+ * });
+ * ```
+ */
+export function toPimlicoFormat(packed: PackedUserOperation): PimlicoUserOperation {
+  const unpacked = unpackUserOperation(packed);
+
+  // Split initCode into factory (20 bytes) and factoryData (rest)
+  let factory: string | undefined;
+  let factoryData: string | undefined;
+  if (unpacked.initCode && unpacked.initCode !== "0x" && unpacked.initCode.length >= 42) {
+    factory = "0x" + unpacked.initCode.slice(2, 42);
+    factoryData = unpacked.initCode.length > 42 ? "0x" + unpacked.initCode.slice(42) : "0x";
+  }
+
+  // Check if paymaster is set (not zero address)
+  const hasPaymaster =
+    unpacked.paymaster &&
+    unpacked.paymaster !== "0x" &&
+    unpacked.paymaster !== ethers.ZeroAddress;
+
+  const result: PimlicoUserOperation = {
+    sender: unpacked.sender,
+    nonce: unpacked.nonce,
+    callData: unpacked.callData,
+    callGasLimit: unpacked.callGasLimit,
+    verificationGasLimit: unpacked.verificationGasLimit,
+    preVerificationGas: unpacked.preVerificationGas,
+    maxFeePerGas: unpacked.maxFeePerGas,
+    maxPriorityFeePerGas: unpacked.maxPriorityFeePerGas,
+    signature: unpacked.signature,
+  };
+
+  // Add factory fields only if deploying
+  if (factory) {
+    result.factory = factory;
+    result.factoryData = factoryData;
+  }
+
+  // Add paymaster fields only if using paymaster
+  if (hasPaymaster) {
+    result.paymaster = unpacked.paymaster;
+    result.paymasterVerificationGasLimit = unpacked.paymasterVerificationGasLimit;
+    result.paymasterPostOpGasLimit = unpacked.paymasterPostOpGasLimit;
+    result.paymasterData = unpacked.paymasterData;
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
