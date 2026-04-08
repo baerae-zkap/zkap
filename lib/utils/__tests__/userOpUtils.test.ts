@@ -436,6 +436,62 @@ describe('toPimlicoFormat', () => {
     expect(pimlico.factory).toBeUndefined();
     expect(pimlico.factoryData).toBeUndefined();
   });
+
+  it('outputs minimal hex encoding (no leading zeros) for gas fields', () => {
+    const userOp = makeUserOp({
+      verificationGasLimit: '0x186a0',
+      callGasLimit: '0x5208',
+      maxPriorityFeePerGas: '0x77359400',
+      maxFeePerGas: '0x3b9aca00',
+      preVerificationGas: '0xc350',
+      nonce: '0x1',
+    });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    // Must not have leading zeros (JSON-RPC convention)
+    expect(pimlico.verificationGasLimit).toBe('0x186a0');
+    expect(pimlico.callGasLimit).toBe('0x5208');
+    expect(pimlico.maxPriorityFeePerGas).toBe('0x77359400');
+    expect(pimlico.maxFeePerGas).toBe('0x3b9aca00');
+    expect(pimlico.preVerificationGas).toBe('0xc350');
+    expect(pimlico.nonce).toBe('0x1');
+  });
+
+  it('outputs "0x0" for zero gas values (not "0x")', () => {
+    const userOp = makeUserOp({
+      verificationGasLimit: '0x0',
+      callGasLimit: '0x0',
+      maxPriorityFeePerGas: '0x0',
+      maxFeePerGas: '0x0',
+      preVerificationGas: '0x0',
+      nonce: '0x0',
+    });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.verificationGasLimit).toBe('0x0');
+    expect(pimlico.callGasLimit).toBe('0x0');
+    expect(pimlico.maxPriorityFeePerGas).toBe('0x0');
+    expect(pimlico.maxFeePerGas).toBe('0x0');
+    expect(pimlico.preVerificationGas).toBe('0x0');
+    expect(pimlico.nonce).toBe('0x0');
+  });
+
+  it('outputs minimal hex for paymaster gas fields', () => {
+    const paymasterAddr = '0x' + 'CC'.repeat(20);
+    const userOp = makeUserOp({
+      paymaster: paymasterAddr,
+      paymasterVerificationGasLimit: '0x6978',
+      paymasterPostOpGasLimit: '0x1388',
+      paymasterData: '0xdeadbeef',
+    });
+    const packed = packUserOperation(userOp);
+    const pimlico = toPimlicoFormat(packed);
+
+    expect(pimlico.paymasterVerificationGasLimit).toBe('0x6978');
+    expect(pimlico.paymasterPostOpGasLimit).toBe('0x1388');
+  });
 });
 
 // ---------------------------------------------------------------------------

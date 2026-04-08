@@ -888,4 +888,35 @@ describe('Erc4337BundlerProvider with usePimlicoFormat', () => {
     const hash = await provider.submitUserOp(makePackedUserOp(), MOCK_ENTRY_POINT);
     expect(hash).toBe(MOCK_USER_OP_HASH);
   });
+
+  it('throws classified BundlerError on RPC error when usePimlicoFormat=true', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        jsonrpc: '2.0',
+        id: 1,
+        error: { code: -32602, message: 'AA21 didn\'t pay prefund' },
+      }),
+    });
+
+    const provider = new Erc4337BundlerProvider({
+      rpcUrl: 'https://public.pimlico.io/v2/421614/rpc',
+      usePimlicoFormat: true,
+    });
+
+    await expect(provider.submitUserOp(makePackedUserOp(), MOCK_ENTRY_POINT))
+      .rejects.toMatchObject({ code: 'AA21_INSUFFICIENT_FUNDS', retryable: false });
+  });
+
+  it('throws NETWORK_ERROR on fetch failure when usePimlicoFormat=true', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+    const provider = new Erc4337BundlerProvider({
+      rpcUrl: 'https://public.pimlico.io/v2/421614/rpc',
+      usePimlicoFormat: true,
+    });
+
+    await expect(provider.submitUserOp(makePackedUserOp(), MOCK_ENTRY_POINT))
+      .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+  });
 });

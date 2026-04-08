@@ -10,6 +10,12 @@ function padTo16Bytes(hex: string): string {
   return clean.padStart(32, "0"); // 16 bytes = 32 hex chars
 }
 
+/** Strip leading zeros from a hex string to produce minimal encoding (JSON-RPC convention). */
+function toMinimalHex(hex: string): string {
+  const stripped = hex.replace(/^0x0+/, "0x");
+  return stripped === "0x" ? "0x0" : stripped;
+}
+
 /**
  * Pack a UserOperation (unpacked SDK format) into a PackedUserOperation (on-chain format).
  * accountGasLimits = verificationGasLimit (16 bytes) || callGasLimit (16 bytes)
@@ -141,13 +147,13 @@ export function toPimlicoFormat(packed: PackedUserOperation): PimlicoUserOperati
 
   const result: PimlicoUserOperation = {
     sender: unpacked.sender,
-    nonce: unpacked.nonce,
+    nonce: toMinimalHex(unpacked.nonce),
     callData: unpacked.callData,
-    callGasLimit: unpacked.callGasLimit,
-    verificationGasLimit: unpacked.verificationGasLimit,
-    preVerificationGas: unpacked.preVerificationGas,
-    maxFeePerGas: unpacked.maxFeePerGas,
-    maxPriorityFeePerGas: unpacked.maxPriorityFeePerGas,
+    callGasLimit: toMinimalHex(unpacked.callGasLimit),
+    verificationGasLimit: toMinimalHex(unpacked.verificationGasLimit),
+    preVerificationGas: toMinimalHex(unpacked.preVerificationGas),
+    maxFeePerGas: toMinimalHex(unpacked.maxFeePerGas),
+    maxPriorityFeePerGas: toMinimalHex(unpacked.maxPriorityFeePerGas),
     signature: unpacked.signature,
   };
 
@@ -160,8 +166,8 @@ export function toPimlicoFormat(packed: PackedUserOperation): PimlicoUserOperati
   // Add paymaster fields only if using paymaster
   if (hasPaymaster) {
     result.paymaster = unpacked.paymaster;
-    result.paymasterVerificationGasLimit = unpacked.paymasterVerificationGasLimit;
-    result.paymasterPostOpGasLimit = unpacked.paymasterPostOpGasLimit;
+    result.paymasterVerificationGasLimit = toMinimalHex(unpacked.paymasterVerificationGasLimit);
+    result.paymasterPostOpGasLimit = toMinimalHex(unpacked.paymasterPostOpGasLimit);
     result.paymasterData = unpacked.paymasterData;
   }
 
