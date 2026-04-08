@@ -131,19 +131,31 @@ export function unpackUserOperation(packed: PackedUserOperation): UserOperation 
 export function toPimlicoFormat(packed: PackedUserOperation): PimlicoUserOperation {
   const unpacked = unpackUserOperation(packed);
 
-  // Split initCode into factory (20 bytes) and factoryData (rest)
+  // Validate and split initCode into factory (20 bytes) and factoryData (rest)
   let factory: string | undefined;
   let factoryData: string | undefined;
-  if (unpacked.initCode && unpacked.initCode !== "0x" && unpacked.initCode.length >= 42) {
-    factory = "0x" + unpacked.initCode.slice(2, 42);
-    factoryData = unpacked.initCode.length > 42 ? "0x" + unpacked.initCode.slice(42) : "0x";
+  const initCode = unpacked.initCode;
+  if (initCode && initCode !== "0x") {
+    if (initCode.length < 42) {
+      throw new Error(
+        `Invalid initCode: expected at least 20-byte address (42 hex chars with 0x prefix), got ${initCode.length} chars`
+      );
+    }
+    factory = "0x" + initCode.slice(2, 42);
+    factoryData = initCode.length > 42 ? "0x" + initCode.slice(42) : "0x";
   }
 
-  // Check if paymaster is set (not zero address)
+  // Validate paymasterAndData: if paymaster is present, gas fields must also be present
+  const paymasterHex = packed.paymasterAndData.replace("0x", "");
   const hasPaymaster =
     unpacked.paymaster &&
     unpacked.paymaster !== "0x" &&
-    unpacked.paymaster !== ethers.ZeroAddress;
+    unpacked.paymaster.toLowerCase() !== ethers.ZeroAddress;
+  if (hasPaymaster && paymasterHex.length < 104) {
+    throw new Error(
+      `Invalid paymasterAndData: has paymaster address but missing gas fields (expected ≥104 hex chars, got ${paymasterHex.length})`
+    );
+  }
 
   const result: PimlicoUserOperation = {
     sender: unpacked.sender,

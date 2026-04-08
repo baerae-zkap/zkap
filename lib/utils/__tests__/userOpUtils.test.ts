@@ -427,14 +427,29 @@ describe('toPimlicoFormat', () => {
     expect(pimlico.signature).toBe(userOp.signature);
   });
 
-  it('handles initCode shorter than 42 chars as no factory', () => {
-    // Edge case: initCode that's not empty but too short to be valid
-    const userOp = makeUserOp({ initCode: '0x1234' }); // only 4 hex chars
+  it('throws on initCode shorter than 42 chars (invalid address)', () => {
+    const userOp = makeUserOp({ initCode: '0x1234' }); // only 4 hex chars, not a valid address
     const packed = packUserOperation(userOp);
-    const pimlico = toPimlicoFormat(packed);
 
-    expect(pimlico.factory).toBeUndefined();
-    expect(pimlico.factoryData).toBeUndefined();
+    expect(() => toPimlicoFormat(packed)).toThrow('Invalid initCode');
+  });
+
+  it('throws on paymasterAndData with paymaster but missing gas fields', () => {
+    // 20-byte paymaster address (40 hex) but no gas fields (needs 104+ hex total)
+    const paymasterAddr = 'CC'.repeat(20); // 40 hex chars = 20 bytes
+    const packed = {
+      sender: '0x' + 'AA'.repeat(20),
+      nonce: '0x1',
+      initCode: '0x',
+      callData: '0x',
+      accountGasLimits: '0x' + '00'.repeat(16) + '00'.repeat(16),
+      preVerificationGas: '0x1',
+      gasFees: '0x' + '00'.repeat(16) + '00'.repeat(16),
+      paymasterAndData: '0x' + paymasterAddr, // only address, no gas fields
+      signature: '0x',
+    };
+
+    expect(() => toPimlicoFormat(packed)).toThrow('Invalid paymasterAndData');
   });
 
   it('outputs minimal hex encoding (no leading zeros) for gas fields', () => {
