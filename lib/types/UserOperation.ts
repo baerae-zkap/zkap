@@ -182,3 +182,30 @@ export interface PimlicoUserOperation {
   /** Signature over the UserOperation hash, validated by the account. */
   signature: string;
 }
+
+/**
+ * Gas estimation response from Pimlico's `eth_estimateUserOperationGas` endpoint.
+ *
+ * All values are hex-encoded strings. Use these values to override the gas limits
+ * returned by `autoFillUserOp()` when submitting to Pimlico bundlers.
+ *
+ * @example
+ * ```ts
+ * const estimate = await provider.estimateUserOpGas(packed, entryPoint);
+ * builder.setPreVerificationGas(estimate.preVerificationGas);
+ * builder.setVerificationGasLimit(estimate.verificationGasLimit);
+ * builder.setCallGasLimit(estimate.callGasLimit);
+ * ```
+ */
+export interface PimlicoGasEstimate {
+  /** Gas overhead charged before on-chain execution begins (hex string). */
+  preVerificationGas: string;
+  /** Gas limit for the account's signature-verification phase (hex string). */
+  verificationGasLimit: string;
+  /** Gas limit for the account's execution phase (hex string). */
+  callGasLimit: string;
+  /** Gas limit for paymaster verification (hex string). Only present when using a paymaster. */
+  paymasterVerificationGasLimit?: string;
+  /** Gas limit for paymaster post-op hook (hex string). Only present when using a paymaster. */
+  paymasterPostOpGasLimit?: string;
+}

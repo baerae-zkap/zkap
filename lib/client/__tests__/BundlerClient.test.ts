@@ -920,3 +920,173 @@ describe('Erc4337BundlerProvider with usePimlicoFormat', () => {
       .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Erc4337BundlerProvider.estimateUserOpGas
+// ---------------------------------------------------------------------------
+
+describe('Erc4337BundlerProvider.estimateUserOpGas', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it('sends eth_estimateUserOperationGas and returns gas estimates', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          preVerificationGas: '0x5208',
+          verificationGasLimit: '0x186a0',
+          callGasLimit: '0xc350',
+        },
+      }),
+    });
+
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+    const userOp = makePackedUserOp();
+
+    const estimate = await provider.estimateUserOpGas(userOp, MOCK_ENTRY_POINT);
+
+    // normalizeHex pads to even length
+    expect(estimate.preVerificationGas).toBe('0x5208');
+    expect(estimate.verificationGasLimit).toBe('0x0186a0');  // 0x186a0 → 0x0186a0
+    expect(estimate.callGasLimit).toBe('0xc350');
+
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(callBody.method).toBe('eth_estimateUserOperationGas');
+    expect(callBody.params[0]).toEqual(userOp);
+    expect(callBody.params[1]).toBe(MOCK_ENTRY_POINT);
+  });
+
+  it('normalizes odd-length hex strings from Pimlico response', async () => {
+    // Pimlico sometimes returns odd-length hex like "0x203ef" instead of "0x0203ef"
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          preVerificationGas: '0x203ef',  // odd length (5 hex chars)
+          verificationGasLimit: '0x1',    // single char
+          callGasLimit: '0xabc',          // odd length (3 hex chars)
+        },
+      }),
+    });
+
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+    const estimate = await provider.estimateUserOpGas(makePackedUserOp(), MOCK_ENTRY_POINT);
+
+    // Should be padded to even length
+    expect(estimate.preVerificationGas).toBe('0x0203ef');
+    expect(estimate.verificationGasLimit).toBe('0x01');
+    expect(estimate.callGasLimit).toBe('0x0abc');
+  });
+
+  it('converts to Pimlico format when usePimlicoFormat=true', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          preVerificationGas: '0x5208',
+          verificationGasLimit: '0x186a0',
+          callGasLimit: '0xc350',
+        },
+      }),
+    });
+
+    const provider = new Erc4337BundlerProvider({
+      rpcUrl: 'https://public.pimlico.io/v2/421614/rpc',
+      usePimlicoFormat: true,
+    });
+
+    const factoryAddr = '0x' + 'AA'.repeat(20);
+    const factoryCalldata = 'deadbeef';
+    const userOp = makePackedUserOp({
+      initCode: factoryAddr + factoryCalldata,
+    });
+
+    await provider.estimateUserOpGas(userOp, MOCK_ENTRY_POINT);
+
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const sentUserOp = callBody.params[0];
+
+    // Should have Pimlico format (factory/factoryData instead of initCode)
+    expect(sentUserOp).toHaveProperty('factory');
+    expect(sentUserOp).toHaveProperty('factoryData');
+    expect(sentUserOp).not.toHaveProperty('initCode');
+    expect(sentUserOp).not.toHaveProperty('accountGasLimits');
+  });
+
+  it('includes paymaster gas limits when present in response', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          preVerificationGas: '0x5208',
+          verificationGasLimit: '0x186a0',
+          callGasLimit: '0xc350',
+          paymasterVerificationGasLimit: '0x7530',
+          paymasterPostOpGasLimit: '0x2710',
+        },
+      }),
+    });
+
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+    const estimate = await provider.estimateUserOpGas(makePackedUserOp(), MOCK_ENTRY_POINT);
+
+    expect(estimate.paymasterVerificationGasLimit).toBe('0x7530');
+    expect(estimate.paymasterPostOpGasLimit).toBe('0x2710');
+  });
+
+  it('omits paymaster gas limits when not present in response', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          preVerificationGas: '0x5208',
+          verificationGasLimit: '0x186a0',
+          callGasLimit: '0xc350',
+        },
+      }),
+    });
+
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+    const estimate = await provider.estimateUserOpGas(makePackedUserOp(), MOCK_ENTRY_POINT);
+
+    expect(estimate.paymasterVerificationGasLimit).toBeUndefined();
+    expect(estimate.paymasterPostOpGasLimit).toBeUndefined();
+  });
+
+  it('throws classified BundlerError when JSON-RPC returns error', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        jsonrpc: '2.0',
+        id: 1,
+        error: { code: -32000, message: 'AA21: not enough gas' },
+      }),
+    });
+
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+
+    await expect(provider.estimateUserOpGas(makePackedUserOp(), MOCK_ENTRY_POINT))
+      .rejects.toMatchObject({ code: 'AA21_INSUFFICIENT_FUNDS' });
+  });
+
+  it('throws NETWORK_ERROR on fetch failure', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+    const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+
+    await expect(provider.estimateUserOpGas(makePackedUserOp(), MOCK_ENTRY_POINT))
+      .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+  });
+});
