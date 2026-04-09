@@ -45,7 +45,7 @@ export { BundlerError } from "./client/types";
 export type { BundlerProvider, BundlerErrorCode, UserOpStatus, UserOpReceipt } from "./client/types";
 
 // Pimlico format (for external bundler integration)
-export type { PimlicoUserOperation } from "./types/UserOperation";
+export type { PimlicoUserOperation, PimlicoGasEstimate } from "./types/UserOperation";
 
 // Chain registry
 export { ChainRegistry } from "./registry/ChainRegistry";

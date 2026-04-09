@@ -1,4 +1,4 @@
-import type { PackedUserOperation, PimlicoUserOperation } from "../types/UserOperation";
+import type { PackedUserOperation, PimlicoUserOperation, PimlicoGasEstimate } from "../types/UserOperation";
 import type { BundlerProvider, UserOpReceipt, UserOpStatus } from "./types";
 import { BundlerError } from "./types";
 import { toPimlicoFormat } from "../utils/userOpUtils";
@@ -21,6 +21,17 @@ function classifyBundlerError(message: string): BundlerError {
     return new BundlerError(message, "NETWORK_ERROR", true);
   }
   return new BundlerError(message, "BUNDLER_REJECTED", false);
+}
+
+/**
+ * Normalize hex string to even length for ethers.js compatibility.
+ * Pimlico may return odd-length hex strings like "0x203ef" (5 chars).
+ * ethers.js expects even-length hex (valid bytes), so we pad.
+ */
+function normalizeHex(hex: string): string {
+  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+  const padded = clean.length % 2 === 0 ? clean : "0" + clean;
+  return "0x" + padded;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +304,57 @@ export class Erc4337BundlerProvider implements BundlerProvider {
       success: Boolean(raw.success),
       actualGasCost: String(raw.actualGasCost || "0"),
       actualGasUsed: String(raw.actualGasUsed || "0"),
+    };
+  }
+
+  /**
+   * Estimate gas for a UserOperation via `eth_estimateUserOperationGas`.
+   *
+   * This method is specific to ERC-4337 bundlers that support gas estimation (e.g., Pimlico).
+   * When `usePimlicoFormat` is enabled, the packed UserOperation is automatically
+   * converted to Pimlico's expected format before submission.
+   *
+   * **Note**: This method is only available on {@link Erc4337BundlerProvider}, not on the
+   * {@link BundlerProvider} interface, as not all bundlers support gas estimation.
+   *
+   * @param userOp - The packed UserOperation to estimate gas for. Should have dummy signature set.
+   * @param entryPoint - Address of the ERC-4337 EntryPoint contract.
+   * @returns Gas estimates from the bundler.
+   * @throws {@link BundlerError} if the bundler rejects the estimation or a network error occurs.
+   *
+   * @example
+   * ```ts
+   * const provider = new Erc4337BundlerProvider({
+   *   rpcUrl: "https://public.pimlico.io/v2/421614/rpc",
+   *   usePimlicoFormat: true,
+   * });
+   *
+   * // After autoFillUserOp(), get more accurate estimates from Pimlico
+   * const estimate = await provider.estimateUserOpGas(packed, entryPoint);
+   * builder.setPreVerificationGas(estimate.preVerificationGas);
+   * builder.setVerificationGasLimit(estimate.verificationGasLimit);
+   * builder.setCallGasLimit(estimate.callGasLimit);
+   * ```
+   */
+  async estimateUserOpGas(
+    userOp: PackedUserOperation,
+    entryPoint: string
+  ): Promise<PimlicoGasEstimate> {
+    const opToSend: PackedUserOperation | PimlicoUserOperation = this.usePimlicoFormat
+      ? toPimlicoFormat(userOp)
+      : userOp;
+
+    const result = await this.rpcCall("eth_estimateUserOperationGas", [opToSend, entryPoint]) as Record<string, string>;
+    return {
+      preVerificationGas: normalizeHex(result.preVerificationGas),
+      verificationGasLimit: normalizeHex(result.verificationGasLimit),
+      callGasLimit: normalizeHex(result.callGasLimit),
+      paymasterVerificationGasLimit: result.paymasterVerificationGasLimit
+        ? normalizeHex(result.paymasterVerificationGasLimit)
+        : undefined,
+      paymasterPostOpGasLimit: result.paymasterPostOpGasLimit
+        ? normalizeHex(result.paymasterPostOpGasLimit)
+        : undefined,
     };
   }
 }
