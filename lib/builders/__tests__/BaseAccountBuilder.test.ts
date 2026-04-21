@@ -21,6 +21,12 @@ class TestAccountBuilder extends BaseAccountBuilder {
     this.userOp.signature = keySignatureList.join('');
     return this;
   }
+
+  // Test-only: exposes the protected `estimateGasWithCap` helper for direct assertion.
+  public async testEstimateGasWithCap(tx: ethers.TransactionRequest): Promise<bigint> {
+     
+    return (this as any).estimateGasWithCap(tx);
+  }
 }
 
 describe('BaseAccountBuilder', () => {
@@ -886,6 +892,180 @@ describe('BaseAccountBuilder', () => {
       await expect(builderWithProvider.estimateUserOpGasCost(userOp)).rejects.toThrow(
         'Failed to estimate gas cost'
       );
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // rpcEstimateGasCap — bounded eth_estimateGas to work around RPC gas caps
+  // (Base Sepolia rejects unbounded estimateGas with "intrinsic gas too high".)
+  // --------------------------------------------------------------------------
+  describe('rpcEstimateGasCap (estimateGasWithCap helper)', () => {
+    const DEFAULT_CAP = BigInt(15_000_000);
+    let mockProvider: { estimateGas: jest.Mock };
+
+    beforeEach(() => {
+      mockProvider = {
+        estimateGas: jest.fn().mockResolvedValue(BigInt(574000)),
+      };
+    });
+
+    function makeBuilder(cap?: bigint): TestAccountBuilder {
+      return new TestAccountBuilder(
+        mockChainId,
+        mockEntryPoint,
+        mockProvider as unknown as ethers.JsonRpcProvider,
+        cap
+      );
+    }
+
+    describe('A-1: default (no override) injects 15M gasLimit', () => {
+      it('payload contains gasLimit=15_000_000n by default', async () => {
+        const builder = makeBuilder();
+        await builder.testEstimateGasWithCap({
+          to: '0x' + '22'.repeat(20),
+          data: '0xdeadbeef',
+        });
+
+        expect(mockProvider.estimateGas).toHaveBeenCalledTimes(1);
+        const arg = mockProvider.estimateGas.mock.calls[0][0];
+        expect(arg.gasLimit).toBe(DEFAULT_CAP);
+        expect(arg.to).toBe('0x' + '22'.repeat(20));
+      });
+    });
+
+    describe('A-2: constructor override injects the provided cap', () => {
+      it('payload uses the custom cap value', async () => {
+        const builder = makeBuilder(BigInt(10_000_000));
+        await builder.testEstimateGasWithCap({
+          to: '0x' + '22'.repeat(20),
+          data: '0xdeadbeef',
+        });
+
+        const arg = mockProvider.estimateGas.mock.calls[0][0];
+        expect(arg.gasLimit).toBe(BigInt(10_000_000));
+      });
+    });
+
+    describe('A-3: cap=0n escape hatch drops gas field entirely', () => {
+      it('payload has no gasLimit field when cap is 0n', async () => {
+        const builder = makeBuilder(BigInt(0));
+        await builder.testEstimateGasWithCap({
+          to: '0x' + '22'.repeat(20),
+          data: '0xdeadbeef',
+        });
+
+        const arg = mockProvider.estimateGas.mock.calls[0][0];
+        expect(arg.gasLimit).toBeUndefined();
+        // Other fields are passed through unchanged
+        expect(arg.to).toBe('0x' + '22'.repeat(20));
+        expect(arg.data).toBe('0xdeadbeef');
+      });
+    });
+
+    describe('A-4: caller-supplied gasLimit=0n is also escape hatch', () => {
+      it('drops gasLimit even when default cap is set (caller intent wins)', async () => {
+        const builder = makeBuilder(); // default 15M cap
+        await builder.testEstimateGasWithCap({
+          to: '0x' + '22'.repeat(20),
+          data: '0xdeadbeef',
+          gasLimit: BigInt(0),
+        });
+
+        const arg = mockProvider.estimateGas.mock.calls[0][0];
+        expect(arg.gasLimit).toBeUndefined();
+      });
+
+      it('drops gasLimit when caller passes numeric 0 (BigNumberish normalization)', async () => {
+        const builder = makeBuilder();
+        await builder.testEstimateGasWithCap({
+          to: '0x' + '22'.repeat(20),
+          data: '0xdeadbeef',
+          gasLimit: 0,
+        });
+
+        const arg = mockProvider.estimateGas.mock.calls[0][0];
+        expect(arg.gasLimit).toBeUndefined();
+      });
+
+      it('drops gasLimit when caller passes string "0x0"', async () => {
+        const builder = makeBuilder();
+        await builder.testEstimateGasWithCap({
+          to: '0x' + '22'.repeat(20),
+          data: '0xdeadbeef',
+          gasLimit: '0x0',
+        });
+
+        const arg = mockProvider.estimateGas.mock.calls[0][0];
+        expect(arg.gasLimit).toBeUndefined();
+      });
+    });
+
+    describe('caller-supplied gasLimit > 0 is used as-is (overrides cap)', () => {
+      it('uses the caller value, not the cap', async () => {
+        const builder = makeBuilder(); // default 15M
+        await builder.testEstimateGasWithCap({
+          to: '0x' + '22'.repeat(20),
+          gasLimit: BigInt(500_000),
+        });
+
+        const arg = mockProvider.estimateGas.mock.calls[0][0];
+        // caller's 500_000 wins, cap doesn't overwrite
+        expect(BigInt(arg.gasLimit)).toBe(BigInt(500_000));
+      });
+    });
+
+    describe('B: regression spy — rejects unbounded estimate to catch missing gasLimit', () => {
+      it('mock that rejects missing gasLimit succeeds with default cap', async () => {
+        const strictMock = {
+          estimateGas: jest.fn().mockImplementation(
+            (tx: ethers.TransactionRequest) => {
+              if (tx.gasLimit == null) {
+                return Promise.reject(new Error('intrinsic gas too high'));
+              }
+              return Promise.resolve(BigInt(574000));
+            }
+          ),
+        };
+        const builder = new TestAccountBuilder(
+          mockChainId,
+          mockEntryPoint,
+          strictMock as unknown as ethers.JsonRpcProvider
+        );
+
+        // With default cap, payload gets gasLimit=15M, strict mock accepts.
+        await expect(
+          builder.testEstimateGasWithCap({
+            to: '0x' + '22'.repeat(20),
+            data: '0xdeadbeef',
+          })
+        ).resolves.toBe(BigInt(574000));
+      });
+
+      it('mock that rejects missing gasLimit fails with cap=0n (escape hatch propagates rejection)', async () => {
+        const strictMock = {
+          estimateGas: jest.fn().mockImplementation(
+            (tx: ethers.TransactionRequest) => {
+              if (tx.gasLimit == null) {
+                return Promise.reject(new Error('intrinsic gas too high'));
+              }
+              return Promise.resolve(BigInt(574000));
+            }
+          ),
+        };
+        const builder = new TestAccountBuilder(
+          mockChainId,
+          mockEntryPoint,
+          strictMock as unknown as ethers.JsonRpcProvider,
+          BigInt(0) // escape hatch: intentionally skip gasLimit injection
+        );
+
+        await expect(
+          builder.testEstimateGasWithCap({
+            to: '0x' + '22'.repeat(20),
+            data: '0xdeadbeef',
+          })
+        ).rejects.toThrow('intrinsic gas too high');
+      });
     });
   });
 });

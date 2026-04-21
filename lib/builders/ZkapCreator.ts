@@ -20,6 +20,12 @@ export interface ZkapCreatorInfo {
   encodedMasterKey: string;
   /** ABI-encoded transaction key used for signing operations. */
   encodedTxKey: string;
+  /**
+   * Upper bound for `gasLimit` in internal `eth_estimateGas` calls.
+   * Defaults to 15M. Set `0n` to disable injection (escape hatch for chains
+   * with conflicting gas semantics). See {@link ZkapAccountInfo.rpcEstimateGasCap}.
+   */
+  rpcEstimateGasCap?: bigint;
 }
 
 /**
@@ -68,11 +74,13 @@ export class ZkapCreator extends ZkapBuilder {
     salt,
     encodedMasterKey,
     encodedTxKey,
+    rpcEstimateGasCap,
   }: ZkapCreatorInfo) {
     super({
       chainId,
       entryPoint,
       enUrl,
+      rpcEstimateGasCap,
     });
     this.setInitCode(zkapFactory, salt, { encodedMasterKey, encodedTxKey });
     this.zkapFactory = zkapFactory;
