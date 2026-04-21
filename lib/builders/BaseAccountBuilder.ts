@@ -9,10 +9,20 @@ export abstract class BaseAccountBuilder {
   protected static readonly PAYMASTER_AND_DATA_MIN_HEX_LENGTH = 236;
   /** Default paymaster postOp gas: empirical lower bound for typical ERC-4337 postOp operations (e.g. token transfer) */
   protected static readonly DEFAULT_PAYMASTER_POST_OP_GAS = BigInt(5000);
+  /**
+   * Default upper bound for `gasLimit` in internal `eth_estimateGas` calls.
+   * Some public RPCs (observed on Base Sepolia) reject requests without an
+   * explicit `gas` or with `gas` above ~17M with "intrinsic gas too high".
+   * 15M = ~26x headroom over 574K observed worst-case (wallet deploy),
+   * safely under the observed cap, and within every supported chain's blockGasLimit.
+   * Override via constructor `rpcEstimateGasCap` arg. Set to 0n to opt out (no gas field injected).
+   */
+  private static readonly DEFAULT_RPC_ESTIMATE_GAS_CAP = BigInt(15_000_000);
   protected userOp: Partial<UserOperation> = {};
   protected chainId: number;
   protected entryPoint: string;
   protected provider?: ethers.JsonRpcProvider;
+  private readonly rpcEstimateGasCap: bigint;
 
   abstract setInitCode(...args: unknown[]): this;
   abstract setSignature(
@@ -23,7 +33,8 @@ export abstract class BaseAccountBuilder {
   constructor(
     chainId: number,
     entryPoint: string,
-    provider?: ethers.JsonRpcProvider
+    provider?: ethers.JsonRpcProvider,
+    rpcEstimateGasCap?: bigint
   ) {
     if (!Number.isInteger(chainId) || chainId <= 0) {
       throw new Error(`Invalid chainId: ${chainId}. Must be a positive integer.`);
@@ -34,6 +45,45 @@ export abstract class BaseAccountBuilder {
     this.chainId = chainId;
     this.entryPoint = entryPoint;
     this.provider = provider;
+    this.rpcEstimateGasCap =
+      rpcEstimateGasCap ?? BaseAccountBuilder.DEFAULT_RPC_ESTIMATE_GAS_CAP;
+  }
+
+  /**
+   * Wraps `provider.estimateGas` with a bounded `gasLimit` to work around
+   * public RPCs that reject unbounded estimate requests (observed on Base Sepolia).
+   *
+   * Priority (first match wins):
+   *   1. Caller-supplied `tx.gasLimit === 0n` → field is dropped (caller opts out)
+   *   2. Caller-supplied `tx.gasLimit > 0` → used as-is
+   *   3. Caller unset + `rpcEstimateGasCap === 0n` → field is dropped (option opts out)
+   *   4. Caller unset + cap > 0 → cap is injected
+   *
+   * `this.provider` is guaranteed by callers (autoFillUserOp checks early).
+   */
+  protected async estimateGasWithCap(
+    tx: ethers.TransactionRequest
+  ): Promise<bigint> {
+    // ethers v6 TransactionRequest.gasLimit is BigNumberish (bigint | number | string).
+    // Normalize so callers passing `0` or `"0x0"` are treated the same as `0n`.
+    const explicit =
+      tx.gasLimit != null ? BigInt(tx.gasLimit) : undefined;
+
+    if (explicit === BigInt(0)) {
+      const rest: ethers.TransactionRequest = { ...tx };
+      delete rest.gasLimit;
+      return this.provider!.estimateGas(rest);
+    }
+    if (explicit !== undefined) {
+      return this.provider!.estimateGas(tx);
+    }
+    if (this.rpcEstimateGasCap === BigInt(0)) {
+      return this.provider!.estimateGas(tx);
+    }
+    return this.provider!.estimateGas({
+      ...tx,
+      gasLimit: this.rpcEstimateGasCap,
+    });
   }
 
   protected applyDefaults(): void {
@@ -510,7 +560,7 @@ export abstract class BaseAccountBuilder {
       );
 
       /* istanbul ignore next */
-      const gasEstimate = await this.provider.estimateGas({
+      const gasEstimate = await this.estimateGasWithCap({
         to: this.entryPoint,
         data: callData,
       });
@@ -566,7 +616,7 @@ export abstract class BaseAccountBuilder {
       );
 
       /* istanbul ignore next */
-      const gasEstimate = await this.provider.estimateGas({
+      const gasEstimate = await this.estimateGasWithCap({
         to: this.entryPoint,
         data: callData,
       });
@@ -631,7 +681,7 @@ export abstract class BaseAccountBuilder {
       );
 
       /* istanbul ignore next */
-      const gasEstimate = await this.provider.estimateGas({
+      const gasEstimate = await this.estimateGasWithCap({
         to: userOp.paymaster,
         data: callData,
       });

@@ -24,6 +24,14 @@ export interface ZkapAccountInfo {
    * When set, autoFillUserOp will automatically populate paymaster-related data
    */
   paymaster?: PaymasterServiceConfig;
+  /**
+   * Upper bound for `gasLimit` in internal `eth_estimateGas` calls.
+   * Defaults to 15M. Some public RPCs (e.g. Base Sepolia) reject unbounded
+   * estimate requests with "intrinsic gas too high" — an explicit cap avoids this.
+   * Set to `0n` to disable injection and rely on the node's default behavior
+   * (escape hatch for chains with conflicting gas semantics).
+   */
+  rpcEstimateGasCap?: bigint;
 }
 
 export class ZkapBuilder extends BaseAccountBuilder {
@@ -55,14 +63,14 @@ export class ZkapBuilder extends BaseAccountBuilder {
   private signerKeyTypes: number[] | undefined;
   private paymasterService: PaymasterService | undefined;
 
-  constructor({ chainId, entryPoint, enUrl, paymaster }: ZkapAccountInfo) {
+  constructor({ chainId, entryPoint, enUrl, paymaster, rpcEstimateGasCap }: ZkapAccountInfo) {
     try {
       new URL(enUrl);
     } catch {
       throw new Error(`Invalid enUrl: "${enUrl}". Must be a valid URL.`);
     }
     const provider = new ethers.JsonRpcProvider(enUrl);
-    super(chainId, entryPoint, provider);
+    super(chainId, entryPoint, provider, rpcEstimateGasCap);
     this.provider = provider;
 
     // Create PaymasterService instance if paymaster config is provided
@@ -136,7 +144,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
     if (code !== "0x") {
       // Wallet is already deployed
-      const callGasLimit = await this.provider.estimateGas({
+      const callGasLimit = await this.estimateGasWithCap({
         from: this.entryPoint,
         to: this.userOp.sender,
         data: this.userOp.callData,
@@ -167,7 +175,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
         switch (parsedTx.name) {
           case "execute": {
             const { dest, value, func } = parsedTx.args;
-            const gasEstimate = await this.provider.estimateGas({
+            const gasEstimate = await this.estimateGasWithCap({
               from: this.entryPoint,
               to: dest,
               data: func,
@@ -184,7 +192,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
             }
 
             const estimationPromises = destList.map((d: string, i: number) =>
-              this.provider.estimateGas({
+              this.estimateGasWithCap({
                 from: this.entryPoint,
                 to: d,
                 data: funcList[i],
@@ -368,7 +376,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
     if (this.userOp.initCode !== "0x" && this.userOp.initCode !== undefined) {
       const zkapFactory = ethers.dataSlice(this.userOp.initCode, 0, 20);
       const callData = ethers.dataSlice(this.userOp.initCode, 20);
-      const walletCreationGasLimit = await this.provider.estimateGas({
+      const walletCreationGasLimit = await this.estimateGasWithCap({
         to: zkapFactory,
         data: callData,
         from: this.entryPoint,  // EntryPoint calls the factory

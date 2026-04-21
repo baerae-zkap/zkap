@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-04-21
+
+### Added
+- **`rpcEstimateGasCap` constructor option** on `ZkapBuilder` / `ZkapCreator` (via `ZkapAccountInfo` / `ZkapCreatorInfo`). Bounds `gasLimit` in internal `eth_estimateGas` calls with a default of 15M. Fixes Base Sepolia public RPCs rejecting wallet deploy with `"intrinsic gas too high"`. Set to `0n` to disable injection and fall back to node default behavior (escape hatch).
+- **`BaseAccountBuilder` constructor 4th positional arg `rpcEstimateGasCap?: bigint`** — propagated from the subclasses above.
+
+### Fixed
+- `autoFillUserOp()` no longer fails on Base Sepolia (chainId 84532) public RPC endpoints (sepolia.base.org, onfinality, drpc, Tenderly gateway) when estimating gas for `createAccount` or `execute`.
+
 ## [0.1.4] - 2026-04-09
 
 ### Added
