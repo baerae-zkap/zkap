@@ -122,8 +122,10 @@ export class AccountReader {
   /**
    * @param config.rpcUrl - JSON-RPC endpoint URL for the target chain.
    */
-  constructor(config: { rpcUrl: string }) {
-    this.provider = new ethers.JsonRpcProvider(config.rpcUrl);
+  constructor(config: { rpcUrl: string; chainId?: number }) {
+    this.provider = new ethers.JsonRpcProvider(config.rpcUrl, undefined, {
+      staticNetwork: config.chainId ? ethers.Network.from(config.chainId) : true,
+    });
   }
 
   /**
