@@ -297,10 +297,22 @@ export class Erc4337BundlerProvider implements BundlerProvider {
     const raw = await this.rpcCall("eth_getUserOperationReceipt", [userOpHash]) as Record<string, unknown> | null;
     if (!raw) return null;
 
+    // ERC-4337 spec nests the standard EVM TransactionReceipt under `receipt`,
+    // so `transactionHash` / `blockNumber` live there for compliant bundlers
+    // (Pimlico, Stackup, Alchemy, etc.). Top-level fields are kept as a
+    // fallback for non-conforming bundlers that flatten the shape.
+    const nested = (raw.receipt && typeof raw.receipt === "object")
+      ? (raw.receipt as Record<string, unknown>)
+      : {};
+
     return {
       userOpHash,
-      txHash: (raw.transactionHash as string) || (raw.txHash as string) || "",
-      blockNumber: Number(raw.blockNumber || 0),
+      txHash:
+        (nested.transactionHash as string) ||
+        (raw.transactionHash as string) ||
+        (raw.txHash as string) ||
+        "",
+      blockNumber: Number(nested.blockNumber ?? raw.blockNumber ?? 0),
       success: Boolean(raw.success),
       actualGasCost: String(raw.actualGasCost || "0"),
       actualGasUsed: String(raw.actualGasUsed || "0"),

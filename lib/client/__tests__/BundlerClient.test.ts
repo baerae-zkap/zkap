@@ -558,7 +558,71 @@ describe('Erc4337BundlerProvider', () => {
       expect(await provider.getReceipt(MOCK_USER_OP_HASH)).toBeNull();
     });
 
-    it('returns UserOpReceipt with transactionHash when result has transactionHash', async () => {
+    it('reads transactionHash and blockNumber from nested receipt (ERC-4337 spec shape)', async () => {
+      const txHash = '0x' + 'aa'.repeat(32);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          result: {
+            userOpHash: MOCK_USER_OP_HASH,
+            entryPoint: '0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108',
+            sender: '0xe7E34106E83A92b4a45418Bff86381eB1C4e0258',
+            nonce: '0x4',
+            success: true,
+            actualGasCost: '100000',
+            actualGasUsed: '80000',
+            logs: [],
+            receipt: {
+              transactionHash: txHash,
+              blockNumber: 12345,
+              blockHash: '0x' + 'bb'.repeat(32),
+              status: '0x1',
+            },
+          },
+        }),
+      });
+
+      const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+      const receipt = await provider.getReceipt(MOCK_USER_OP_HASH);
+
+      expect(receipt).not.toBeNull();
+      expect(receipt!.txHash).toBe(txHash);
+      expect(receipt!.blockNumber).toBe(12345);
+      expect(receipt!.success).toBe(true);
+      expect(receipt!.actualGasCost).toBe('100000');
+      expect(receipt!.actualGasUsed).toBe('80000');
+      expect(receipt!.userOpHash).toBe(MOCK_USER_OP_HASH);
+    });
+
+    it('parses hex blockNumber from nested receipt (real Pimlico shape)', async () => {
+      const txHash = '0xf8b9a5cf1a4e4069d72e05b2b67ef92164c56bc812ef9f1d076fee4ff99ae51a';
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          result: {
+            userOpHash: MOCK_USER_OP_HASH,
+            success: true,
+            actualGasUsed: '0x4e773',
+            actualGasCost: '0x1cbbe82aeed3c0',
+            logs: [],
+            receipt: {
+              transactionHash: txHash,
+              blockNumber: '0xcf5e155',
+              status: '0x1',
+            },
+          },
+        }),
+      });
+
+      const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+      const receipt = await provider.getReceipt(MOCK_USER_OP_HASH);
+
+      expect(receipt!.txHash).toBe(txHash);
+      expect(receipt!.blockNumber).toBe(217440597);
+      expect(receipt!.success).toBe(true);
+    });
+
+    it('falls back to top-level transactionHash for non-conforming bundlers', async () => {
       const txHash = '0x' + 'dd'.repeat(32);
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -576,16 +640,12 @@ describe('Erc4337BundlerProvider', () => {
       const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
       const receipt = await provider.getReceipt(MOCK_USER_OP_HASH);
 
-      expect(receipt).not.toBeNull();
       expect(receipt!.txHash).toBe(txHash);
       expect(receipt!.blockNumber).toBe(12345);
       expect(receipt!.success).toBe(true);
-      expect(receipt!.actualGasCost).toBe('100000');
-      expect(receipt!.actualGasUsed).toBe('80000');
-      expect(receipt!.userOpHash).toBe(MOCK_USER_OP_HASH);
     });
 
-    it('falls back to txHash when transactionHash is absent', async () => {
+    it('falls back to top-level txHash when transactionHash is absent', async () => {
       const txHash = '0x' + 'ee'.repeat(32);
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -607,7 +667,28 @@ describe('Erc4337BundlerProvider', () => {
       expect(receipt!.success).toBe(false);
     });
 
-    it('returns empty string txHash when neither transactionHash nor txHash present', async () => {
+    it('prefers nested receipt.transactionHash over top-level when both exist', async () => {
+      const nestedHash = '0x' + 'aa'.repeat(32);
+      const topLevelHash = '0x' + 'bb'.repeat(32);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          result: {
+            transactionHash: topLevelHash,
+            success: true,
+            receipt: { transactionHash: nestedHash, blockNumber: 7 },
+          },
+        }),
+      });
+
+      const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com' });
+      const receipt = await provider.getReceipt(MOCK_USER_OP_HASH);
+
+      expect(receipt!.txHash).toBe(nestedHash);
+      expect(receipt!.blockNumber).toBe(7);
+    });
+
+    it('returns empty string txHash when neither nested nor top-level present', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({
