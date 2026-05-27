@@ -1,9 +1,9 @@
 import { ethers } from "ethers";
 
 import { EntryPointABI, ZkapAccountABI, ZkapPaymasterABI } from "../../types/abi";
-import { AaCode, AaFetchError, UserOpRevertError } from "../../errors";
+import { AaCode, AaFetchError, UserOpRevertError, aaCodeToPhase, mapAaPrefix } from "../../errors";
 import { decodeContractError, extractExecutionRevert, extractHex } from "../revertDecoder";
-import { aaCodeToPhase, classifyBundlerError, makeFetchTransportError, mapAaPrefix } from "../errorMap";
+import { classifyBundlerError, makeFetchTransportError } from "../errorMap";
 
 // Fixtures encoded from the shipped ABIs use real selectors (keccak(sig)[:4]),
 // identical to deployed bytecode. The two literal selectors below are captured
