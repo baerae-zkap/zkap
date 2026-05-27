@@ -21,9 +21,6 @@ const errorInterface = new ethers.Interface(
   ),
 );
 
-/** EntryPoint interface for event-log parsing (UserOperationRevertReason). */
-const entryPointInterface = new ethers.Interface(EntryPointABI);
-
 /**
  * Make decoded error args JSON-safe. ethers returns `bigint` for uint args, which
  * would make `JSON.stringify(error)` throw — so BigInts (and nested objects) are
@@ -86,31 +83,4 @@ export function decodeContractError(data: string): RevertInfo {
     selector,
     rawRevertData: data,
   };
-}
-
-type EventLog = { topics: ReadonlyArray<string>; data: string };
-
-/**
- * Extracts the execution-revert reason bytes from a UserOp receipt's logs by
- * parsing the EntryPoint `UserOperationRevertReason` event. A top-level `reason`
- * field (some bundlers expose it) takes precedence. This is a presence probe —
- * a successful op or a receipt without the event yields `""` (not an error).
- */
-export function extractExecutionRevert(
-  logs: ReadonlyArray<EventLog> | undefined,
-  topLevelReason?: string,
-): string {
-  if (typeof topLevelReason === "string" && topLevelReason !== "0x") return topLevelReason;
-  for (const log of logs ?? []) {
-    let parsed;
-    try {
-      parsed = entryPointInterface.parseLog({ topics: [...log.topics], data: log.data });
-    } catch {
-      continue; // not an EntryPoint event
-    }
-    if (parsed && parsed.name === "UserOperationRevertReason") {
-      return parsed.args.revertReason as string;
-    }
-  }
-  return "";
 }

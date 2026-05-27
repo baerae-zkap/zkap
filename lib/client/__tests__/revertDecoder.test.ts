@@ -1,11 +1,11 @@
 import receiptsJson from "./fixtures/revert-receipts.json";
-import { decodeContractError, extractExecutionRevert } from "../revertDecoder";
+import { decodeContractError } from "../revertDecoder";
 
 /**
- * End-to-end revert decode against REAL Base Sepolia receipts (captured from the
- * 4 reverted UserOps below). Validates the actual on-chain path:
- *   receipt logs → extractExecutionRevert → decodeContractError
- * — not just hand-built/ABI-encoded fixtures. RPC used to capture: sepolia.base.org.
+ * Revert decode against the revert bytes from REAL Base Sepolia receipts (4 reverted
+ * UserOps). The full receipt-logs → reason → ReceiptRevert path is exercised in the
+ * provider tests; here we validate decodeContractError on the captured reason bytes.
+ * RPC used to capture: sepolia.base.org.
  */
 type RevertFixture = {
   txHash: string;
@@ -24,15 +24,11 @@ describe("revertDecoder against real Base Sepolia receipts", () => {
     expect(fixtures.every((f) => f.success === false)).toBe(true);
   });
 
-  it.each(fixtures)("extractExecutionRevert + decodeContractError — $note", (fx) => {
-    // 1) pull the revert reason out of the real receipt logs
-    const reason = extractExecutionRevert(fx.logs);
-    expect(reason).toBe(fx.revertReason);
-
-    // 2) decode it — always returns a RevertInfo (selector + raw always preserved)
-    const decoded = decodeContractError(reason);
-    expect(decoded.selector).toBe(reason.slice(0, 10));
-    expect(decoded.rawRevertData).toBe(reason);
+  it.each(fixtures)("decodeContractError — $note", (fx) => {
+    // decode the captured revert bytes — always a RevertInfo (selector + raw preserved)
+    const decoded = decodeContractError(fx.revertReason);
+    expect(decoded.selector).toBe(fx.revertReason.slice(0, 10));
+    expect(decoded.rawRevertData).toBe(fx.revertReason);
     if (fx.expect === null) {
       // unknown target selector → SDK can't decode; caller keeps raw + selector only
       expect(decoded.contractError).toBeUndefined();
@@ -40,7 +36,7 @@ describe("revertDecoder against real Base Sepolia receipts", () => {
       expect(decoded.contractError).toEqual(fx.expect);
     }
 
-    // 3) whatever we produce must stay JSON-safe
-    expect(() => JSON.stringify({ reason, decoded })).not.toThrow();
+    // whatever we produce must stay JSON-safe
+    expect(() => JSON.stringify(decoded)).not.toThrow();
   });
 });

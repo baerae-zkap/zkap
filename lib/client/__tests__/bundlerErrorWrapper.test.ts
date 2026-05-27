@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 
 import { EntryPointABI, ZkapAccountABI, ZkapPaymasterABI } from "../../types/abi";
 import { AaCode, AaFetchError, AaOperationError, UserOpRevertError, aaCodeToPhase, mapAaPrefix } from "../../errors";
-import { decodeContractError, extractExecutionRevert } from "../revertDecoder";
+import { decodeContractError } from "../revertDecoder";
 import { classifyBundlerError, makeFetchTransportError } from "../bundlerErrorWrapper";
 
 // Fixtures encoded from the shipped ABIs use real selectors (keccak(sig)[:4]),
@@ -11,7 +11,6 @@ import { classifyBundlerError, makeFetchTransportError } from "../bundlerErrorWr
 const errIface = new ethers.Interface(
   [...EntryPointABI, ...ZkapAccountABI, ...ZkapPaymasterABI].filter((f: { type?: string }) => f.type === "error"),
 );
-const epIface = new ethers.Interface(EntryPointABI);
 
 describe("mapAaPrefix", () => {
   it("maps a known AA prefix to its AaCode", () => {
@@ -80,21 +79,6 @@ describe("decodeContractError", () => {
     expect(() => decodeContractError("")).toThrow(AaOperationError);
     expect(() => decodeContractError("not hex")).toThrow(AaOperationError);
     expect(() => decodeContractError("0xab")).toThrow(AaOperationError); // shorter than a 4-byte selector
-  });
-});
-
-describe("extractExecutionRevert", () => {
-  it("pulls revertReason bytes from a UserOperationRevertReason log", () => {
-    const reason = errIface.encodeErrorResult("TxKeyUpdateInProgress", []);
-    const evt = epIface.getEvent("UserOperationRevertReason")!;
-    const encoded = epIface.encodeEventLog(evt, [ethers.zeroPadValue("0x01", 32), ethers.ZeroAddress, 0n, reason]);
-    const out = extractExecutionRevert([{ topics: encoded.topics, data: encoded.data }]);
-    expect(out).toBe(reason);
-    expect(decodeContractError(out).contractError).toEqual({ name: "TxKeyUpdateInProgress", args: [] });
-  });
-  it("prefers a top-level reason and returns \"\" when no revert log is present", () => {
-    expect(extractExecutionRevert([], "0xdeadbeef")).toBe("0xdeadbeef");
-    expect(extractExecutionRevert([{ topics: ["0xabc"], data: "0x" }])).toBe("");
   });
 });
 
