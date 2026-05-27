@@ -26,6 +26,37 @@ describe("mapAaPrefix", () => {
   it("maps an off-catalog AA prefix to AA_UNKNOWN", () => {
     expect(mapAaPrefix("AA99 something new")).toBe(AaCode.UNKNOWN);
   });
+
+  // Exhaustive: every catalogued AA prefix → its AaCode. This is the unit-level
+  // replacement for the old provider-driven classification matrix.
+  it.each([
+    ["AA10", AaCode.AA10_SENDER_ALREADY_CONSTRUCTED],
+    ["AA13", AaCode.AA13_INIT_CODE_FAILED],
+    ["AA14", AaCode.AA14_INIT_CODE_MUST_RETURN_SENDER],
+    ["AA15", AaCode.AA15_INIT_CODE_MUST_CREATE_SENDER],
+    ["AA20", AaCode.AA20_NOT_DEPLOYED],
+    ["AA21", AaCode.AA21_INSUFFICIENT_PREFUND],
+    ["AA22", AaCode.AA22_EXPIRED_OR_NOT_DUE],
+    ["AA23", AaCode.AA23_ACCOUNT_REVERTED],
+    ["AA24", AaCode.AA24_SIGNATURE_ERROR],
+    ["AA25", AaCode.AA25_INVALID_NONCE],
+    ["AA31", AaCode.AA31_PAYMASTER_DEPOSIT_TOO_LOW],
+    ["AA32", AaCode.AA32_PAYMASTER_EXPIRED_OR_NOT_DUE],
+    ["AA33", AaCode.AA33_PAYMASTER_REVERTED],
+    ["AA34", AaCode.AA34_PAYMASTER_SIGNATURE_ERROR],
+    ["AA40", AaCode.AA40_OVER_VERIFICATION_GAS_LIMIT],
+    ["AA41", AaCode.AA41_UNDER_VERIFICATION_GAS],
+    ["AA50", AaCode.AA50_POST_OP_REVERTED],
+    ["AA51", AaCode.AA51_PREFUND_BELOW_GAS_COST],
+    ["AA90", AaCode.AA90_INVALID_BENEFICIARY],
+    ["AA91", AaCode.AA91_FAILED_SEND_TO_BENEFICIARY],
+    ["AA92", AaCode.AA92_INTERNAL_CALL_ONLY],
+    ["AA93", AaCode.AA93_INVALID_PAYMASTER_AND_DATA],
+    ["AA94", AaCode.AA94_GAS_VALUES_OVERFLOW],
+    ["AA95", AaCode.AA95_OUT_OF_GAS],
+  ] as const)("maps %s to its AaCode", (prefix, code) => {
+    expect(mapAaPrefix(`${prefix} reverted`)).toBe(code);
+  });
 });
 
 describe("aaCodeToPhase", () => {
