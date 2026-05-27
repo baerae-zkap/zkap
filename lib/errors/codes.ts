@@ -26,7 +26,7 @@
  * the prefix (AA10-AA95) with a self-documenting meaning. The prefix is preserved
  * so it cross-references with bundler logs.
  *
- * phase mapping (`aaCodeToPhase`, errorMap.ts):
+ * phase mapping (`aaCodeToPhase`, phase.ts):
  *   factory              → AA10/13/14/15
  *   account_validation   → AA20/21/22/23/24/25, AA40/41, AA94
  *   paymaster_validation → AA31/32/33/34, AA93
