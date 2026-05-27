@@ -70,14 +70,23 @@ const CODE_TO_PHASE: Readonly<Record<AaCode, UserOpRevertPhase>> = {
   [AaCode.AA32_PAYMASTER_EXPIRED_OR_NOT_DUE]: "paymaster_validation",
   [AaCode.AA33_PAYMASTER_REVERTED]: "paymaster_validation",
   [AaCode.AA34_PAYMASTER_SIGNATURE_ERROR]: "paymaster_validation",
+  // AA50/51 are the paymaster postOp callback (per-op, inside innerHandleOp).
   [AaCode.AA50_POST_OP_REVERTED]: "post_op",
   [AaCode.AA51_PREFUND_BELOW_GAS_COST]: "post_op",
-  [AaCode.AA90_INVALID_BENEFICIARY]: "unknown",
-  [AaCode.AA91_FAILED_SEND_TO_BENEFICIARY]: "unknown",
-  [AaCode.AA92_INTERNAL_CALL_ONLY]: "unknown",
-  [AaCode.AA93_INVALID_PAYMASTER_AND_DATA]: "unknown",
-  [AaCode.AA94_GAS_VALUES_OVERFLOW]: "unknown",
-  [AaCode.AA95_OUT_OF_GAS]: "unknown",
+  // AA90/91 fire in `_compensate` — the per-batch beneficiary payout after every op
+  // (and its postOp) has run. A distinct settlement stage, not the paymaster postOp.
+  [AaCode.AA90_INVALID_BENEFICIARY]: "settlement",
+  [AaCode.AA91_FAILED_SEND_TO_BENEFICIARY]: "settlement",
+  // AA92 is the `innerHandleOp` access guard (execution entry); AA95 is its gas
+  // check immediately before the callData `Exec.call`. Both are execution-path.
+  [AaCode.AA92_INTERNAL_CALL_ONLY]: "execution",
+  // AA93 is the paymasterAndData length check while parsing the paymaster field.
+  [AaCode.AA93_INVALID_PAYMASTER_AND_DATA]: "paymaster_validation",
+  // AA94 is the gas-field overflow precheck in `_validatePrepayment`, gating
+  // account validation.
+  [AaCode.AA94_GAS_VALUES_OVERFLOW]: "account_validation",
+  [AaCode.AA95_OUT_OF_GAS]: "execution",
+  // The code itself is unknown (off-spec AA prefix), so the stage cannot be derived.
   [AaCode.UNKNOWN]: "unknown",
 };
 

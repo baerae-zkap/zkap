@@ -36,6 +36,16 @@ describe("aaCodeToPhase", () => {
     expect(aaCodeToPhase(AaCode.AA13_INIT_CODE_FAILED)).toBe("factory");
     expect(aaCodeToPhase(AaCode.AA50_POST_OP_REVERTED)).toBe("post_op");
     expect(aaCodeToPhase(AaCode.UNKNOWN)).toBe("unknown");
+    // AA94 gas-field overflow precheck gates account validation (_validatePrepayment).
+    expect(aaCodeToPhase(AaCode.AA94_GAS_VALUES_OVERFLOW)).toBe("account_validation");
+    // AA93 paymasterAndData parsing belongs to the paymaster validation path.
+    expect(aaCodeToPhase(AaCode.AA93_INVALID_PAYMASTER_AND_DATA)).toBe("paymaster_validation");
+    // AA92 internal-call guard and AA95 out-of-gas both fire on the execution path.
+    expect(aaCodeToPhase(AaCode.AA92_INTERNAL_CALL_ONLY)).toBe("execution");
+    expect(aaCodeToPhase(AaCode.AA95_OUT_OF_GAS)).toBe("execution");
+    // AA90/91 fire in _compensate — per-batch beneficiary settlement, not postOp.
+    expect(aaCodeToPhase(AaCode.AA90_INVALID_BENEFICIARY)).toBe("settlement");
+    expect(aaCodeToPhase(AaCode.AA91_FAILED_SEND_TO_BENEFICIARY)).toBe("settlement");
   });
 });
 
