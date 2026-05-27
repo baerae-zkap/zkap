@@ -8,7 +8,6 @@ import {
   aaCodeToPhase,
   mapAaPrefix,
   type FetchService,
-  type OperationType,
 } from "../errors";
 import { decodeContractError } from "./revertDecoder";
 
@@ -17,7 +16,7 @@ import { decodeContractError } from "./revertDecoder";
 // ---------------------------------------------------------------------------
 export function makeFetchTransportError(
   err: unknown,
-  ctx: { service: FetchService; url: string; method: "GET" | "POST"; operation: OperationType },
+  ctx: { service: FetchService; url: string; method: "GET" | "POST"; operation: string },
 ): AaFetchError {
   const isTimeout = err instanceof DOMException && err.name === "AbortError";
   return new AaFetchError({
@@ -42,7 +41,7 @@ export interface ClassifyBundlerErrorOpts {
   httpStatus?: number;
   /** Pre-stringified original response — always preserved. */
   raw: string;
-  operation: OperationType;
+  operation: string;
   service: FetchService;
   url: string;
   method: "GET" | "POST";
