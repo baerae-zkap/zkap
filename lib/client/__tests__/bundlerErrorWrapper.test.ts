@@ -1,8 +1,8 @@
 import { ethers } from "ethers";
 
 import { EntryPointABI, ZkapAccountABI, ZkapPaymasterABI } from "../../types/abi";
-import { AaCode, AaFetchError, UserOpRevertError, aaCodeToPhase, mapAaPrefix } from "../../errors";
-import { decodeContractError, extractExecutionRevert, extractHex } from "../revertDecoder";
+import { AaCode, AaFetchError, AaOperationError, UserOpRevertError, aaCodeToPhase, mapAaPrefix } from "../../errors";
+import { decodeContractError, extractExecutionRevert } from "../revertDecoder";
 import { classifyBundlerError, makeFetchTransportError } from "../bundlerErrorWrapper";
 
 // Fixtures encoded from the shipped ABIs use real selectors (keccak(sig)[:4]),
@@ -53,28 +53,33 @@ describe("decodeContractError", () => {
   it("unwraps FailedOpWithRevert one level to the inner custom error", () => {
     const inner = errIface.encodeErrorResult("InsufficientTxKeyWeight", []);
     const wrapped = errIface.encodeErrorResult("FailedOpWithRevert", [0n, "AA23 reverted (or OOG)", inner]);
-    expect(decodeContractError(wrapped)).toEqual({ name: "InsufficientTxKeyWeight", args: [] });
+    expect(decodeContractError(wrapped).contractError).toEqual({ name: "InsufficientTxKeyWeight", args: [] });
   });
   it("decodes the standard Error(string) (matches the real ERC20 receipt)", () => {
     const data = errIface.encodeErrorResult("Error", ["ERC20: transfer amount exceeds balance"]);
-    expect(decodeContractError(data)).toEqual({ name: "Error", args: ["ERC20: transfer amount exceeds balance"] });
+    expect(decodeContractError(data).contractError).toEqual({ name: "Error", args: ["ERC20: transfer amount exceeds balance"] });
   });
   it("decodes Panic(uint256)", () => {
     const data = errIface.encodeErrorResult("Panic", [0x11]);
-    expect(decodeContractError(data)).toEqual({ name: "Panic", args: ["17"] });
+    expect(decodeContractError(data).contractError).toEqual({ name: "Panic", args: ["17"] });
   });
   it("decodes a real captured OZ FailedCall selector", () => {
     // 0xd6bda275 — from real Base Sepolia receipt 0xc9f0502c...
-    expect(decodeContractError("0xd6bda275")).toEqual({ name: "FailedCall", args: [] });
+    expect(decodeContractError("0xd6bda275").contractError).toEqual({ name: "FailedCall", args: [] });
   });
-  it("returns undefined for unknown target selectors (real captured)", () => {
+  it("preserves selector + raw (no contractError) for unknown target selectors", () => {
     // 0x1b16c2b3 / 0xe6e287bf — unknown target errors from real receipts.
-    expect(decodeContractError("0x1b16c2b3" + "00".repeat(32))).toBeUndefined();
-    expect(decodeContractError("0xe6e287bf" + "00".repeat(32))).toBeUndefined();
+    const a = decodeContractError("0x1b16c2b3" + "00".repeat(32));
+    expect(a.contractError).toBeUndefined();
+    expect(a.selector).toBe("0x1b16c2b3");
+    expect(a.rawRevertData).toBe("0x1b16c2b3" + "00".repeat(32));
+    expect(decodeContractError("0xe6e287bf" + "00".repeat(32)).contractError).toBeUndefined();
   });
-  it("returns undefined for empty input", () => {
-    expect(decodeContractError("0x")).toBeUndefined();
-    expect(decodeContractError(undefined)).toBeUndefined();
+  it("throws AaOperationError on empty / non-hex / selector-less input", () => {
+    expect(() => decodeContractError("0x")).toThrow(AaOperationError);
+    expect(() => decodeContractError("")).toThrow(AaOperationError);
+    expect(() => decodeContractError("not hex")).toThrow(AaOperationError);
+    expect(() => decodeContractError("0xab")).toThrow(AaOperationError); // shorter than a 4-byte selector
   });
 });
 
@@ -85,11 +90,11 @@ describe("extractExecutionRevert", () => {
     const encoded = epIface.encodeEventLog(evt, [ethers.zeroPadValue("0x01", 32), ethers.ZeroAddress, 0n, reason]);
     const out = extractExecutionRevert([{ topics: encoded.topics, data: encoded.data }]);
     expect(out).toBe(reason);
-    expect(decodeContractError(out)).toEqual({ name: "TxKeyUpdateInProgress", args: [] });
+    expect(decodeContractError(out).contractError).toEqual({ name: "TxKeyUpdateInProgress", args: [] });
   });
-  it("prefers a top-level reason and ignores unrelated logs", () => {
+  it("prefers a top-level reason and returns \"\" when no revert log is present", () => {
     expect(extractExecutionRevert([], "0xdeadbeef")).toBe("0xdeadbeef");
-    expect(extractExecutionRevert([{ topics: ["0xabc"], data: "0x" }])).toBeUndefined();
+    expect(extractExecutionRevert([{ topics: ["0xabc"], data: "0x" }])).toBe("");
   });
 });
 
@@ -131,14 +136,5 @@ describe("makeFetchTransportError", () => {
     const abort = new DOMException("aborted", "AbortError");
     expect(makeFetchTransportError(abort, ctx).code).toBe("ZKAP_AA_FETCH_TIMEOUT");
     expect(makeFetchTransportError(new TypeError("network"), ctx).code).toBe("ZKAP_AA_FETCH_TRANSPORT");
-  });
-});
-
-describe("extractHex", () => {
-  it("returns hex strings and digs into nested data", () => {
-    expect(extractHex("0x1234abcd")).toBe("0x1234abcd");
-    expect(extractHex({ data: "0xdeadbeef" })).toBe("0xdeadbeef");
-    expect(extractHex(undefined)).toBeUndefined();
-    expect(extractHex("not hex")).toBeUndefined();
   });
 });

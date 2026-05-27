@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 
 import { EntryPointABI, ZkapAccountABI, ZkapPaymasterABI } from "../types/abi";
-import type { DecodedContractError } from "../errors";
+import { AaOperationError, AaOperationErrorCode, type RevertInfo } from "../errors";
 
 /**
  * Decodes revert bytes into a contract custom-error name + args.
@@ -12,7 +12,8 @@ import type { DecodedContractError } from "../errors";
  * (`keccak(signature)[:4]`), so this matches the deployed bytecode.
  *
  * Verified against real Base Sepolia receipts: `Error("ERC20: transfer amount
- * exceeds balance")`, OZ `FailedCall`, and unknown target selectors (→ undefined).
+ * exceeds balance")`, OZ `FailedCall`, and unknown target selectors (→ raw bytes +
+ * selector preserved, no `contractError`).
  */
 const errorInterface = new ethers.Interface(
   [...EntryPointABI, ...ZkapAccountABI, ...ZkapPaymasterABI].filter(
@@ -36,46 +37,55 @@ function jsonSafeArgs(args: ReadonlyArray<unknown>): unknown[] {
   });
 }
 
-/** Returns the value as a 0x-prefixed hex string if it looks like revert data, else undefined. */
-export function extractHex(data: unknown): `0x${string}` | undefined {
-  if (typeof data === "string" && data.startsWith("0x") && data.length >= 10) {
-    return data as `0x${string}`;
-  }
-  // Some bundlers nest the hex under error.data.data / .revertData.
-  if (data && typeof data === "object") {
-    const nested = (data as { data?: unknown; revertData?: unknown });
-    return extractHex(nested.data) ?? extractHex(nested.revertData);
-  }
-  return undefined;
-}
-
 /**
- * Best-effort decode of revert bytes. Returns undefined for empty input or a
- * selector the SDK does not know (the caller preserves the raw bytes + selector
- * so the consumer can decode with their own target ABI).
+ * Decodes revert bytes into a {@link RevertInfo}. Always preserves the 4-byte
+ * selector + raw bytes; a known selector additionally carries the decoded
+ * `contractError`. An unknown selector returns selector + raw only (no
+ * `contractError`) so the consumer can decode with their own target ABI (facts-only).
+ *
+ * `data` must be a hex string with at least a 4-byte selector — anything else
+ * (empty, `"0x"`, non-hex) is a caller error and throws `AaOperationError`. Callers
+ * holding untrusted input should gate with `ethers.isHexString` first.
  *
  * Unwraps EntryPoint `FailedOpWithRevert(opIndex, reason, inner)` one level to
  * recover the actual contract error carried in `inner`.
  */
-export function decodeContractError(data?: string): DecodedContractError | undefined {
-  if (!data || data === "0x") return undefined;
+export function decodeContractError(data: string): RevertInfo {
+  if (!ethers.isHexString(data) || data.length < 10) {
+    throw new AaOperationError({
+      code: AaOperationErrorCode.INPUT_INVALID,
+      operation: "decode",
+      message: "decodeContractError requires hex revert data with at least a 4-byte selector",
+    });
+  }
+  const selector = data.slice(0, 10);
   let outer: ethers.ErrorDescription | null;
   try {
     outer = errorInterface.parseError(data);
   } catch {
-    return undefined; // unknown selector
+    return { selector, rawRevertData: data }; // unknown selector
   }
-  if (!outer) return undefined;
+  if (!outer) return { selector, rawRevertData: data };
   if (outer.name === "FailedOpWithRevert") {
     const inner = outer.args[2] as string;
     try {
       const decodedInner = errorInterface.parseError(inner);
-      if (decodedInner) return { name: decodedInner.name, args: jsonSafeArgs(decodedInner.args) };
+      if (decodedInner) {
+        return {
+          contractError: { name: decodedInner.name, args: jsonSafeArgs(decodedInner.args) },
+          selector,
+          rawRevertData: data,
+        };
+      }
     } catch {
       // inner not decodable — fall through to the outer (FailedOpWithRevert)
     }
   }
-  return { name: outer.name, args: jsonSafeArgs(outer.args) };
+  return {
+    contractError: { name: outer.name, args: jsonSafeArgs(outer.args) },
+    selector,
+    rawRevertData: data,
+  };
 }
 
 type EventLog = { topics: ReadonlyArray<string>; data: string };
@@ -83,13 +93,13 @@ type EventLog = { topics: ReadonlyArray<string>; data: string };
 /**
  * Extracts the execution-revert reason bytes from a UserOp receipt's logs by
  * parsing the EntryPoint `UserOperationRevertReason` event. A top-level `reason`
- * field (some bundlers expose it) takes precedence. Returns undefined when the
- * op succeeded or no revert reason is present.
+ * field (some bundlers expose it) takes precedence. This is a presence probe —
+ * a successful op or a receipt without the event yields `""` (not an error).
  */
 export function extractExecutionRevert(
   logs: ReadonlyArray<EventLog> | undefined,
   topLevelReason?: string,
-): string | undefined {
+): string {
   if (typeof topLevelReason === "string" && topLevelReason !== "0x") return topLevelReason;
   for (const log of logs ?? []) {
     let parsed;
@@ -102,5 +112,5 @@ export function extractExecutionRevert(
       return parsed.args.revertReason as string;
     }
   }
-  return undefined;
+  return "";
 }

@@ -1,3 +1,5 @@
+import { ethers } from "ethers";
+
 import {
   AaCode,
   AaFetchErrorCode,
@@ -8,7 +10,7 @@ import {
   type FetchService,
   type OperationType,
 } from "../errors";
-import { decodeContractError, extractHex } from "./revertDecoder";
+import { decodeContractError } from "./revertDecoder";
 
 // ---------------------------------------------------------------------------
 // fetch() throw → TRANSPORT / TIMEOUT
@@ -57,7 +59,13 @@ export interface ClassifyBundlerErrorOpts {
  * Raw is preserved in every branch (rawBundlerError / rawResponse).
  */
 export function classifyBundlerError(opts: ClassifyBundlerErrorOpts): UserOpRevertError | AaFetchError {
-  const revertData = extractHex(opts.data);
+  // opts.data is untrusted bundler payload — only treat it as revert bytes when it is
+  // a hex string with a full selector. decodeContractError requires that by contract.
+  const revertData = ethers.isHexString(opts.data) && (opts.data as string).length >= 10
+    ? (opts.data as `0x${string}`)
+    : undefined;
+  const contractError = revertData ? decodeContractError(revertData).contractError : undefined;
+  const rawRevertData = revertData;
 
   // 1) AA prefix → validation-phase rejection
   const aa = mapAaPrefix(opts.text);
@@ -66,8 +74,8 @@ export function classifyBundlerError(opts: ClassifyBundlerErrorOpts): UserOpReve
       code: aa,
       phase: aaCodeToPhase(aa),
       operation: opts.operation,
-      contractError: decodeContractError(revertData),
-      rawRevertData: revertData,
+      contractError,
+      rawRevertData,
       rawBundlerError: opts.raw,
       message: opts.text,
     });
@@ -80,8 +88,8 @@ export function classifyBundlerError(opts: ClassifyBundlerErrorOpts): UserOpReve
       code: AaCode.UNKNOWN,
       phase: "execution",
       operation: opts.operation,
-      contractError: decodeContractError(revertData),
-      rawRevertData: revertData,
+      contractError,
+      rawRevertData,
       rawBundlerError: opts.raw,
       message: opts.text || "Execution reverted",
     });

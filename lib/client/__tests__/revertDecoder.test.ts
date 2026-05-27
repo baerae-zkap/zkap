@@ -29,13 +29,15 @@ describe("revertDecoder against real Base Sepolia receipts", () => {
     const reason = extractExecutionRevert(fx.logs);
     expect(reason).toBe(fx.revertReason);
 
-    // 2) decode it
+    // 2) decode it — always returns a RevertInfo (selector + raw always preserved)
     const decoded = decodeContractError(reason);
+    expect(decoded.selector).toBe(reason.slice(0, 10));
+    expect(decoded.rawRevertData).toBe(reason);
     if (fx.expect === null) {
-      // unknown target selector → SDK can't decode; caller keeps raw + selector
-      expect(decoded).toBeUndefined();
+      // unknown target selector → SDK can't decode; caller keeps raw + selector only
+      expect(decoded.contractError).toBeUndefined();
     } else {
-      expect(decoded).toEqual(fx.expect);
+      expect(decoded.contractError).toEqual(fx.expect);
     }
 
     // 3) whatever we produce must stay JSON-safe
