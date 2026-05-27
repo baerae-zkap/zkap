@@ -50,7 +50,7 @@ function jsonSafeArgs(args: ReadonlyArray<unknown>): unknown[] {
 export function decodeContractError(data: string): RevertInfo {
   if (!ethers.isHexString(data) || data.length < 10) {
     throw new AaOperationError({
-      code: AaOperationErrorCode.INPUT_INVALID,
+      code: AaOperationErrorCode.INPUT_INVALID_FORMAT,
       operation: "decode",
       message: "decodeContractError requires hex revert data with at least a 4-byte selector",
     });
