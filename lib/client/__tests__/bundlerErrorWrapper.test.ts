@@ -77,6 +77,13 @@ describe("aaCodeToPhase", () => {
     expect(aaCodeToPhase(AaCode.AA90_INVALID_BENEFICIARY)).toBe("settlement");
     expect(aaCodeToPhase(AaCode.AA91_FAILED_SEND_TO_BENEFICIARY)).toBe("settlement");
   });
+
+  it("falls back to 'unknown' for a code not catalogued in CODE_TO_PHASE", () => {
+    // Defensive `?? "unknown"` arm: a future AaCode addition that ships before
+    // its phase mapping should degrade gracefully instead of returning undefined.
+    const offCatalog = "ZKAP_AA_AA99_FUTURE_CODE" as unknown as AaCode;
+    expect(aaCodeToPhase(offCatalog)).toBe("unknown");
+  });
 });
 
 describe("decodeContractError", () => {
@@ -142,6 +149,18 @@ describe("classifyBundlerError (3-way)", () => {
     expect(f.code).toBe("ZKAP_AA_FETCH_HTTP_STATUS");
     expect(f.httpStatus).toBe(502);
     expect(f.rawResponse).toContain("502");
+  });
+
+  it("revert data with empty text falls back to 'Execution reverted' message", () => {
+    // Covers the `opts.text || "Execution reverted"` arm — when a bundler
+    // returns revert data but no message string (e.g. some Pimlico responses
+    // expose only `data`), the wrapper still emits a readable message.
+    const data = errIface.encodeErrorResult("Error", ["transfer amount exceeds balance"]);
+    const e = classifyBundlerError({ ...ctx, text: "", data, raw: "raw" });
+    expect(e).toBeInstanceOf(UserOpRevertError);
+    const r = e as UserOpRevertError;
+    expect(r.phase).toBe("execution");
+    expect(r.message).toBe("Execution reverted");
   });
 });
 
