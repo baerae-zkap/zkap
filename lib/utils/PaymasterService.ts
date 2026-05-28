@@ -37,6 +37,28 @@ export interface PaymasterDataResponse {
   };
 }
 
+export interface TokenPaymentResponse {
+  rewrittenUserOp: {
+    callData: string;
+    callGasLimit: string;
+    verificationGasLimit: string;
+    preVerificationGas: string;
+    maxFeePerGas: string;
+    maxPriorityFeePerGas: string;
+    paymasterVerificationGasLimit: string;
+    paymasterPostOpGasLimit: string;
+  };
+  paymaster: string;
+  paymasterData: string;
+  paymasterVerificationGasLimit: string;
+  paymasterPostOpGasLimit: string;
+  validUntil: number;
+  validAfter: number;
+  treasury: string;
+  tokenAmount: string;
+  sessionId: string;
+}
+
 // Empirically measured gas limits for each paymaster mode
 const VERIFYING_PAYMASTER_VERIFICATION_GAS = 27000n;
 const VERIFYING_PAYMASTER_POST_OP_GAS = 0n;
@@ -332,5 +354,96 @@ export class PaymasterService {
   }
   getConfig(): Readonly<PaymasterServiceConfig> {
     return { ...this.config };
+  }
+
+  /**
+   * Calls POST /paymaster-v2/v1/sponsorship/token-payment and returns the full
+   * token-payment response (rewritten UserOp + paymaster data + session metadata).
+   *
+   * @param input Chain ID, unsigned UserOp (pre-rewrite), and token address
+   * @param options Service key and optional idempotency key
+   */
+  async sponsorTokenPayment(
+    input: {
+      chainId: number;
+      userOp: UserOperation;
+      tokenAddress: string;
+    },
+    options: { serviceKey: string; idempotencyKey?: string }
+  ): Promise<TokenPaymentResponse> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PaymasterService.FETCH_TIMEOUT_MS);
+    const url = `${this.config.serverUrl}/paymaster-v2/v1/sponsorship/token-payment`;
+
+    let response: Response;
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "X-Service-Key": options.serviceKey,
+      };
+      if (options.idempotencyKey) {
+        headers["Idempotency-Key"] = options.idempotencyKey;
+      }
+      response = await fetch(url, {
+        method: "POST",
+        headers,
+        signal: controller.signal,
+        body: JSON.stringify({
+          chainId: input.chainId,
+          userOp: this.buildUserOpParams(input.userOp),
+          tokenAddress: input.tokenAddress,
+        }),
+      });
+    } catch (fetchError) {
+      if (fetchError instanceof Error && fetchError.name === "AbortError") {
+        throw new AaFetchError({
+          code: AaFetchErrorCode.TIMEOUT,
+          operation: "sponsor_token_payment",
+          service: "paymaster",
+          url,
+          method: "POST",
+          message: `Token payment request timed out after ${PaymasterService.FETCH_TIMEOUT_MS}ms`,
+        });
+      }
+      throw fetchError;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!response.ok) {
+      let responseText = "";
+      try {
+        responseText = await response.text();
+      } catch {
+        // ignore body read failures
+      }
+      throw new AaFetchError({
+        code: AaFetchErrorCode.HTTP_STATUS,
+        httpStatus: response.status,
+        operation: "sponsor_token_payment",
+        service: "paymaster",
+        url,
+        method: "POST",
+        rawResponse: responseText,
+        message: `Token payment request failed: ${response.status} ${response.statusText}${responseText ? `: ${responseText}` : ""}`,
+      });
+    }
+
+    let data: TokenPaymentResponse;
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      throw new AaFetchError({
+        code: AaFetchErrorCode.RESPONSE_SHAPE,
+        operation: "sponsor_token_payment",
+        service: "paymaster",
+        url,
+        method: "POST",
+        cause: jsonError,
+        message: `Token payment error: invalid JSON response (${jsonError instanceof Error ? jsonError.message : String(jsonError)})`,
+      });
+    }
+
+    return data;
   }
 }
