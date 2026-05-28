@@ -811,6 +811,16 @@ export class ZkapBuilder extends BaseAccountBuilder {
   /**
    * Returns the UserOperation hash scoped to the paymaster context.
    * Used internally by PaymasterService; not needed for typical signing flows.
+   *
+   * @remarks
+   * Must match ZkapPaymaster._getHash() (BaseSingletonPaymaster derivative) byte-for-byte:
+   *   userOpHash = keccak256(encodeUserOpForPaymaster(userOp))
+   *   return     = keccak256(abi.encode(userOpHash, block.chainid))
+   *
+   * Cross-chain replay protection is provided by chainid alone. The paymaster
+   * address is already committed via paymasterAndData slice inside
+   * encodeUserOpForPaymaster, so adding `entryPoint` here would diverge from
+   * the on-chain contract and break signature verification.
    */
   getUserOpHashForPaymaster(): string {
     const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
@@ -819,10 +829,9 @@ export class ZkapBuilder extends BaseAccountBuilder {
       this.encodeUserOpForPaymaster(this.getPackedUserOp())
     );
 
-    // Include entryPoint in domain separator to prevent replay attacks against different EntryPoints
     const enc = defaultAbiCoder.encode(
-      ["bytes32", "address", "uint256"],
-      [userOpHash, this.entryPoint, this.chainId]
+      ["bytes32", "uint256"],
+      [userOpHash, this.chainId]
     );
     return ethers.keccak256(enc);
   }
