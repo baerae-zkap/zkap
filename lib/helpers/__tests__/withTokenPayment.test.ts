@@ -206,7 +206,10 @@ describe("withTokenPayment", () => {
         builder as unknown as import("../../builders/ZkapBuilder").ZkapBuilder,
         makeOptions()
       )
-    ).rejects.toThrow("CALLDATA_REWRITE_MISMATCH");
+    ).rejects.toMatchObject({
+      code: "ZKAP_AA_OP_PAYMASTER_REWRITE_MISMATCH",
+      operation: "with_token_payment",
+    });
 
     // Builder must NOT have been patched with paymaster fields
     expect(builder.setPaymaster).not.toHaveBeenCalled();

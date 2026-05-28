@@ -67,7 +67,7 @@ export function computeRewrittenCallData(
  *
  * The caller is responsible for signing the UserOp after this call.
  *
- * @throws {Error} CALLDATA_REWRITE_MISMATCH if server callData differs from expected
+ * @throws {AaOperationError} PAYMASTER_REWRITE_MISMATCH if server callData differs from SDK expectation
  * @throws {AaFetchError} on HTTP / timeout / JSON parse failures
  * @throws {AaOperationError} if builder state is invalid
  */
@@ -120,10 +120,12 @@ export async function withTokenPayment(
     expectedCallData.toLowerCase() !==
     serverResponse.rewrittenUserOp.callData.toLowerCase()
   ) {
-    throw new Error(
-      `CALLDATA_REWRITE_MISMATCH: server rewrite differs from SDK expectation. ` +
-        `Refuse to sign. server=${serverResponse.rewrittenUserOp.callData}, expected=${expectedCallData}`
-    );
+    throw new AaOperationError({
+      code: AaOperationErrorCode.PAYMASTER_REWRITE_MISMATCH,
+      operation: "with_token_payment",
+      message: `Server callData rewrite differs from SDK expectation; refusing to sign (trust boundary)`,
+      cause: undefined,
+    });
   }
 
   // 4. Verification passed — patch the builder

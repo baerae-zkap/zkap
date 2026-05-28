@@ -234,6 +234,21 @@ describe('PaymasterService', () => {
         .rejects.toThrow('Paymaster data request failed: 500 Internal Server Error');
     });
 
+    it('includes response body text in HTTP error message when available', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        statusText: 'Unprocessable Entity',
+        text: () => Promise.resolve('invalid userOp format'),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      const err = await service.getPaymasterData(mockUserOp).catch((e: unknown) => e);
+
+      expect((err as Error).message).toContain('invalid userOp format');
+      expect((err as any).rawResponse).toBe('invalid userOp format');
+    });
+
     it('should throw on API error response', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -314,6 +329,19 @@ describe('PaymasterService', () => {
 
       await expect(service.getPaymasterData(createMockUserOp()))
         .rejects.toThrow('Paymaster data error: invalid JSON response');
+    });
+
+    it('should handle non-Error JSON parse rejection', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.reject('parse_failure'),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      const err = await service.getPaymasterData(createMockUserOp()).catch((e: unknown) => e);
+
+      expect((err as any).code).toBe('ZKAP_AA_FETCH_RESPONSE_SHAPE');
+      expect((err as Error).message).toContain('parse_failure');
     });
 
     it('should include all userOp fields in request', async () => {
@@ -575,12 +603,47 @@ describe('PaymasterService', () => {
         .rejects.toThrow('Paymaster request timed out after 30000ms');
     });
 
+    it('setTimeout callback fires and aborts the request after timeout', async () => {
+      jest.useFakeTimers();
+      const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+      // fetch hangs until AbortController fires, then rejects with AbortError
+      mockFetch.mockImplementationOnce((_url: string, opts: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          (opts.signal as AbortSignal).addEventListener('abort', () => {
+            reject(abortError);
+          });
+        });
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      const promise = service.getPaymasterData(createMockUserOp());
+      jest.advanceTimersByTime(30001);
+      await expect(promise).rejects.toThrow('Paymaster request timed out after 30000ms');
+      jest.useRealTimers();
+    });
+
     it('should rethrow non-abort fetch errors', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
 
       const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
       await expect(service.getPaymasterData(createMockUserOp()))
         .rejects.toThrow('Connection refused');
+    });
+
+    it('handles HTTP error with no response body gracefully (text() throws)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        text: () => Promise.reject(new Error('body read failed')),
+      });
+
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      const err = await service.getPaymasterData(createMockUserOp()).catch((e: unknown) => e);
+
+      expect((err as any).code).toBe('ZKAP_AA_FETCH_HTTP_STATUS');
+      expect((err as any).httpStatus).toBe(503);
+      expect((err as any).rawResponse).toBe('');
     });
 
     it('should stringify non-object API error', async () => {
@@ -592,6 +655,301 @@ describe('PaymasterService', () => {
       const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
       await expect(service.getPaymasterData(createMockUserOp()))
         .rejects.toThrow('Paymaster data error: "unauthorized"');
+    });
+  });
+
+  describe('sponsorTokenPayment', () => {
+    const TOKEN_ADDRESS = '0x' + 'aa'.repeat(20);
+    const SERVICE_KEY = 'sk-test-9999';
+    const IDEMPOTENCY_KEY = 'idem-key-001';
+
+    function createTokenPaymentResponse() {
+      return {
+        rewrittenUserOp: {
+          callData: '0x' + '22'.repeat(64),
+          callGasLimit: '0x8000',
+          verificationGasLimit: '0x30000',
+          preVerificationGas: '0xe000',
+          maxFeePerGas: '0x3b9aca00',
+          maxPriorityFeePerGas: '0x3b9aca00',
+          paymasterVerificationGasLimit: '0xa000',
+          paymasterPostOpGasLimit: '0x20000',
+        },
+        paymaster: '0x' + 'bb'.repeat(20),
+        paymasterData: '0x' + 'ee'.repeat(78),
+        paymasterVerificationGasLimit: '0xa000',
+        paymasterPostOpGasLimit: '0x20000',
+        validUntil: 9999999999,
+        validAfter: 0,
+        treasury: '0x' + 'cc'.repeat(20),
+        tokenAmount: '1000000000000000000',
+        sessionId: 'sess_xyz',
+      };
+    }
+
+    function makeErc20Service() {
+      return new PaymasterService({
+        serverUrl: 'https://paymaster.test',
+        paymasterAddress: '0x' + '33'.repeat(20),
+        chainId: 1,
+        mode: PaymasterMode.ERC20,
+        tokenAddress: TOKEN_ADDRESS,
+      });
+    }
+
+    it('happy path: returns full TokenPaymentResponse', async () => {
+      const expected = createTokenPaymentResponse();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(expected),
+      });
+
+      const service = makeErc20Service();
+      const result = await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      );
+
+      expect(result).toEqual(expected);
+    });
+
+    it('sends POST to correct endpoint', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(createTokenPaymentResponse()),
+      });
+
+      const service = makeErc20Service();
+      await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      );
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://paymaster.test/paymaster-v2/v1/sponsorship/token-payment',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
+    it('sets X-Service-Key header', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(createTokenPaymentResponse()),
+      });
+
+      const service = makeErc20Service();
+      await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      );
+
+      const callArgs = mockFetch.mock.calls[0][1];
+      expect(callArgs.headers['X-Service-Key']).toBe(SERVICE_KEY);
+    });
+
+    it('sets Idempotency-Key header when provided', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(createTokenPaymentResponse()),
+      });
+
+      const service = makeErc20Service();
+      await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY, idempotencyKey: IDEMPOTENCY_KEY }
+      );
+
+      const callArgs = mockFetch.mock.calls[0][1];
+      expect(callArgs.headers['Idempotency-Key']).toBe(IDEMPOTENCY_KEY);
+    });
+
+    it('omits Idempotency-Key header when not provided', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(createTokenPaymentResponse()),
+      });
+
+      const service = makeErc20Service();
+      await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      );
+
+      const callArgs = mockFetch.mock.calls[0][1];
+      expect(callArgs.headers['Idempotency-Key']).toBeUndefined();
+    });
+
+    it('sends correct request body', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(createTokenPaymentResponse()),
+      });
+
+      const userOp = createMockUserOp();
+      const service = makeErc20Service();
+      await service.sponsorTokenPayment(
+        { chainId: 137, userOp, tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      );
+
+      const callArgs = mockFetch.mock.calls[0][1];
+      const body = JSON.parse(callArgs.body);
+      expect(body.chainId).toBe(137);
+      expect(body.tokenAddress).toBe(TOKEN_ADDRESS);
+      expect(body.userOp.sender).toBe(userOp.sender);
+      expect(body.userOp.callData).toBe(userOp.callData);
+    });
+
+    it('throws AaFetchError TIMEOUT on AbortError', async () => {
+      const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const service = makeErc20Service();
+      const err = await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      ).catch((e: unknown) => e);
+
+      expect((err as any).code).toBe('ZKAP_AA_FETCH_TIMEOUT');
+      expect((err as Error).message).toMatch(/timed out after 30000ms/);
+    });
+
+    it('setTimeout callback fires and aborts sponsorTokenPayment after timeout', async () => {
+      jest.useFakeTimers();
+      const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+      mockFetch.mockImplementationOnce((_url: string, opts: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          (opts.signal as AbortSignal).addEventListener('abort', () => {
+            reject(abortError);
+          });
+        });
+      });
+
+      const service = makeErc20Service();
+      const promise = service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      );
+      jest.advanceTimersByTime(30001);
+      await expect(promise).rejects.toThrow('Token payment request timed out after 30000ms');
+      jest.useRealTimers();
+    });
+
+    it('rethrows non-abort fetch errors', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('DNS failure'));
+
+      const service = makeErc20Service();
+      await expect(
+        service.sponsorTokenPayment(
+          { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+          { serviceKey: SERVICE_KEY }
+        )
+      ).rejects.toThrow('DNS failure');
+    });
+
+    it('throws AaFetchError HTTP_STATUS on 4xx response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: () => Promise.resolve('Unauthorized'),
+      });
+
+      const service = makeErc20Service();
+      const err = await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      ).catch((e: unknown) => e);
+
+      expect((err as any).code).toBe('ZKAP_AA_FETCH_HTTP_STATUS');
+      expect((err as any).httpStatus).toBe(401);
+    });
+
+    it('throws AaFetchError HTTP_STATUS on 5xx response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: () => Promise.resolve('Server error'),
+      });
+
+      const service = makeErc20Service();
+      const err = await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      ).catch((e: unknown) => e);
+
+      expect((err as any).code).toBe('ZKAP_AA_FETCH_HTTP_STATUS');
+      expect((err as any).httpStatus).toBe(500);
+    });
+
+    it('includes rawResponse in HTTP_STATUS error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        text: () => Promise.resolve('Access denied'),
+      });
+
+      const service = makeErc20Service();
+      const err = await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      ).catch((e: unknown) => e);
+
+      expect((err as any).rawResponse).toBe('Access denied');
+    });
+
+    it('throws AaFetchError RESPONSE_SHAPE on invalid JSON', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.reject(new Error('Unexpected token')),
+      });
+
+      const service = makeErc20Service();
+      const err = await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      ).catch((e: unknown) => e);
+
+      expect((err as any).code).toBe('ZKAP_AA_FETCH_RESPONSE_SHAPE');
+      expect((err as Error).message).toMatch(/invalid JSON response/);
+    });
+
+    it('throws AaFetchError RESPONSE_SHAPE on non-Error JSON parse rejection', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.reject('parse_failure_string'),
+      });
+
+      const service = makeErc20Service();
+      const err = await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      ).catch((e: unknown) => e);
+
+      expect((err as any).code).toBe('ZKAP_AA_FETCH_RESPONSE_SHAPE');
+      expect((err as Error).message).toContain('parse_failure_string');
+    });
+
+    it('handles HTTP error with no response body gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        text: () => Promise.reject(new Error('body read failed')),
+      });
+
+      const service = makeErc20Service();
+      const err = await service.sponsorTokenPayment(
+        { chainId: 1, userOp: createMockUserOp(), tokenAddress: TOKEN_ADDRESS },
+        { serviceKey: SERVICE_KEY }
+      ).catch((e: unknown) => e);
+
+      expect((err as any).code).toBe('ZKAP_AA_FETCH_HTTP_STATUS');
+      expect((err as any).httpStatus).toBe(503);
+      // rawResponse is empty string when text() throws
+      expect((err as any).rawResponse).toBe('');
     });
   });
 
