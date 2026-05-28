@@ -594,4 +594,45 @@ describe('PaymasterService', () => {
         .rejects.toThrow('Paymaster data error: "unauthorized"');
     });
   });
+
+  // The constructor blocks unsupported modes, so the public methods'
+  // fall-through throws are only reachable when an instance's state is
+  // mutated post-construction. These tests inject an invalid mode to
+  // exercise those defensive branches.
+  describe('defensive invalid-mode branches', () => {
+    function makeServiceWithInvalidMode(): PaymasterService {
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      // `config` is `private` but not `readonly` — the field itself can be
+      // reassigned via runtime reflection (Object.freeze only froze the prior
+      // object's properties, not the slot on the instance).
+      (service as any).config = { ...service.getConfig(), mode: 999 };
+      return service;
+    }
+
+    it('getPaymasterData throws on invalid mode (runtime fall-through)', async () => {
+      const service = makeServiceWithInvalidMode();
+      await expect(service.getPaymasterData(createMockUserOp()))
+        .rejects.toThrow('Invalid paymaster mode');
+    });
+
+    it('estimatePaymasterVerificationGasLimit throws on invalid mode (runtime fall-through)', () => {
+      const service = makeServiceWithInvalidMode();
+      expect(() => service.estimatePaymasterVerificationGasLimit())
+        .toThrow('Invalid paymaster mode');
+    });
+
+    it('estimatePaymasterPostOpGasLimit throws on invalid mode (runtime fall-through)', () => {
+      const service = makeServiceWithInvalidMode();
+      expect(() => service.estimatePaymasterPostOpGasLimit())
+        .toThrow('Invalid paymaster mode');
+    });
+
+    it('getPaymasterDataErc20 throws when tokenAddress is missing (direct call on VERIFYING service)', async () => {
+      // VERIFYING-mode services have no tokenAddress; calling the ERC20 method
+      // directly skips the getPaymasterData router and hits the in-method guard.
+      const service = new PaymasterService(createMockConfig(PaymasterMode.VERIFYING));
+      await expect(service.getPaymasterDataErc20(createMockUserOp()))
+        .rejects.toThrow('tokenAddress is required for ERC20 paymaster mode');
+    });
+  });
 });
