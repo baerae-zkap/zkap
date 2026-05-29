@@ -1,6 +1,6 @@
 {
   "name": "@baerae/zkap-aa",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "ZKAP Account Abstraction SDK — ERC-4337 smart wallet, passkey, zk-oidc signers.",
   "keywords": [
     "erc-4337",
