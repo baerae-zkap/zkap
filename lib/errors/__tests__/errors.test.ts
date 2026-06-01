@@ -127,7 +127,7 @@ describe("catalog integrity", () => {
   it("array view lengths", () => {
     expect(AA_CODES).toHaveLength(25);
     expect(ZKAP_AA_FETCH_CODES).toHaveLength(5);
-    expect(ZKAP_AA_OP_CODES).toHaveLength(25);
+    expect(ZKAP_AA_OP_CODES).toHaveLength(24);
   });
   it("code values are unique", () => {
     expect(new Set(ZKAP_AA_OP_CODES).size).toBe(ZKAP_AA_OP_CODES.length);

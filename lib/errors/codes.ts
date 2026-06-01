@@ -139,9 +139,6 @@ export const AaOperationErrorCode = {
   SIGNER_STATE_CONFLICT:         "ZKAP_AA_OP_SIGNER_STATE_CONFLICT",    // concurrent call / stale (userOpHash changed/mismatch)
   SIGNER_UNSUPPORTED:            "ZKAP_AA_OP_SIGNER_UNSUPPORTED",       // unsupported social service
 
-  // PAYMASTER — paymaster v2 server interaction
-  PAYMASTER_REWRITE_MISMATCH:    "ZKAP_AA_OP_PAYMASTER_REWRITE_MISMATCH", // server callData rewrite differs from SDK expectation (trust boundary)
-
   // fallback
   UNKNOWN:                       "ZKAP_AA_OP_UNKNOWN",
 } as const;
