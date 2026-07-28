@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-07-28
+
 ### Changed
 
 - `ZkapBuilder.WEB_AUTHN_KEY_VALIDATION_GAS` lowered from 470,000 to 150,000. The old value was
@@ -14,7 +16,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (EIP-7951); mainnet-measured validation via the precompile is now ~97k gas. WebAuthn ops'
   `verificationGasLimit` drops from 594,000 to 210,000. Fees are unchanged (unused verification
   gas is never charged by EntryPoint v0.7/v0.8); the required prefund locked per op shrinks by
-  ~384k gas and app-side fee previews (limit-sum based) become accurate.
+  ~384k gas and app-side fee previews (limit-sum based) become accurate. ⚠️ Chains without the
+  P256VERIFY precompile fall back to the pure-Solidity path and will revert with this limit —
+  verify precompile support before using WebAuthn ops on non-mainnet/Sepolia chains.
+- Release CI: `npm` pinned to 11 in the publish workflow — `npm@latest` (12) requires Node ≥ 22
+  and EBADENGINEs on the Node 20 runner (broke the v0.1.8 tag publish on first run).
+
+### Removed
+
+- `withTokenPayment` helper and `AaOperationErrorCode.PAYMASTER_REWRITE_MISMATCH` (revert of the
+  unshipped byte-level paymaster rewrite-verification path; `PaymasterService` trimmed
+  accordingly). No known consumers.
+
+## [0.1.8] - 2026-07-28
+
+Salt-only release, cut from `v0.1.7` (excludes everything above).
+
+### Added
+
+- `computeSalt(aud, sub, walletIndex?)` — optional third argument derives additional wallets
+  from the same social account. `undefined`/`0` keep the historical 2-arg salt byte-for-byte;
+  `1..255` append `String(walletIndex)` as a third ABI string. ABI slot 3 is reserved for the
+  walletIndex decimal string; future derivation parameters must use slot 4+. Out-of-range or
+  non-integer values (including `null`) throw. Canonical salt implementation — mirrored test
+  vectors live in embedded-zkap and zkap-web3-server.
+- `MAX_WALLET_INDEX` (= 255) export.
+- `WalletHelper.computeSalt(aud, sub, walletIndex?)` and
+  `WalletHelper.deriveAddress({ aud, sub, chainId, walletIndex? })`.
 
 ## [0.1.5] - 2026-04-21
 
