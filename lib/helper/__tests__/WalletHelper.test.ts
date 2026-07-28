@@ -191,6 +191,22 @@ describe('WalletHelper', () => {
       const b = WalletHelper.computeSalt('aud1', 'sub2');
       expect(a).not.toBe(b);
     });
+
+    it('walletIndex 0 and omitted produce the same salt (backward compat)', () => {
+      const a = WalletHelper.computeSalt('aud1', 'sub1');
+      const b = WalletHelper.computeSalt('aud1', 'sub1', 0);
+      expect(a).toBe(b);
+    });
+
+    it('walletIndex >= 1 produces a different salt than the default wallet', () => {
+      const a = WalletHelper.computeSalt('aud1', 'sub1');
+      const b = WalletHelper.computeSalt('aud1', 'sub1', 1);
+      expect(a).not.toBe(b);
+    });
+
+    it('rejects an out-of-range walletIndex', () => {
+      expect(() => WalletHelper.computeSalt('aud1', 'sub1', 256)).toThrow();
+    });
   });
 
   describe('deriveAddress', () => {
@@ -213,6 +229,29 @@ describe('WalletHelper', () => {
       const helper = makeWalletHelper();
       await expect(helper.deriveAddress({ aud: 'aud', sub: 'sub', chainId: MOCK_CHAIN_ID }))
         .rejects.toThrow('WalletHelper.deriveAddress: failed to call getAddress');
+    });
+
+    it('accepts an optional walletIndex and derives a different salt-backed address', async () => {
+      const MOCK_WALLET_ADDR = '0x' + 'EE'.repeat(20);
+      mockFactoryGetAddress.mockResolvedValueOnce(MOCK_WALLET_ADDR);
+
+      const helper = makeWalletHelper();
+      const addr = await helper.deriveAddress({
+        aud: 'my-client-id',
+        sub: 'user-sub',
+        chainId: MOCK_CHAIN_ID,
+        walletIndex: 1,
+      });
+
+      expect(addr).toBe(MOCK_WALLET_ADDR);
+      expect(mockFactoryGetAddress).toHaveBeenCalledWith(expect.any(BigInt));
+    });
+
+    it('rejects when walletIndex is out of range', async () => {
+      const helper = makeWalletHelper();
+      await expect(
+        helper.deriveAddress({ aud: 'aud', sub: 'sub', chainId: MOCK_CHAIN_ID, walletIndex: 256 })
+      ).rejects.toThrow();
     });
   });
 
