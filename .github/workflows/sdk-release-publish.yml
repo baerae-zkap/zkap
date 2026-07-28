@@ -64,7 +64,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm (OIDC Trusted Publishing requires npm >= 11.5.1)
-        run: npm install -g npm@latest
+        # npm@11 pinned: npm@12+ requires Node >= 22, which EBADENGINEs on this
+        # runner's Node 20 (`npm@latest` broke the v0.1.8 publish this way).
+        run: npm install -g npm@11
 
       - name: Install dependencies
         run: npm ci
