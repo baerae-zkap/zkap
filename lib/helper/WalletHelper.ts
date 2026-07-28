@@ -33,9 +33,13 @@ export class WalletHelper {
   /**
    * Compute the deterministic wallet salt from social login identifiers.
    * keccak256(abi.encode(aud, sub)) — matches on-chain derivation.
+   *
+   * `walletIndex` (optional, 0-255) selects an alternate wallet derived from
+   * the same (aud, sub) identity — see `computeSalt` in `../utils/salt` for
+   * the full derivation rules and validation semantics.
    */
-  static computeSalt(aud: string, sub: string): string {
-    return computeSalt(aud, sub);
+  static computeSalt(aud: string, sub: string, walletIndex?: number): string {
+    return computeSalt(aud, sub, walletIndex);
   }
 
   /**
@@ -55,19 +59,23 @@ export class WalletHelper {
    * Derive the counterfactual wallet address for a user.
    * Calls the factory's getAddress(salt) view function.
    *
-   * @param params.aud     - OAuth audience / client_id (e.g. Google client ID)
-   * @param params.sub     - User's subject identifier from the provider
-   * @param params.chainId - Target chain ID
+   * @param params.aud         - OAuth audience / client_id (e.g. Google client ID)
+   * @param params.sub         - User's subject identifier from the provider
+   * @param params.chainId     - Target chain ID
+   * @param params.walletIndex - Optional wallet index (0-255) for deriving an
+   *                             alternate wallet from the same identity — see
+   *                             `computeSalt` in `../utils/salt`.
    */
   async deriveAddress(params: {
     aud: string;
     sub: string;
     chainId: number;
+    walletIndex?: number;
   }): Promise<string> {
-    const { aud, sub, chainId } = params;
+    const { aud, sub, chainId, walletIndex } = params;
     const chainConfig = await this.chainRegistry.getChainConfig(chainId);
 
-    const salt = computeSalt(aud, sub);
+    const salt = computeSalt(aud, sub, walletIndex);
     const saltBigInt = BigInt(salt);
 
     const rpcProvider = new ethers.JsonRpcProvider(chainConfig.rpcUrl);
