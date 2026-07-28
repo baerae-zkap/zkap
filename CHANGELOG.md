@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `ZkapBuilder.WEB_AUTHN_KEY_VALIDATION_GAS` lowered from 470,000 to 150,000. The old value was
+  measured on the pure-Solidity P-256 verification path before the P256VERIFY precompile
+  (EIP-7951); mainnet-measured validation via the precompile is now ~97k gas. WebAuthn ops'
+  `verificationGasLimit` drops from 594,000 to 210,000. Fees are unchanged (unused verification
+  gas is never charged by EntryPoint v0.7/v0.8); the required prefund locked per op shrinks by
+  ~384k gas and app-side fee previews (limit-sum based) become accurate.
+
 ## [0.1.5] - 2026-04-21
 
 ### Added

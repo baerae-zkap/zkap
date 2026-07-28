@@ -43,7 +43,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
   static readonly ADDRESS_KEY_VALIDATION_GAS = 15000n;
   static readonly SECP256K1_KEY_VALIDATION_GAS = 15000n;  // secp256k1 ECDSA, ecrecover level
   static readonly SECP256R1_KEY_VALIDATION_GAS = 470000n; // P-256 ECDSA, similar to WebAuthn
-  static readonly WEB_AUTHN_KEY_VALIDATION_GAS = 470000n; // measured at approximately 450k gas
+  static readonly WEB_AUTHN_KEY_VALIDATION_GAS = 150000n; // mainnet-measured ~97k with the P256VERIFY precompile (EIP-7951) × 1.5 margin; was 470000n from the pre-precompile pure-Solidity path (~450k)
   static readonly OAUTH_RS256_KEY_VALIDATION_GAS = 350000n; // RSA-2048 signature verification
   static readonly ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 1000000n; // based on new contract measurement, includes buffer (old contract: ~340000)
 
