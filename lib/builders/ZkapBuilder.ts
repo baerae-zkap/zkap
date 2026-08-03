@@ -45,7 +45,21 @@ export class ZkapBuilder extends BaseAccountBuilder {
   static readonly SECP256R1_KEY_VALIDATION_GAS = 470000n; // P-256 ECDSA, similar to WebAuthn
   static readonly WEB_AUTHN_KEY_VALIDATION_GAS = 150000n; // mainnet-measured ~97k with the P256VERIFY precompile (EIP-7951) × 1.5 margin; was 470000n from the pre-precompile pure-Solidity path (~450k)
   static readonly OAUTH_RS256_KEY_VALIDATION_GAS = 350000n; // RSA-2048 signature verification
-  static readonly ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 1000000n; // based on new contract measurement, includes buffer (old contract: ~340000)
+  /**
+   * zk-OAuth validation with the shuffled 3-of-6 circuit — the conservative default,
+   * used whenever the proof count cannot be determined from the signature.
+   * Sepolia-measured `validateUserOp` (EntryPoint v0.8, updateMasterKey / updateTxKey):
+   * 753,719–753,790 gas across 6 ops → x1.2 in autoFillUserOp gives a 1,110,000
+   * verificationGasLimit (~1.43x measured). Was 1,000,000.
+   */
+  static readonly ZK_OAUTH_RS256_KEY_VALIDATION_GAS = 900000n;
+  /**
+   * zk-OAuth validation with a SINGLE proof (1-of-1) — the wallet-deployment signature.
+   * Sepolia-measured `validateUserOp`: 250,215 (sponsored) / 278,797 (user-paid).
+   * A deploy op's 3-of-6 verification happens inside `updateKeys` EXECUTION (callGasLimit),
+   * not in validation, which is why the two profiles differ this much.
+   */
+  static readonly ZK_OAUTH_RS256_SINGLE_PROOF_VALIDATION_GAS = 400000n;
 
   // Estimated signature sizes per key type (bytes) — used to generate dummy signatures for preVerificationGas estimation
   private static readonly ESTIMATED_SIG_SIZES: Record<number, number> = {
@@ -148,6 +162,47 @@ export class ZkapBuilder extends BaseAccountBuilder {
     }
   }
 
+  /**
+   * Number of Groth16 proofs carried by the currently set zk-OAuth signature
+   * (1 = 1-of-1, 3 = shuffled 3-of-6), or `null` when it cannot be determined.
+   *
+   * The signature present before `autoFillUserOp()` is a dummy built with the same
+   * proof count as the real one (that is what `createDummyZkSignature` is for), so this
+   * reads the right profile without a new API. Anything unexpected returns `null` and
+   * the caller falls back to the conservative 3-of-6 budget.
+   */
+  private decodeZkProofCount(): number | null {
+    const signature = this.userOp.signature;
+    if (!signature || signature === "0x") {
+      return null;
+    }
+    try {
+      const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+      const [, keySignatureList] = abiCoder.decode(
+        ["uint8[]", "bytes[]"],
+        signature
+      );
+      if (!keySignatureList || keySignatureList.length === 0) {
+        return null;
+      }
+      const decodedProof = abiCoder.decode(
+        ["uint256[6]", "uint256[]", "uint256[]", "uint256[8][]"],
+        keySignatureList[0]
+      );
+      const proofs = decodedProof[3];
+      return proofs.length > 0 ? proofs.length : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** zk-OAuth verification budget for the signature currently set (see the constants). */
+  private zkOAuthValidationGas(): bigint {
+    return this.decodeZkProofCount() === 1
+      ? ZkapBuilder.ZK_OAUTH_RS256_SINGLE_PROOF_VALIDATION_GAS
+      : ZkapBuilder.ZK_OAUTH_RS256_KEY_VALIDATION_GAS;
+  }
+
   private async estimateCallGasLimit(): Promise<string> {
     // Check if code exists at the sender address to determine whether it is deployed
     const code = await this.provider.getCode(this.userOp.sender as string);
@@ -229,9 +284,20 @@ export class ZkapBuilder extends BaseAccountBuilder {
 
           case "updateKeys": {
             // updateKeys(bytes encodedMasterKey, bytes encodedTxKey)
-            // Called with initCode during wallet creation - wallet not yet deployed
-            // Cannot use on-chain estimateGas, use fixed value
-            const UPDATE_KEYS_GAS = BigInt(2000000);
+            // Called with initCode during wallet creation - wallet not yet deployed, so
+            // on-chain estimateGas is impossible and the value must be measured offline.
+            //
+            // Sepolia (EntryPoint v0.8, current ZkapAccount): the execution frame used
+            // 867,516 gas in both traced deploys; across 20 deploys the callData length
+            // varied 1,636-1,732B (rpId/origin), which bounds the worst case near
+            // ~927,500. 1,300,000 keeps ~1.4x headroom.
+            //
+            // Not just a safety number: EntryPoint v0.8 charges a 10% penalty on UNUSED
+            // callGasLimit above a 40,000 threshold, so the old 2,000,000 burned ~115k
+            // gas per deploy. Headroom is cheap (10% of it) but under-declaring is not —
+            // execution then reverts ON-CHAIN and is still charged, leaving a wallet
+            // deployed with its keys un-updated. Re-measure after a contract redeploy.
+            const UPDATE_KEYS_GAS = BigInt(1300000);
             return ethers.toBeHex((UPDATE_KEYS_GAS + ZkapBuilder.GAS_BUFFER).toString());
           }
 
@@ -461,7 +527,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
       } else if (keyType === PrimitiveAccountKeyTypes.keyOAuthRS256) {
         verificationGasLimit += ZkapBuilder.OAUTH_RS256_KEY_VALIDATION_GAS;
       } else if (keyType === PrimitiveAccountKeyTypes.keyZkOAuthRS256) {
-        verificationGasLimit += ZkapBuilder.ZK_OAUTH_RS256_KEY_VALIDATION_GAS;
+        verificationGasLimit += this.zkOAuthValidationGas();
       }
     }
 
