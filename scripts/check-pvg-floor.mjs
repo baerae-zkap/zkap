@@ -53,12 +53,22 @@ const SHAPES = [
   ["zk-deploy (1668B/928B)", 1668, 928],
 ];
 
-const endpoint = (chainId) => {
-  const key = process.env.PIMLICO_API_KEY;
-  return key
-    ? `https://api.pimlico.io/v2/${chainId}/rpc?apikey=${key}`
+const usingApiKey = !!process.env.PIMLICO_API_KEY;
+
+const endpoint = (chainId) =>
+  usingApiKey
+    ? `https://api.pimlico.io/v2/${chainId}/rpc?apikey=${process.env.PIMLICO_API_KEY}`
     : `https://public.pimlico.io/v2/${chainId}/rpc`;
-};
+
+/**
+ * What to print for an endpoint. Built from constants, NOT by masking `endpoint()` —
+ * a redacting `.replace()` over a URL that carries the key is one URL-shape change away
+ * from printing the key, so the log path never touches that string at all.
+ */
+const endpointLabel = (chainId) =>
+  usingApiKey
+    ? `api.pimlico.io/v2/${chainId}/rpc (with API key)`
+    : `public.pimlico.io/v2/${chainId}/rpc (public, rate-limited)`;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -133,7 +143,7 @@ let failures = 0;
 let checked = 0;
 
 for (const chainId of CHAINS) {
-  console.log(`\n=== chain ${chainId} (${endpoint(chainId).replace(/apikey=.*/, "apikey=***")})`);
+  console.log(`\n=== chain ${chainId} (${endpointLabel(chainId)})`);
   for (const [label, callDataBytes, signatureBytes] of SHAPES) {
     const op = shapeOp(callDataBytes, signatureBytes);
     const port = calcAltoRequiredPvg(op, { supportsEip7623: false });
