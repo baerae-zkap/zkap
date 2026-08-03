@@ -1112,9 +1112,9 @@ describe('ZkapBuilder', () => {
       // Execute
       await builder.autoFillUserOp();
 
-      // Verify: callGasLimit should be exactly 2,025,000 (2M + 25k buffer)
+      // Verify: callGasLimit should be exactly 1,325,000 (1.3M measured budget + 25k buffer)
       const userOp = builder.getUserOp();
-      expect(userOp.callGasLimit).toBe("0x1ee628");  // hex for 2,025,000
+      expect(userOp.callGasLimit).toBe("0x1437c8");  // hex for 1,325,000
     });
 
     it('should return fixed gas estimate for updateMasterKey when wallet not deployed', async () => {

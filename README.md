@@ -203,6 +203,13 @@ builder
 
 await builder.autoFillUserOp(); // estimates gas, sets nonce
 
+// Trim preVerificationGas to what the bundler actually requires (+ margin).
+// EntryPoint charges preVerificationGas in full, so padding it is a permanent
+// overpayment. Calibrated against Pimlico alto; on chains where alto adds an L2
+// data-availability component, pass it via `extraComponent`. Must run before
+// getUserOpHash() — preVerificationGas is part of the hash.
+builder.applyBundlerPreVerificationGas();
+
 const userOpHash = builder.getUserOpHash();
 const signatures = await signer.signUserOpHash(userOpHash);
 builder.setSignature([0], signatures);

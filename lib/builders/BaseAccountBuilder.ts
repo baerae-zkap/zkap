@@ -1,6 +1,7 @@
 import { UserOperation, PackedUserOperation } from "../types/UserOperation";
 import { ethers } from "ethers";
 import { AaOperationError, AaOperationErrorCode, AaFetchError, AaFetchErrorCode } from "../errors";
+import { calibrateBundlerPvg, CalibrateBundlerPvgOptions } from "../utils/bundlerPvg";
 
 export abstract class BaseAccountBuilder {
   /** Multiplier to add 20% buffer to gas estimates (120/100 = 1.2x) */
@@ -340,6 +341,42 @@ export abstract class BaseAccountBuilder {
 
   setPreVerificationGas(preVerificationGas: string): this {
     this.userOp.preVerificationGas = preVerificationGas;
+    return this;
+  }
+
+  /**
+   * Raise `preVerificationGas` to the bundler's own floor plus a margin
+   * (see {@link calibrateBundlerPvg}), never lowering the value already set.
+   *
+   * PVG is charged in full by EntryPoint, so the historical "multiply the estimate by
+   * 4" habit is a permanent overpayment; this sets what alto actually requires.
+   *
+   * ORDER MATTERS:
+   *  1. after `autoFillUserOp()` — nonce/initCode/callData/signature must be final;
+   *  2. after the final `callGasLimit` — the EIP-7623 branch reads it;
+   *  3. BEFORE any paymaster handoff and before `getUserOpHash()` — PVG is part of the
+   *     hash and of the paymaster's signed digest.
+   *
+   * The signature present at this point must have the byte length of the REAL signature
+   * (that is what dummy signatures are for): the bundler recomputes its floor from the
+   * submitted bytes.
+   *
+   * On chains where alto adds an L2 data-availability component (op-stack, arbitrum,
+   * mantle, ...) pass it via `options.extraComponent`, or keep a conservative multiplier
+   * instead of this method.
+   */
+  applyBundlerPreVerificationGas(
+    options?: CalibrateBundlerPvgOptions
+  ): this {
+    const userOp = this.getUserOp();
+    const current = userOp.preVerificationGas
+      ? BigInt(userOp.preVerificationGas)
+      : BigInt(0);
+    const calibrated = calibrateBundlerPvg(userOp, options);
+
+    this.userOp.preVerificationGas = ethers.toBeHex(
+      calibrated > current ? calibrated : current
+    );
     return this;
   }
 

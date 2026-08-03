@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-03
+
+### Added
+
+- `calcAltoRequiredPvg()` / `calibrateBundlerPvg()` (`lib/utils/bundlerPvg.ts`) and
+  `BaseAccountBuilder.applyBundlerPreVerificationGas()`: compute the bundler's actual
+  `preVerificationGas` floor instead of guessing at it. The calculation is a port of
+  Pimlico alto's `calcExecutionPvgComponent`, which is exactly what
+  `eth_sendUserOperation` compares against; `calibrateBundlerPvg` adds a margin
+  (default `x1.10 + 15,000`, the same 110% alto's own estimator returns, plus a flat
+  cushion for overhead drift).
+
+  **Why it matters:** EntryPoint charges `preVerificationGas` in FULL — `preOpGas` is
+  `measuredValidationGas + preVerificationGas` — so anything declared above the floor is
+  paid and never refunded, while anything below it is rejected at submission. The common
+  "multiply the SDK estimate by 4" workaround costs ~200k gas per op on ZK-signed ops.
+  Measured on Sepolia (EntryPoint v0.8): the floor for a wallet-deploy op is 76,673 gas
+  against 295,232 declared under the x4 policy.
+
+  Verified against the live endpoint, not just unit-tested: for five op shapes on chains
+  1 and 11155111, `eth_estimateUserOperationGas` returned exactly `port x 1.10`. Re-run
+  `scripts/check-pvg-floor.mjs` after an alto release or a bundler-vendor change.
+
+  ⚠️ **alto-specific, execution component only.** Chains where alto adds an L2
+  data-availability component (`op-stack`, `arbitrum`, `mantle`, `etherlink`, `citrea`,
+  `monad`) need that part supplied via `extraComponent`, or a conservative multiplier
+  instead. Verified `chainType=default` (component 0): Ethereum mainnet, Sepolia.
+  ⚠️ The op must be complete before calling: the signature must already have the REAL
+  signature's byte length (that is what dummy signatures are for), and `callGasLimit`
+  must be final. Call it after `autoFillUserOp()` and before any paymaster handoff or
+  `getUserOpHash()`.
+
+- `ZkapBuilder.ZK_OAUTH_RS256_SINGLE_PROOF_VALIDATION_GAS` (400,000): zk-OAuth
+  validation budget for a single-proof (1-of-1) signature, selected automatically from
+  the proof count in the signature already set. Undecodable or absent signatures keep
+  using the conservative 3-of-6 constant.
+
+### Changed
+
+- `ZkapBuilder.ZK_OAUTH_RS256_KEY_VALIDATION_GAS` lowered from 1,000,000 to 900,000.
+  Sepolia-measured `validateUserOp` for shuffled 3-of-6 key updates is 753,719–753,790
+  gas across six ops; with `autoFillUserOp`'s x1.2 buffer the resulting
+  `verificationGasLimit` drops from 1,230,000 to 1,110,000 (~1.43x measured). Wallet
+  deployments drop much further — their validation is 1-of-1 (250,215–278,797 measured;
+  the 3-of-6 verification happens in `updateKeys` EXECUTION, not validation), so with the
+  new single-proof constant a deploy's `verificationGasLimit` goes from 1,919,821 to
+  ~1,199,821. Fees are unchanged (unused verification gas is never charged by EntryPoint
+  v0.7/v0.8); what shrinks is the required prefund locked per op, which is what gates a
+  user-paid wallet on having "enough" balance.
+
+- `updateKeys` (wallet-creation `callGasLimit`, used when the wallet is not yet deployed
+  so on-chain estimation is impossible) lowered from 2,000,000 to 1,300,000 (+25,000
+  buffer = 1,325,000). Sepolia-measured execution is 867,516 gas, stable across traced
+  deploys, with a ~927,500 worst case derived from the callData-length spread of 20
+  deploys — the new value keeps ~1.4x headroom.
+
+  **Why it matters:** EntryPoint v0.7/v0.8 charge a 10% penalty on UNUSED
+  `callGasLimit` above a 40,000 threshold, so the old value burned ~115k gas per deploy.
+  ⚠️ This is the one field whose under-declaration is not a free rejection: execution
+  reverts ON-CHAIN and is still charged, leaving a wallet deployed with its keys
+  un-updated. The constants are measurements of the CURRENT contract deployment —
+  re-measure after a ZkapAccount/verifier redeploy or a circuit change.
+
 ## [0.1.9] - 2026-07-28
 
 ### Changed

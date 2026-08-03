@@ -36,6 +36,16 @@ export * from "./utils/base64url";
 export { IUserOpSigner } from "./utils/IUserOpSigner";
 export { packUserOperation, unpackUserOperation, toPimlicoFormat, createDummyPasskeySignature, createDummyZkSignature } from "./utils/userOpUtils";
 export { computeSalt } from "./utils/salt";
+export {
+  calcAltoRequiredPvg,
+  calibrateBundlerPvg,
+  ALTO_DEFAULT_OVERHEADS,
+} from "./utils/bundlerPvg";
+export type {
+  AltoGasOverheads,
+  AltoRequiredPvgOptions,
+  CalibrateBundlerPvgOptions,
+} from "./utils/bundlerPvg";
 
 // Bundler client
 export { BundlerClient } from "./client/BundlerClient";
