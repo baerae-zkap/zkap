@@ -2,9 +2,9 @@
  * basic-userop: send a UserOperation from a ZKAP smart wallet
  *
  * Usage:
- *   node index.js chains          — list supported chains
- *   node index.js send            — send a UserOp (reads .env)
- *   node index.js derive          — print counterfactual wallet address
+ *   node index.js info     — print chain config and wallet state
+ *   node index.js derive   — print the counterfactual wallet address
+ *   node index.js send     — send a UserOp (reads .env)
  *
  * Requires: cp .env.example .env && fill in values
  */
@@ -18,80 +18,177 @@ require('fs').existsSync(path.join(__dirname, '.env')) &&
       if (k && v.length) process.env[k.trim()] = v.join('=').trim();
     });
 
+const { ethers } = require('ethers');
 const {
-  ChainRegistry,
+  ZkapBuilder,
+  ZkapCreator,
+  AccountKeyBuilder,
+  AccountReader,
   BundlerClient,
-  ZkapBundlerProvider,
-  WalletHelper,
+  Erc4337BundlerProvider,
   AddressKeySigner,
+  PrimitiveAccountKeyTypes,
+  computeSalt,
 } = require('@baerae/zkap-aa');
 
-const registry = new ChainRegistry();
-const bundlerClient = new BundlerClient(new ZkapBundlerProvider());
-const helper = new WalletHelper({ chainRegistry: registry, bundlerClient });
-
-async function listChains() {
-  const chains = await registry.getSupportedChains();
-  if (chains.length === 0) {
-    console.log('No supported chains found.');
-    return;
-  }
-  console.log('Supported chains:');
-  chains.forEach(c => console.log(`  ${c.chainId.toString().padEnd(10)} ${c.name}`));
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} not set in .env`);
+  return value;
 }
 
-async function deriveAddress() {
-  const { WALLET_ADDRESS, CHAIN_ID } = process.env;
-  if (!CHAIN_ID) throw new Error('CHAIN_ID not set in .env');
+// There is no chain registry — you supply the config. Every command reads from here.
+function loadChain() {
+  return {
+    chainId: Number(requireEnv('CHAIN_ID')),
+    rpcUrl: requireEnv('RPC_URL'),
+    entryPoint: requireEnv('ENTRY_POINT'),
+    bundlerUrl: process.env.BUNDLER_URL,
+    zkapFactory: process.env.FACTORY_ADDRESS,
+    addressKeyLogic: process.env.ADDRESS_KEY_LOGIC,
+  };
+}
 
-  // Derive address from AUD + SUB (requires OAuth identity).
-  // If you already have a deployed wallet, skip this and use WALLET_ADDRESS directly.
-  console.log('Tip: set AUD and SUB in .env to derive address from OAuth identity.');
-  console.log('     For now, your deployed wallet is:', WALLET_ADDRESS || '(not set)');
+async function info() {
+  const chain = loadChain();
+  const wallet = requireEnv('WALLET_ADDRESS');
+
+  console.log('Chain config (from .env):');
+  console.log(`  chainId:     ${chain.chainId}`);
+  console.log(`  rpcUrl:      ${chain.rpcUrl}`);
+  console.log(`  entryPoint:  ${chain.entryPoint}`);
+  console.log(`  bundlerUrl:  ${chain.bundlerUrl || '(not set)'}`);
+  console.log(`  zkapFactory: ${chain.zkapFactory || '(not set)'}`);
+
+  const reader = new AccountReader({ rpcUrl: chain.rpcUrl, chainId: chain.chainId });
+  const deployed = await reader.isDeployed(wallet);
+  const balance = await reader.getBalance(wallet);
+
+  console.log(`\nWallet ${wallet}`);
+  console.log(`  deployed: ${deployed}`);
+  console.log(`  balance:  ${ethers.formatEther(balance)} ETH`);
+
+  // getTxKeyList returns [] for an undeployed account rather than throwing, so
+  // check isDeployed first — otherwise "0 keys" also means "wrong RPC_URL".
+  if (!deployed) {
+    console.log('  txKeys:   not deployed — no key slots yet');
+    return;
+  }
+
+  const txKeys = await reader.getTxKeyList(wallet);
+  console.log(`  txKeys:   ${txKeys.length}`);
+  txKeys.forEach(k => console.log(`    [${k.index}] ${k.keyType} @ ${k.logicContract}`));
+}
+
+async function derive() {
+  const chain = loadChain();
+  if (!chain.zkapFactory) throw new Error('FACTORY_ADDRESS not set in .env');
+  if (!chain.addressKeyLogic) throw new Error('ADDRESS_KEY_LOGIC not set in .env');
+
+  const aud = requireEnv('AUD');
+  const sub = requireEnv('SUB');
+  const privateKey = requireEnv('PRIVATE_KEY');
+
+  // A ZKAP address is CREATE2(salt, encodedMasterKey, encodedTxKey) — it depends on
+  // the key material the wallet will be DEPLOYED with, not on (aud, sub) alone.
+  // Derive with exactly the inputs you will deploy with, or you fund an address the
+  // deploy never targets.
+  const salt = computeSalt(aud, sub);
+
+  const signerAddress = new ethers.Wallet(privateKey).address;
+  const encodedMasterKey = new AccountKeyBuilder(1, [
+    {
+      keyType: PrimitiveAccountKeyTypes.keyAddress,
+      logicContract: chain.addressKeyLogic,
+      weight: 1,
+      keyData: { signerAddress },
+    },
+  ]).getEncodedKey();
+
+  const creator = new ZkapCreator({
+    chainId: chain.chainId,
+    entryPoint: chain.entryPoint,
+    zkapFactory: chain.zkapFactory,
+    enUrl: chain.rpcUrl,
+    salt,
+    encodedMasterKey,
+    encodedTxKey: '0x', // no separate transaction key on this wallet
+  });
+
+  const address = await creator.deriveZkapAddress();
+
+  console.log('salt:             ', salt);
+  console.log('master key signer:', signerAddress);
+  console.log('wallet address:   ', address);
+  console.log('\nSet WALLET_ADDRESS to this value in .env.');
+  console.log('The wallet is not deployed yet — its first UserOp must carry initCode,');
+  console.log('which this ZkapCreator instance already has set. `send` below assumes an');
+  console.log('already-deployed wallet.');
 }
 
 async function send() {
-  const {
-    PRIVATE_KEY,
-    WALLET_ADDRESS,
-    CHAIN_ID,
-    TO_ADDRESS,
-    VALUE_WEI = '0',
-  } = process.env;
+  const chain = loadChain();
+  if (!chain.bundlerUrl) throw new Error('BUNDLER_URL not set in .env');
 
-  if (!PRIVATE_KEY) throw new Error('PRIVATE_KEY not set in .env');
-  if (!WALLET_ADDRESS) throw new Error('WALLET_ADDRESS not set in .env');
-  if (!CHAIN_ID) throw new Error('CHAIN_ID not set in .env');
-  if (!TO_ADDRESS) throw new Error('TO_ADDRESS not set in .env');
+  const privateKey = requireEnv('PRIVATE_KEY');
+  const sender = requireEnv('WALLET_ADDRESS');
+  const to = requireEnv('TO_ADDRESS');
+  const value = process.env.VALUE_WEI || '0';
 
-  const chainId = Number(CHAIN_ID);
-  const signer = new AddressKeySigner([PRIVATE_KEY]);
+  const signer = new AddressKeySigner([privateKey]);
 
-  console.log(`Sending UserOp on chain ${chainId}...`);
-  console.log(`  from: ${WALLET_ADDRESS}`);
-  console.log(`  to:   ${TO_ADDRESS}`);
-  console.log(`  value: ${VALUE_WEI} wei`);
+  console.log(`Sending UserOp on chain ${chain.chainId}...`);
+  console.log(`  from:  ${sender}`);
+  console.log(`  to:    ${to}`);
+  console.log(`  value: ${value} wei`);
 
-  const { userOpHash, receipt } = await helper.sendTransaction({
-    sender: WALLET_ADDRESS,
-    to: TO_ADDRESS,
-    value: VALUE_WEI,
-    chainId,
-    signer,
+  const builder = new ZkapBuilder({
+    chainId: chain.chainId,
+    entryPoint: chain.entryPoint,
+    enUrl: chain.rpcUrl,
   });
 
-  console.log('\nSubmitted UserOpHash:', userOpHash);
+  builder
+    .setSender(sender)
+    .setExecuteCallData(to, value, '0x', signer.keyTypes);
+
+  // Fills nonce, gas limits and fee fields from the RPC endpoint.
+  await builder.autoFillUserOp();
+
+  // Trim preVerificationGas to the bundler's real floor (+ margin). Must run after
+  // autoFillUserOp() and before getUserOpHash() — PVG is part of the hash.
+  builder.applyBundlerPreVerificationGas();
+
+  const userOpHash = builder.getUserOpHash();
+  const signatures = await signer.signUserOpHash(userOpHash);
+  builder.setSignature(signer.keyTypes.map((_, i) => i), signatures);
+
+  // The BUNDLER endpoint, not RPC_URL — these are different services.
+  const bundlerClient = new BundlerClient(
+    new Erc4337BundlerProvider({ rpcUrl: chain.bundlerUrl, usePimlicoFormat: true })
+  );
+
+  const submittedHash = await bundlerClient.submitUserOp(
+    builder.getPackedUserOp(),
+    chain.entryPoint
+  );
+
+  console.log('\nSubmitted UserOpHash:', submittedHash);
   console.log('Waiting for on-chain confirmation...');
 
-  const result = await receipt;
-  console.log('Confirmed!');
-  console.log('  tx hash:', result.receipt.transactionHash);
-  console.log('  block:  ', result.receipt.blockNumber);
+  const receipt = await bundlerClient.waitForReceipt(submittedHash);
+  console.log(receipt.success ? 'Confirmed!' : 'Included, but execution reverted.');
+  console.log('  tx hash: ', receipt.txHash);
+  console.log('  block:   ', receipt.blockNumber);
+  console.log('  gas cost:', receipt.actualGasCost, 'wei');
+  if (!receipt.success) {
+    console.log('  revert:  ', receipt.contractError?.name || receipt.revertReason || '(unknown)');
+  }
 }
 
 const command = process.argv[2] || 'help';
 
-const commands = { chains: listChains, send, derive: deriveAddress };
+const commands = { info, derive, send };
 
 if (commands[command]) {
   commands[command]().catch(err => {
@@ -99,5 +196,5 @@ if (commands[command]) {
     process.exit(1);
   });
 } else {
-  console.log('Usage: node index.js <chains|send|derive>');
+  console.log('Usage: node index.js <info|derive|send>');
 }

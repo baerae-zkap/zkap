@@ -1,7 +1,7 @@
 import { BaseAccount } from "./BaseAccount";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
 import { ethers } from "ethers";
-import EntryPoint from "../types/abi/EntryPoint.json";
+import { EntryPointABI } from "../types/abi";
 import { PackedUserOperation } from "../types/UserOperation";
 import { AaOperationError, AaOperationErrorCode, AaFetchError, AaFetchErrorCode } from "../errors";
 
@@ -39,7 +39,7 @@ export class ZkapAccount extends BaseAccount {
     this.provider = new ethers.JsonRpcProvider(enUrl);
     this.entryPoint = new ethers.Contract(
       entryPointAddress,
-      EntryPoint.abi,
+      EntryPointABI,
       this.provider
     );
   }

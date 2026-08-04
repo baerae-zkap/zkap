@@ -54,8 +54,7 @@ export interface UserOpReceipt {
  * Transport abstraction for communicating with an ERC-4337 bundler.
  *
  * Implement this interface to support custom bundler backends.
- * Two built-in implementations are provided: {@link ZkapBundlerProvider} and
- * {@link Erc4337BundlerProvider}.
+ * One built-in implementation is provided: {@link Erc4337BundlerProvider}.
  */
 export interface BundlerProvider {
   /**

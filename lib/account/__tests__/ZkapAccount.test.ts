@@ -22,9 +22,6 @@ jest.mock('ethers', () => ({
   },
 }));
 
-// Mock EntryPoint ABI
-jest.mock('../../types/abi/EntryPoint.json', () => ({ abi: [] }), { virtual: true });
-
 import { ZkapAccount } from '../ZkapAccount';
 import { IUserOpSigner } from '../../utils/IUserOpSigner';
 

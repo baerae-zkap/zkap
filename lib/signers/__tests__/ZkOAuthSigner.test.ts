@@ -5,11 +5,6 @@
  * Fetches Google/Kakao OAuth public keys, communicates with the ZK proof server, and interacts with smart contracts
  */
 
-// Mock ABIs first (before any imports)
-jest.mock('../../types/abi/ZkapAccount.json', () => ({ abi: [] }), { virtual: true });
-jest.mock('../../types/abi/AccountKeyZkOAuthRS256Verifier.json', () => ({ abi: [] }), { virtual: true });
-jest.mock('../../types/abi/PoseidonMerkleTreeDirectory.json', () => ({ abi: [] }), { virtual: true });
-
 // Mock crypto utils
 const mockGetSignedMessageHash = jest.fn().mockReturnValue('0x' + 'ee'.repeat(32));
 jest.mock('../../utils/crypto', () => ({

@@ -26,11 +26,25 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      # The only typecheck that covers lib/**/__tests__/** — tsconfig.json excludes
+      # them, and no enabled eslint rule resolves modules, so a stale test import
+      # is otherwise caught by nothing but a jest run.
+      - name: Type check (including tests)
+        run: npx tsc --noEmit -p tsconfig.eslint.json
+
       - name: Lint
         run: npx eslint "lib/**/*.ts"
+
+      - name: ABI modules are in sync
+        run: node scripts/gen-abi.mjs && git diff --exit-code -- lib/types/abi/generated.ts
 
       - name: Test
         run: npm run test:ci
 
       - name: Build
         run: npm run build
+
+      - name: Assert published entrypoints load
+        run: |
+          node -e "const m=require('./dist/lib/index.js'); if(!Object.keys(m).length) throw new Error('CJS entrypoint exports nothing'); console.log('CJS OK:', Object.keys(m).length, 'exports')"
+          node --input-type=module -e "const m=await import('./dist/esm/index.js'); if(!Object.keys(m).length) throw new Error('ESM entrypoint exports nothing'); console.log('ESM OK:', Object.keys(m).length, 'exports')"

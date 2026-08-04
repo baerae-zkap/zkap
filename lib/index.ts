@@ -49,28 +49,20 @@ export type {
 
 // Bundler client
 export { BundlerClient } from "./client/BundlerClient";
-export { ZkapBundlerProvider, Erc4337BundlerProvider } from "./client/BundlerProvider";
+export { Erc4337BundlerProvider } from "./client/BundlerProvider";
 export type { Erc4337BundlerProviderConfig } from "./client/BundlerProvider";
 export type { BundlerProvider, UserOpStatus, UserOpReceipt } from "./client/types";
 
-// Error model (ZkapAaError hierarchy + 카탈로그 + 팩토리)
+// Error model (ZkapAaError hierarchy + catalog + factories)
 export * from "./errors";
 export { safeStringify } from "./utils/safeStringify";
 
 // Pimlico format (for external bundler integration)
 export type { PimlicoUserOperation, PimlicoGasEstimate } from "./types/UserOperation";
 
-// Chain registry
-export { ChainRegistry } from "./registry/ChainRegistry";
-export type { ChainConfig } from "./registry/ChainRegistry";
-
 // Account reader
 export { AccountReader } from "./reader/AccountReader";
 export type { TxKeyInfo, MasterKeyInfo, WebAuthnKeyData as AccountWebAuthnKeyData, KeyType } from "./reader/AccountReader";
-
-// Wallet helper
-export { WalletHelper } from "./helper/WalletHelper";
-export type { WalletHelperConfig } from "./helper/WalletHelper";
 
 // TxKey helper
 export { TxKeyHelper } from "./helper/TxKeyHelper";

@@ -7,8 +7,8 @@ export const MAX_WALLET_INDEX = 255;
  * Computes the deterministic salt for a ZKAP wallet address.
  *
  * This is the **canonical** implementation of salt derivation for the ZKAP
- * protocol — the embedded-zkap SPA and zkap-web3-server import this function
- * directly rather than re-implementing the ABI encoding.
+ * protocol. Import it rather than re-implementing the ABI encoding — the salt
+ * determines the wallet address, so a mismatch strands funds.
  *
  * Two derivation paths, selected by `walletIndex`:
  * - `walletIndex` omitted, `undefined`, or `0`:

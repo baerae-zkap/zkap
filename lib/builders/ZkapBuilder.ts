@@ -615,7 +615,7 @@ export class ZkapBuilder extends BaseAccountBuilder {
    * Sets the initCode for deploying the wallet on first use.
    * Only needed when the wallet has not been deployed yet.
    * @param zkapFactory Address of the ZkapFactory contract
-   * @param salt Deterministic salt (use `WalletHelper.computeSalt(aud, sub)`)
+   * @param salt Deterministic salt (use `computeSalt(aud, sub)`)
    * @param keys Encoded master key and tx key
    */
   setInitCode(

@@ -1,9 +1,8 @@
 /**
  * Error code catalogs + operation catalog.
  *
- * Source: `error-modeling.html` appendix B (code catalogs) and
- * `error-catalog-mapping.md` (full mapping of 198 throw sites). Structure aligned
- * with the `zkap-bank/src/errors/codes.ts` org convention.
+ * Codes are catalogued per throw site and follow the same structure as the other
+ * SDKs in this org, so an error surfaced by one is shaped like the others.
  *
  * Pattern:
  * - Catalog objects are exported `as const` (IDE autocomplete + safe rename refactor).

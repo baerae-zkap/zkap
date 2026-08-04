@@ -22,6 +22,12 @@
     "esModuleInterop": true,
     "moduleResolution": "node"
   },
-  "include": ["lib/**/*", "lib/**/*.json"],
+  // `.json` is deliberately NOT a program root: nothing in lib/ may import JSON at
+  // runtime (native ESM would need an import attribute). Re-adding "lib/**/*.json"
+  // makes tsc copy the Hardhat artifacts into dist again — ~820 KB of bytecode and
+  // metadata no runtime code reads. ABIs come from lib/types/abi/generated.ts.
+  // Note tsconfig.eslint.json DOES keep the glob: it includes tests, and two of
+  // them import a JSON fixture, which composite builds require to be listed.
+  "include": ["lib/**/*"],
   "exclude": ["node_modules", "dist", "lib/**/__tests__/**"]
 }

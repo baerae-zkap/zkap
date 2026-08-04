@@ -7,6 +7,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-04
+
+Removes the SDK's dependencies on ZKAP Server's chain-config and bundler REST
+endpoints, and repairs the ESM build.
+
+**Why now:** the ZKAP web3 server is removing `rpcUrl` and `explorerUrl` from its
+public chain-config surface (`GET /api/v1/chains*` and the GCS static JSON),
+because that surface is unauthenticated and therefore cannot carry a keyed RPC
+endpoint. Every SDK path that consumed it was already dead — two of the three
+endpoints do not exist server-side at all — so this release removes the latent
+trap rather than reacting to a live break.
+
+### BREAKING CHANGES
+
+- **`ChainRegistry` and type `ChainConfig` removed.** The class fetched chain
+  config from `GET /api/v1/chains` and `/api/v1/chains/:id` and threw when the
+  response had no `rpcUrl`. No consumer used it — every product independently
+  reimplemented chain config instead.
+  - **Migration**: supply chain configuration yourself. `AccountReader({ rpcUrl })`
+    and `ZkapBuilder({ enUrl })` already take the RPC URL directly, and contract
+    addresses keep coming from your own config service. There is **no replacement
+    type** for `ChainConfig` — model your own. Note that `ChainConfig.contracts`
+    carried the key-logic addresses (`zkOAuthVerifier1of1` / `zkOAuthVerifier3of3`);
+    those are the `logicContract` values `AccountKeyBuilder` needs, so keep sourcing
+    them.
+- **`WalletHelper` and type `WalletHelperConfig` removed.** It required a
+  `ChainRegistry`, and no consumer used it.
+  - **Migration** (sends): `ZkapBuilder` + `BundlerClient` + `Erc4337BundlerProvider`.
+    See the rewritten Quick Start in the README.
+  - **Migration** (`computeSalt`): use the already-exported `computeSalt` — the
+    static method only delegated to it, so this is 1:1.
+  - **Migration** (`deriveAddress`): `ZkapCreator.deriveZkapAddress()`. Note this
+    method could not have worked: it called a `getAddress(uint256)` selector
+    (`0xb93f9b0a`) that `ZkapAccountFactory` does not implement — absent from both
+    the ABI and the `deployedBytecode` of the compiled factory artifact this SDK
+    ships, and never present in the repository's history. The factory exposes
+    `calcAccountAddress(uint256,bytes,bytes)` (`0xfc8737d2`) instead. A ZKAP
+    counterfactual address is CREATE2 over init code embedding `encodedMasterKey`
+    and `encodedTxKey` — inputs `deriveAddress` never received. Its only test
+    coverage mocked `ethers.Contract` outright.
+  - **Migration** (reads): the `AccountReader` methods share the names but are
+    **not drop-in**. Drop the per-call `chainId` argument and pass it to the
+    constructor instead — `new AccountReader({ rpcUrl, chainId })`, which also sets
+    ethers' `staticNetwork` and skips the `eth_chainId` probe. `isDeployed`,
+    `getBalance` and `getTxKeyList` become single-argument;
+    `findTxKeysByRpId(address, chainId, rpIdHash)` becomes
+    `findTxKeysByRpId(address, rpIdHash)`, so its second argument changes meaning.
+- **`ZkapBundlerProvider` removed.** It called `/api/v1/bundler/submit-direct` and
+  `/api/v1/bundler/status/:hash`; ZKAP Server has no bundler controller, so both
+  404'd.
+  - **Migration**: `Erc4337BundlerProvider({ rpcUrl: <bundler RPC endpoint> })`.
+    Note `rpcUrl` here is the **bundler** endpoint, not a JSON-RPC node.
+- **`FetchService` union member `"chain_registry"` removed**, since
+  `ChainRegistry` was its only producer.
+  - **Migration**: only affects code that narrows on `err.service`. The four now
+    unused `operation` strings (`get_chain_config`, `get_supported_chains`,
+    `parse_chain_config`, `derive_address`) are not a breaking concern —
+    `operation` is documented as a free-form string, not a closed catalog.
+- **The Hardhat artifact `.json` files no longer ship in `dist`**, and `dist/esm`
+  is now genuinely ESM (see Fixed). Every `*ABI` export keeps its exact name and
+  type. Only code deep-importing `dist/**/types/abi/*.json` is affected; the
+  package's `exports` map has only ever exposed `"."`.
+
+### Fixed
+
+- **`dist/esm/index.js` was unloadable in native Node.** Two defects: no
+  `{"type":"module"}` marker for `dist/esm` (so Node classified the output as
+  CommonJS and only newer versions rescued it via module-syntax detection), and
+  bare `.json` specifiers, which native ESM rejects without an import attribute.
+  The build now emits `dist/esm/package.json` and generates ABI modules
+  (`scripts/gen-abi.mjs` → `lib/types/abi/generated.ts`) so no runtime JSON
+  import remains. `engines.node` is unchanged.
+  - Side effect: ~820 KB of unused contract bytecode and metadata no longer ships.
+    `dist/lib` 1.5M → 1.1M, `dist/esm` 1.3M → 908K.
+- **README documented a receipt field that does not exist.** `UserOpReceipt` is
+  flat — the transaction hash is `receipt.txHash`, not
+  `result.receipt.transactionHash`. Same bug in `examples/basic-userop`.
+- **README nested `poseidonMerkleTreeDirectory` under `contracts`** in the
+  `ZkOAuthSigner` sample. `ChainConfig` declared it at the top level, so the
+  sample would not have compiled.
+- **README documented the ZKAP bundler default as `https://bundler.zkap.app`**
+  while the code used `https://api.zkap.app`. Moot with the provider removed.
+
+### Removed
+
+- Dead internal test helpers (`lib/__tests__/helpers/{mocks,fixtures}.ts`) — zero
+  inbound references, excluded from both test discovery and coverage, never
+  shipped. No consumer impact.
+
+### Changed
+
+- README rewritten around the API consumers actually use: a caller-supplied
+  `CHAIN` config object, `ZkapBuilder` + `BundlerClient` +
+  `Erc4337BundlerProvider` for sends, `ZkapCreator` for address derivation, and
+  `AccountReader` for reads. `examples/basic-userop` rewritten to match, with its
+  `chains` command replaced by `info`.
+- `exports` conditions reordered so `types` resolves first. Hygiene only —
+  TypeScript already fell through a matched-but-failing `import` condition.
+  `dist/esm` intentionally ships no `.d.ts`; types always resolve from the CJS
+  build.
+- CI: the release workflow now verifies `package.json`'s version matches the
+  release version before publishing, always builds (previously skippable), and
+  asserts both entrypoints actually load. PR CI additionally typechecks test
+  files and verifies the generated ABI module is in sync.
+
 ## [0.1.10] - 2026-08-03
 
 ### Added
