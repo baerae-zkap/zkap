@@ -68,10 +68,6 @@ export type { ChainConfig } from "./registry/ChainRegistry";
 export { AccountReader } from "./reader/AccountReader";
 export type { TxKeyInfo, MasterKeyInfo, WebAuthnKeyData as AccountWebAuthnKeyData, KeyType } from "./reader/AccountReader";
 
-// Wallet helper
-export { WalletHelper } from "./helper/WalletHelper";
-export type { WalletHelperConfig } from "./helper/WalletHelper";
-
 // TxKey helper
 export { TxKeyHelper } from "./helper/TxKeyHelper";
 export type { WebAuthnNewKeyParams, ExistingKeyEntry } from "./helper/TxKeyHelper";
