@@ -49,7 +49,7 @@ export type {
 
 // Bundler client
 export { BundlerClient } from "./client/BundlerClient";
-export { ZkapBundlerProvider, Erc4337BundlerProvider } from "./client/BundlerProvider";
+export { Erc4337BundlerProvider } from "./client/BundlerProvider";
 export type { Erc4337BundlerProviderConfig } from "./client/BundlerProvider";
 export type { BundlerProvider, UserOpStatus, UserOpReceipt } from "./client/types";
 
