@@ -28,8 +28,7 @@
  * execution component, by design. Such chains are reported as SKIP(l2).
  */
 import { ethers } from "ethers";
-// CJS build on purpose: the ESM output carries no "type": "module" marker, so importing
-// it makes Node re-parse the file and print a MODULE_TYPELESS_PACKAGE_JSON warning.
+// CJS build on purpose: no .js extension rewriting needed on this path.
 import { calcAltoRequiredPvg } from "../dist/lib/utils/bundlerPvg.js";
 
 const ENTRY_POINT = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108";

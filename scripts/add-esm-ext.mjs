@@ -8,11 +8,16 @@
  * Handles two cases:
  * - "./types/UserOperation" → "./types/UserOperation.js"  (file)
  * - "./types/abi"           → "./types/abi/index.js"      (directory with index)
+ *
+ * Then writes dist/esm/package.json with {"type":"module"}. Without it Node
+ * treats every dist/esm/*.js as CommonJS — newer versions rescue it via
+ * module-syntax detection (with a perf warning), older ones fail outright.
  */
 import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from 'fs';
 import { join, extname, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const ESM_DIR = new URL('../dist/esm', import.meta.url).pathname;
+const ESM_DIR = fileURLToPath(new URL('../dist/esm', import.meta.url));
 
 function walkJs(dir) {
   const entries = readdirSync(dir);
@@ -55,3 +60,9 @@ function patchFile(filePath) {
 
 walkJs(ESM_DIR);
 console.log('ESM .js extensions patched');
+
+// Mark dist/esm as ESM. Only the `type` field — an `exports` field here would
+// turn dist/esm into a resolution boundary and break Metro's resolution of the
+// package's own relative imports inside it.
+writeFileSync(join(ESM_DIR, 'package.json'), '{"type":"module"}\n', 'utf8');
+console.log('ESM module marker written (dist/esm/package.json)');

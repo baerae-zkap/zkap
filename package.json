@@ -66,9 +66,9 @@
   "types": "dist/lib/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/lib/index.d.ts",
       "import": "./dist/esm/index.js",
-      "require": "./dist/lib/index.js",
-      "types": "./dist/lib/index.d.ts"
+      "require": "./dist/lib/index.js"
     }
   },
   "devDependencies": {

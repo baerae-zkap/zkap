@@ -1,9 +1,11 @@
 import { ethers } from "ethers";
 import { IUserOpSigner } from "../utils/IUserOpSigner";
 import { BN254_FR } from "../utils/crypto";
-import zkapAccountJson from "../types/abi/ZkapAccount.json";
-import AccountKeyZkOAuthRS256VerifierJson from "../types/abi/AccountKeyZkOAuthRS256Verifier.json";
-import poseidonMerkleTreeDirectoryJson from "../types/abi/PoseidonMerkleTreeDirectory.json";
+import {
+  ZkapAccountABI,
+  AccountKeyZkOAuthRS256VerifierABI,
+  PoseidonMerkleTreeDirectoryABI,
+} from "../types/abi";
 import { JwkKey, JwtHeader } from "../types/jwk";
 import { PrimitiveAccountKeyTypes } from "../types/AccountKey";
 import { AaOperationError, AaOperationErrorCode, AaFetchError, AaFetchErrorCode } from "../errors";
@@ -278,7 +280,7 @@ export class ZkOAuthSigner implements IUserOpSigner {
   private async _doInit(): Promise<void> {
     this.zkapAccount = new ethers.Contract(
       this.zkapAddress,
-      zkapAccountJson.abi,
+      ZkapAccountABI,
       this.provider
     );
     // masterKeyList(index) returns KeyRef { logic: address, keyId: uint256 }
@@ -298,7 +300,7 @@ export class ZkOAuthSigner implements IUserOpSigner {
 
     this.zkOAuthRS256Verifier = new ethers.Contract(
       masterKeyAddress,
-      AccountKeyZkOAuthRS256VerifierJson.abi,
+      AccountKeyZkOAuthRS256VerifierABI,
       this.provider
     );
     // Fetch anchor from smart contract (KeyPurpose.Master = 0)
@@ -314,7 +316,7 @@ export class ZkOAuthSigner implements IUserOpSigner {
 
     this.poseidonMerkleTreeDirectory = new ethers.Contract(
       this.poseidonMerkleTreeDirectoryAddress,
-      poseidonMerkleTreeDirectoryJson.abi,
+      PoseidonMerkleTreeDirectoryABI,
       this.provider
     );
 
