@@ -45,8 +45,8 @@ export interface ZkapAaErrorOptions {
  * `e instanceof ZkapAaError`.
  *
  * Abstract — direct instantiation forbidden. Use `UserOpRevertError`,
- * `AaFetchError`, or `AaOperationError`. Structure aligned with
- * `zkap-bank/src/errors/ZkapBankError.ts`.
+ * `AaFetchError`, or `AaOperationError`. Structure follows the shared error
+ * convention used across this org's SDKs.
  */
 export abstract class ZkapAaError extends Error {
   readonly code: ZkapAaCode;

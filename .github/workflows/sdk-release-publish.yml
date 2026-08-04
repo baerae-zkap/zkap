@@ -40,6 +40,17 @@ jobs:
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
 
+      - name: Verify package.json version matches release version
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PKG_VERSION" != "$VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) != release version ($VERSION). Bump package.json and re-tag."
+            exit 1
+          fi
+          echo "package.json version matches release version: $PKG_VERSION"
+
       - name: Verify version is newer than published
         shell: bash
         run: |
@@ -79,9 +90,17 @@ jobs:
         if: ${{ !inputs.skip-tests }}
         run: npm test -- --ci --forceExit
 
+      # Never gated: dist/ is gitignored, so skipping the build would publish a
+      # tarball whose main/module/types point at nothing.
       - name: Build
-        if: ${{ !inputs.skip-tests }}
         run: npm run build
+
+      - name: Assert published entrypoints load
+        shell: bash
+        run: |
+          node -e "const m=require('./dist/lib/index.js'); if(!Object.keys(m).length) throw new Error('CJS entrypoint exports nothing'); console.log('CJS OK:', Object.keys(m).length, 'exports')"
+          node --input-type=module -e "const m=await import('./dist/esm/index.js'); if(!Object.keys(m).length) throw new Error('ESM entrypoint exports nothing'); console.log('ESM OK:', Object.keys(m).length, 'exports')"
+          node -e "const fs=require('fs'),p=require('./package.json'); if(!fs.existsSync(p.types)) throw new Error('missing types: '+p.types); console.log('types OK:', p.types)"
 
       - name: Publish dry-run
         run: npm publish --dry-run

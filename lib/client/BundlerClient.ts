@@ -11,7 +11,7 @@ const DEFAULT_TIMEOUT = 60000;
  *
  * @example
  * ```ts
- * const provider = new ZkapBundlerProvider();
+ * const provider = new Erc4337BundlerProvider({ rpcUrl: "https://your-bundler-rpc" });
  * const client = new BundlerClient(provider);
  *
  * const userOpHash = await client.submitUserOp(packedUserOp, entryPoint);

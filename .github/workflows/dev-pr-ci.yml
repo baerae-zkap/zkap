@@ -26,6 +26,12 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      # The only typecheck that covers lib/**/__tests__/** — tsconfig.json excludes
+      # them, and no enabled eslint rule resolves modules, so a stale test import
+      # is otherwise caught by nothing but a jest run.
+      - name: Type check (including tests)
+        run: npx tsc --noEmit -p tsconfig.eslint.json
+
       - name: Lint
         run: npx eslint "lib/**/*.ts"
 
