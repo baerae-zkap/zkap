@@ -6,7 +6,7 @@ Thanks for your interest in contributing.
 
 ```bash
 git clone https://github.com/baerae-zkap/zkap-aa-sdk.git
-cd zkap-aa
+cd zkap-aa-sdk
 npm install
 ```
 
@@ -25,8 +25,8 @@ npm run test:coverage
 # Type check (no emit)
 npx tsc --noEmit
 
-# Lint
-npm run lint
+# Lint (note: `npm run lint` carries --fix and rewrites files)
+npx eslint "lib/**/*.ts"
 
 # Build
 npm run build
@@ -41,9 +41,8 @@ lib/
 │   └── aggregators/  # DEX aggregator (1inch)
 ├── client/           # BundlerClient, BundlerProvider
 ├── config/           # ZkapProviderConfig
-├── helper/           # WalletHelper, TxKeyHelper
+├── helper/           # TxKeyHelper
 ├── reader/           # AccountReader
-├── registry/         # ChainRegistry
 ├── signers/          # PasskeySigner, ZkOAuthSigner, ZkOidcSigner, AddressKeySigner
 ├── types/            # TypeScript types and ABI JSON
 └── utils/            # crypto, signature, base64url, salt, ...
@@ -80,7 +79,8 @@ export class YourSigner implements IUserOpSigner {
 - [ ] `npx tsc --noEmit` passes with zero errors
 - [ ] `npm test` passes
 - [ ] New public APIs have JSDoc comments
-- [ ] CHANGELOG.md updated under `## [Unreleased]`
+- [ ] CHANGELOG.md updated — under `## [Unreleased]`, or under a new versioned
+      heading when the PR is the release itself (the house pattern for releases)
 
 ## Commit style
 

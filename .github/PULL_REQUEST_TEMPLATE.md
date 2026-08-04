@@ -15,5 +15,5 @@
 - [ ] `npx tsc --noEmit` passes
 - [ ] `npm test` passes
 - [ ] New public APIs have JSDoc comments
-- [ ] CHANGELOG.md updated under `## [Unreleased]`
+- [ ] CHANGELOG.md updated — under `## [Unreleased]`, or under a new versioned heading when this PR is the release itself
 - [ ] Breaking changes documented in CHANGELOG

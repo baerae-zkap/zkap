@@ -31,69 +31,130 @@ Requires Node.js >= 18.
 
 ## Quick Start
 
-> **Prerequisites:** ZKAP wallets are ERC-4337 smart contract wallets. You need a wallet address before you can send UserOps.
-> - **OAuth flow (Google / Kakao):** derive your address with `helper.deriveAddress({ aud, sub, chainId })` — see step 3 below.
-> - **EOA flow (testing):** use `ZkapCreator` to deploy a new wallet with a private key as the master key, or contact the team to provision a testnet wallet.
-> - The first UserOp sent to a counterfactual address will automatically deploy the wallet on-chain via `initCode`.
+> **Prerequisites:** ZKAP wallets are ERC-4337 smart contract wallets, so before sending UserOps you need three things the SDK does not discover for you:
+> - **Chain config** — an RPC URL, a bundler RPC URL, the EntryPoint address, and (only when deriving or deploying a wallet) the ZkapAccountFactory and key-logic addresses. Keep these in your own config table; see step 1.
+> - **A wallet address** — an already-deployed wallet, or a counterfactual address derived with `ZkapCreator` (step 3).
+> - **A signer** whose key type matches a key registered on that wallet.
+>
+> The first UserOp sent from a counterfactual address deploys the wallet on-chain via `initCode` — that is what `ZkapCreator` sets up.
 
-### 1. Discover supported chains
+### 1. Configure your chain
+
+The SDK never fetches configuration — you pass addresses and endpoints in. Keep one entry per chain in your app; every sample below reads from this `CHAIN` object.
 
 ```typescript
-import { ChainRegistry } from '@baerae/zkap-aa';
+const CHAIN = {
+  chainId: 11155111,                     // Ethereum Sepolia
+  rpcUrl: process.env.RPC_URL!,           // JSON-RPC node — gas estimation, nonce reads
+  bundlerUrl: process.env.BUNDLER_URL!,   // ERC-4337 bundler RPC (Pimlico, Alchemy, alto, ...)
+  entryPoint: '0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108', // EntryPoint v0.8
 
-const registry = new ChainRegistry();
-const chains = await registry.getSupportedChains();
-console.log(chains.map(c => `${c.name} (${c.chainId})`));
+  // Only needed by the features that use them:
+  zkapFactory: process.env.ZKAP_FACTORY!,               // deriving / deploying a wallet
+  addressKeyLogic: process.env.ADDRESS_KEY_LOGIC!,      // building an EOA master key
+  poseidonMerkleTreeDirectory: process.env.MERKLE_DIR!, // ZkOAuthSigner
+};
 ```
+
+> `rpcUrl` and `bundlerUrl` are **different endpoints**. `Erc4337BundlerProvider` takes the bundler one.
+
+This is the subset the samples below use. A production integration also needs a logic-contract address per key type it registers — `addressKeyLogic` for EOA keys, and the zkOAuth verifier or WebAuthn implementation address for those key types.
 
 ### 2. Send a transaction (EOA signer)
 
-`WalletHelper.sendTransaction` handles the full UserOp lifecycle in one call:
+`ZkapBuilder` builds and signs the UserOperation; `BundlerClient` submits it and waits for the receipt.
 
 ```typescript
 import {
-  ChainRegistry,
+  ZkapBuilder,
   BundlerClient,
-  ZkapBundlerProvider,
-  WalletHelper,
+  Erc4337BundlerProvider,
   AddressKeySigner,
 } from '@baerae/zkap-aa';
 
-const CHAIN_ID = 11155111; // use a chainId from getSupportedChains()
 const WALLET_ADDRESS = '0xYourZkapWalletAddress';
-const PRIVATE_KEY = process.env.PRIVATE_KEY!;
+const signer = new AddressKeySigner([process.env.PRIVATE_KEY!]);
 
-const registry = new ChainRegistry();
-const bundlerClient = new BundlerClient(new ZkapBundlerProvider());
-const helper = new WalletHelper({ chainRegistry: registry, bundlerClient });
-
-const signer = new AddressKeySigner([PRIVATE_KEY]);
-
-const { userOpHash, receipt } = await helper.sendTransaction({
-  sender: WALLET_ADDRESS,
-  to: '0xRecipientAddress',
-  value: '1000000000000000', // 0.001 ETH in wei
-  chainId: CHAIN_ID,
-  signer,
+const builder = new ZkapBuilder({
+  chainId: CHAIN.chainId,
+  entryPoint: CHAIN.entryPoint,
+  enUrl: CHAIN.rpcUrl,
 });
 
-console.log('Submitted:', userOpHash);
-const result = await receipt;
-console.log('Confirmed in tx:', result.receipt.transactionHash);
+builder
+  .setSender(WALLET_ADDRESS)
+  .setExecuteCallData(
+    '0xRecipientAddress',
+    '1000000000000000', // 0.001 ETH in wei
+    '0x',               // calldata — '0x' for a plain transfer
+    signer.keyTypes,    // which on-chain key verifies this op
+  );
+
+await builder.autoFillUserOp(); // nonce, gas limits and fee fields, from CHAIN.rpcUrl
+
+// Trim preVerificationGas to what the bundler actually requires. Must run before
+// getUserOpHash() — see "preVerificationGas calibration" below.
+builder.applyBundlerPreVerificationGas();
+
+const userOpHash = builder.getUserOpHash();
+const signatures = await signer.signUserOpHash(userOpHash);
+builder.setSignature(signer.keyTypes.map((_, i) => i), signatures);
+
+const bundlerClient = new BundlerClient(
+  new Erc4337BundlerProvider({
+    rpcUrl: CHAIN.bundlerUrl,  // the BUNDLER endpoint, not CHAIN.rpcUrl
+    usePimlicoFormat: true,    // Pimlico / alto want the unpacked factory+factoryData shape
+  }),
+);
+
+const submittedHash = await bundlerClient.submitUserOp(
+  builder.getPackedUserOp(),
+  CHAIN.entryPoint,
+);
+console.log('Submitted:', submittedHash);
+
+const receipt = await bundlerClient.waitForReceipt(submittedHash);
+console.log('Confirmed in tx:', receipt.txHash, '— success:', receipt.success);
 ```
+
+`waitForReceipt` returns a flat `UserOpReceipt` (`txHash`, `blockNumber`, `success`, `actualGasCost`, `actualGasUsed`, plus `revertReason` / `contractError` on an execution revert).
 
 ### 3. Derive a counterfactual wallet address
 
-Before a wallet is deployed, its address is deterministic from the user's identity:
+A ZKAP address is `CREATE2(salt, encodedMasterKey, encodedTxKey)` — it depends on the key material the wallet will be **deployed** with, not on the identity alone. Derive it from exactly the inputs you will deploy with, or you will fund an address the deploy never targets.
 
 ```typescript
-const address = await helper.deriveAddress({
-  aud: 'your-google-client-id',
-  sub: 'user-subject-from-provider',
-  chainId: CHAIN_ID,
+import { computeSalt, ZkapCreator, AccountKeyBuilder, PrimitiveAccountKeyTypes } from '@baerae/zkap-aa';
+import { ethers } from 'ethers';
+
+// keccak256(abi.encode(aud, sub)). Pass a walletIndex of 1-255 to derive additional
+// independent wallets for the same identity; 0 and omitted both mean the default wallet.
+const salt = computeSalt(aud, sub);
+
+// For a wallet controlled by an EOA:
+const encodedMasterKey = new AccountKeyBuilder(1, [
+  {
+    keyType: PrimitiveAccountKeyTypes.keyAddress,
+    logicContract: CHAIN.addressKeyLogic, // on-chain verifier for keyAddress
+    weight: 1,
+    keyData: { signerAddress: new ethers.Wallet(process.env.PRIVATE_KEY!).address },
+  },
+]).getEncodedKey();
+
+const creator = new ZkapCreator({
+  chainId: CHAIN.chainId,
+  entryPoint: CHAIN.entryPoint,
+  zkapFactory: CHAIN.zkapFactory,
+  enUrl: CHAIN.rpcUrl,
+  salt,
+  encodedMasterKey,
+  encodedTxKey: '0x', // '0x' when the wallet has no separate transaction key at deploy
 });
-console.log('Wallet address:', address);
+
+const address = await creator.deriveZkapAddress(); // factory.calcAccountAddress eth_call
 ```
+
+`ZkapCreator` extends `ZkapBuilder`, and `deriveZkapAddress()` has already set both `initCode` and `sender` — so the same instance sends the wallet's first UserOp, and that op deploys it. Use `ZkapCreator` for the first op and plain `ZkapBuilder` after that.
 
 ## Signers
 
@@ -148,15 +209,13 @@ revealed on-chain — the proof shows they hold a valid token without exposing i
 ```typescript
 import { ZkOAuthSigner } from '@baerae/zkap-aa';
 
-const chainConfig = await registry.getChainConfig(CHAIN_ID);
-
 const signer = new ZkOAuthSigner(
   'https://your-proof-server.example.com', // ZK proof server URL (must be HTTPS)
-  chainConfig.rpcUrl,
+  CHAIN.rpcUrl,
   walletAddress,
   ['google'],                               // socialServices: one entry per slot
   [async (msgHash) => fetchIdToken()],      // idTokenGenerators: one per provider
-  chainConfig.contracts.poseidonMerkleTreeDirectory,
+  CHAIN.poseidonMerkleTreeDirectory,
   1,  // zkapK: proof threshold (must be 1)
   1   // zkapN: number of providers
 );
@@ -165,60 +224,50 @@ const signer = new ZkOAuthSigner(
 await signer.prepareIdToken(msgHash);
 ```
 
-## WalletHelper API
+## Batch transactions
 
-`WalletHelper` is the recommended high-level interface.
+`setExecuteBatchCallData` puts several calls into one UserOperation. Everything else — `autoFillUserOp`, PVG calibration, signing, submission — is identical to Quick Start step 2.
 
 ```typescript
-const helper = new WalletHelper({ chainRegistry, bundlerClient });
+builder
+  .setSender(WALLET_ADDRESS)
+  .setExecuteBatchCallData(
+    [tokenAddress, recipient],  // to
+    ['0', '1000000000000000'],  // value, in wei
+    [approveCallData, '0x'],    // data
+    signer.keyTypes,
+  );
 ```
 
-| Method | Description |
-|--------|-------------|
-| `deriveAddress({ aud, sub, chainId })` | Counterfactual address from OAuth identity |
-| `sendTransaction({ sender, to, value, data?, signer, chainId })` | Single-call UserOp |
-| `sendBatchTransaction({ sender, transactions, signer, chainId })` | Batch UserOp |
-| `WalletHelper.computeSalt(aud, sub)` | Raw keccak256 salt for address derivation |
+All three arrays must be the same length and in the same order — the calls execute sequentially, and a revert in any one reverts the whole UserOperation.
 
-Both send methods return `{ userOpHash: string; receipt: Promise<UserOpReceipt> }`.
+## preVerificationGas calibration
 
-## Low-level: ZkapBuilder
-
-For direct control over UserOperation construction:
+`autoFillUserOp()` leaves a conservative `preVerificationGas`. EntryPoint charges PVG in FULL — anything declared above the bundler's floor is paid and never refunded, and anything below it is rejected at submission — so `applyBundlerPreVerificationGas()` sets what the bundler actually requires plus a margin (default `x1.10 + 15,000`).
 
 ```typescript
-import { ZkapBuilder, BundlerClient, ZkapBundlerProvider } from '@baerae/zkap-aa';
+await builder.autoFillUserOp();
 
-const chainConfig = await registry.getChainConfig(CHAIN_ID);
-
-const builder = new ZkapBuilder({
-  chainId: CHAIN_ID,
-  entryPoint: chainConfig.entryPoint,
-  enUrl: chainConfig.rpcUrl,
-});
-
-builder
-  .setSender(walletAddress)
-  .setExecuteCallData(to, value, data, signer.keyTypes);
-
-await builder.autoFillUserOp(); // estimates gas, sets nonce
-
-// Trim preVerificationGas to what the bundler actually requires (+ margin).
-// EntryPoint charges preVerificationGas in full, so padding it is a permanent
-// overpayment. Calibrated against Pimlico alto; on chains where alto adds an L2
-// data-availability component, pass it via `extraComponent`. Must run before
-// getUserOpHash() — preVerificationGas is part of the hash.
+// ORDER MATTERS:
+//  1. after autoFillUserOp() — nonce / initCode / callData / signature must be final;
+//  2. after the final callGasLimit — the EIP-7623 branch reads it;
+//  3. BEFORE getUserOpHash() — preVerificationGas is part of the hash.
 builder.applyBundlerPreVerificationGas();
 
-const userOpHash = builder.getUserOpHash();
-const signatures = await signer.signUserOpHash(userOpHash);
-builder.setSignature([0], signatures);
-
-const packedUserOp = builder.getPackedUserOp();
-const bundlerClient = new BundlerClient(new ZkapBundlerProvider());
-const submittedHash = await bundlerClient.submitUserOp(packedUserOp, chainConfig.entryPoint);
-const receipt = await bundlerClient.waitForReceipt(submittedHash);
+const userOpHash = builder.getUserOpHash(); // safe to sign now
 ```
+
+The signature present when you call it must already have the byte length of the REAL signature — that is what the dummy signature `autoFillUserOp()` installs is for. The bundler recomputes its floor from the bytes you submit, so a length that changes between calibration and submission invalidates the result.
+
+> **Not compatible with a builder-configured paymaster.** When `paymaster` is set on `ZkapBuilder`, `autoFillUserOp()` performs the paymaster handoff itself and the paymaster signs a digest that includes `preVerificationGas`. Changing PVG afterwards invalidates that signature. Use a conservative multiplier on paymaster-sponsored ops instead.
+
+Calibrated against Pimlico alto's **execution** component only. On chains where alto adds an L2 data-availability component (`op-stack`, `arbitrum`, `mantle`, `etherlink`, `citrea`, `monad`) supply it explicitly, or keep a conservative multiplier:
+
+```typescript
+builder.applyBundlerPreVerificationGas({ extraComponent: 40_000n });
+```
+
+Other options: `marginPercent` (default `110n`) and `marginAbsolute` (default `15000n`). The underlying functions are exported for direct use — `calcAltoRequiredPvg(userOp, opts)` and `calibrateBundlerPvg(userOp, opts)`.
 
 ## Gas Sponsorship (Paymaster)
 
@@ -228,56 +277,62 @@ Pass a `paymaster` config to `ZkapBuilder` to sponsor gas or accept ERC-20 payme
 import { ZkapBuilder, PaymasterMode } from '@baerae/zkap-aa';
 
 const builder = new ZkapBuilder({
-  chainId: CHAIN_ID,
-  entryPoint: chainConfig.entryPoint,
-  enUrl: chainConfig.rpcUrl,
+  chainId: CHAIN.chainId,
+  entryPoint: CHAIN.entryPoint,
+  enUrl: CHAIN.rpcUrl,
   paymaster: {
     serverUrl: 'https://paymaster.example.com',
     paymasterAddress: '0xPaymasterContractAddress',
-    chainId: CHAIN_ID,
+    chainId: CHAIN.chainId,
     mode: PaymasterMode.VERIFYING, // or PaymasterMode.ERC20
     // tokenAddress: '0x...'       // required for ERC20 mode
   },
 });
 ```
 
-## Chain Registry
+`autoFillUserOp()` fetches and installs the paymaster signature itself when this config is present — do not call `applyBundlerPreVerificationGas()` on a sponsored op (see above).
 
-`ChainRegistry` fetches contract addresses, RPC URLs, and bundler endpoints from the
-ZKAP API (`https://api.zkap.app`). Results are cached for 5 minutes by default.
+## Reading account state
+
+`AccountReader` reads a deployed ZkapAccount over plain JSON-RPC — no bundler, no server.
 
 ```typescript
-import { ChainRegistry } from '@baerae/zkap-aa';
+import { AccountReader } from '@baerae/zkap-aa';
 
-// Default API endpoint
-const registry = new ChainRegistry();
+const reader = new AccountReader({ rpcUrl: CHAIN.rpcUrl, chainId: CHAIN.chainId });
 
-// Custom API endpoint or cache TTL
-const registry = new ChainRegistry({
-  apiUrl: 'https://your-api.example.com',
-  cacheTtlMs: 60_000,
-});
+await reader.isDeployed(WALLET_ADDRESS);   // false for a counterfactual address
+await reader.getBalance(WALLET_ADDRESS);   // native balance in wei, as a string
+await reader.getTxKeyList(WALLET_ADDRESS); // registered txKey slots
+await reader.getMasterKeyInfo(WALLET_ADDRESS);
 
-const chainConfig = await registry.getChainConfig(chainId);
-// { chainId, name, rpcUrl, entryPoint, zkapFactory, bundlerUrl, contracts }
-
-registry.refresh(); // clear cache and force re-fetch
+// WebAuthn keys registered for one relying party (rpIdHash = SHA-256 of the rpId)
+await reader.findTxKeysByRpId(WALLET_ADDRESS, rpIdHash);
 ```
+
+Passing `chainId` to the constructor is optional but worth it — it sets ethers' `staticNetwork` and skips the `eth_chainId` probe.
+
+Note the asymmetry on an **undeployed** account: `getTxKeyList` returns `[]` rather than throwing, while `getMasterKeyInfo` throws `AaFetchError`. Call `isDeployed()` first if you need to tell "no keys" apart from "no wallet".
 
 ## Bundler Providers
 
 ```typescript
-import { ZkapBundlerProvider, Erc4337BundlerProvider, BundlerClient } from '@baerae/zkap-aa';
+import { Erc4337BundlerProvider, BundlerClient } from '@baerae/zkap-aa';
 
-// ZKAP hosted bundler (default: https://bundler.zkap.app)
-const provider = new ZkapBundlerProvider();
-const provider = new ZkapBundlerProvider({ baseUrl: 'https://your-bundler.example.com' });
+// Any ERC-4337 JSON-RPC bundler (Pimlico, Alchemy, Stackup, self-hosted alto).
+const provider = new Erc4337BundlerProvider({ rpcUrl: CHAIN.bundlerUrl });
 
-// Any ERC-4337 compatible bundler RPC endpoint
-const provider = new Erc4337BundlerProvider({ rpcUrl: 'https://bundler.example.com/rpc' });
+// Pimlico / alto expect the unpacked v0.7+ shape — factory + factoryData instead of
+// initCode, and individual gas fields instead of packed bytes32 values.
+const pimlico = new Erc4337BundlerProvider({
+  rpcUrl: 'https://public.pimlico.io/v2/11155111/rpc',
+  usePimlicoFormat: true,
+});
 
 const bundlerClient = new BundlerClient(provider);
 ```
+
+`Erc4337BundlerProvider` additionally exposes `estimateUserOpGas(packedUserOp, entryPoint)` for bundlers that implement `eth_estimateUserOperationGas`. It is not part of the `BundlerProvider` interface, so call it on the provider directly.
 
 ## Contributing
 
