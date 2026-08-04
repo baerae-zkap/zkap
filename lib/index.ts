@@ -60,10 +60,6 @@ export { safeStringify } from "./utils/safeStringify";
 // Pimlico format (for external bundler integration)
 export type { PimlicoUserOperation, PimlicoGasEstimate } from "./types/UserOperation";
 
-// Chain registry
-export { ChainRegistry } from "./registry/ChainRegistry";
-export type { ChainConfig } from "./registry/ChainRegistry";
-
 // Account reader
 export { AccountReader } from "./reader/AccountReader";
 export type { TxKeyInfo, MasterKeyInfo, WebAuthnKeyData as AccountWebAuthnKeyData, KeyType } from "./reader/AccountReader";
