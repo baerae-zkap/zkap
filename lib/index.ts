@@ -1,7 +1,6 @@
 // Type definitions
 export * from "./types/UserOperation";
 export * from "./types/AccountKey";
-export * from "./types/jwk";
 export * from "./types/Swap";
 export * from "./types/abi";
 
@@ -22,7 +21,6 @@ export { OneInchAggregator } from "./builders/aggregators/OneInchAggregator";
 // Signer classes
 export { AddressKeySigner } from "./signers/AddressKeySigner";
 export { PasskeySigner } from "./signers/PasskeySigner";
-export { ZkOAuthSigner } from "./signers/ZkOAuthSigner";
 export { ZkOidcSigner } from "./signers/ZkOidcSigner";
 
 // Paymaster service

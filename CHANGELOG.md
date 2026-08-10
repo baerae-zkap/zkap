@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-10
+
+Removes `ZkOAuthSigner`, which called a proof server that does not exist.
+
+**Why:** the signer POSTed a raw `id_token` to `${proofServerUrl}/proof2` and got
+a proof back. No ZKAP-operated service implements `/proof2` — it is a leftover
+from a v0.0.6-era prototype prover (2025-09), and no code in any ZKAP repository
+constructs this class. It also contradicts the product decision that proof
+generation is not offered as an external service: handing a server your own
+`id_token` in exchange for a proof is exactly the client self-prove pattern the
+ZKAP server contract forbids.
+
+`ZkOidcSigner` is the supported zk signer and is unaffected. It takes a finished
+proof and encodes it into the UserOperation signature — no network, no
+`id_token`. It is now documented in the README, which previously covered only the
+removed signer.
+
+### BREAKING CHANGES
+
+> **Shipped as a patch, deliberately.** These are breaking changes and semver
+> would call for a minor bump on 0.x. 0.2.0 went out on 2026-08-04 and the
+> removed surface is dead on arrival — `ZkOAuthSigner` targets an endpoint no
+> ZKAP service has ever served, and no known consumer imports it or the types
+> that went with it. Releasing as 0.2.1 lets `^0.2.0` dependants pick the fix up
+> without a coordinated pin bump. If you pinned `^0.2.0` **and** used any symbol
+> below, pin `0.2.0` explicitly and migrate as described.
+
+- **`ZkOAuthSigner` removed.** No replacement with the same shape: the SDK does
+  not fetch proofs.
+  - **Migration**: produce the proof in your own backend, then
+    `new ZkOidcSigner()` + `setProofData({ sharedInputs, jwtExpList,
+    partialRhsList, proofs })` + `signUserOpHash(userOpHash)`. See the README
+    "ZkOidcSigner" section. Note `signUserOpHash` enforces
+    `sharedInputs[3] === userOpHash mod SNARK_SCALAR_FIELD`, so the proof must be
+    generated for the exact UserOperation being signed.
+- **`JwkKey` and `JwtHeader` types removed** (`lib/types/jwk.ts`, re-exported
+  from the package root). `ZkOAuthSigner` was their only consumer — they
+  described the JWKS documents it fetched.
+  - **Migration**: declare the shapes you need locally, or take them from a JOSE
+    library. They were plain structural interfaces with no SDK behaviour attached.
+- **`FetchService` members `"proof_server"` and `"jwks"` removed.** Both were
+  produced only by `ZkOAuthSigner`; the SDK no longer talks to either service.
+  - **Migration**: only affects code that narrows on `err.service`. The remaining
+    members are `"bundler"`, `"paymaster"`, `"swap_aggregator"` and `"rpc"`.
+
+### Unchanged
+
+- `AccountKeyZkOAuthRS256VerifierABI` and `PoseidonMerkleTreeDirectoryABI` keep
+  shipping. They are generated contract ABIs, still needed to register a zk key
+  (`AccountKeyBuilder`), and are not tied to the removed signer.
+- `AaOperationErrorCode.SIGNER_PROOF_INVALID` stays — `ZkOidcSigner` raises it.
+
 ## [0.2.0] - 2026-08-04
 
 Removes the SDK's dependencies on ZKAP Server's chain-config and bundler REST

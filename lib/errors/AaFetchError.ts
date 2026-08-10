@@ -5,9 +5,7 @@ export type FetchService =
   | "bundler"
   | "paymaster"
   | "swap_aggregator"
-  | "rpc"             // JSON-RPC node read (eth_call, getFeeData, contract reads)
-  | "jwks"            // OAuth JWKS endpoint
-  | "proof_server";   // ZK proof generation server
+  | "rpc";            // JSON-RPC node read (eth_call, getFeeData, contract reads)
 
 export interface AaFetchErrorOptions extends Omit<ZkapAaErrorOptions, "code"> {
   code: ZkapAaFetchErrorCode;

@@ -52,7 +52,7 @@ const CHAIN = {
   // Only needed by the features that use them:
   zkapFactory: process.env.ZKAP_FACTORY!,               // deriving / deploying a wallet
   addressKeyLogic: process.env.ADDRESS_KEY_LOGIC!,      // building an EOA master key
-  poseidonMerkleTreeDirectory: process.env.MERKLE_DIR!, // ZkOAuthSigner
+  poseidonMerkleTreeDirectory: process.env.MERKLE_DIR!, // AccountKeyBuilder (zk key)
 };
 ```
 
@@ -199,30 +199,43 @@ const signer = new PasskeySigner(
 );
 ```
 
-### ZkOAuthSigner
+### ZkOidcSigner
 
-Signs using a ZK proof of a Google or Kakao OAuth JWT. The user's identity is never
-revealed on-chain — the proof shows they hold a valid token without exposing it.
+Signs with a ZK proof of an OIDC id_token. The user's identity is never revealed
+on-chain — the proof shows they hold a valid token without exposing it.
 
-> Supported providers: `"google"` and `"kakao"` only. Currently `zkapK=1` (single-provider).
+This signer performs **no network calls and never touches an id_token**. It takes
+a finished proof and encodes it into the UserOperation signature. Producing that
+proof — collecting the logins, fetching JWKS, running the circuit — is the job of
+whatever backend you operate; the raw id_token must never reach the client.
 
 ```typescript
-import { ZkOAuthSigner } from '@baerae/zkap-aa';
+import { ZkOidcSigner } from '@baerae/zkap-aa';
 
-const signer = new ZkOAuthSigner(
-  'https://your-proof-server.example.com', // ZK proof server URL (must be HTTPS)
-  CHAIN.rpcUrl,
-  walletAddress,
-  ['google'],                               // socialServices: one entry per slot
-  [async (msgHash) => fetchIdToken()],      // idTokenGenerators: one per provider
-  CHAIN.poseidonMerkleTreeDirectory,
-  1,  // zkapK: proof threshold (must be 1)
-  1   // zkapN: number of providers
-);
+const signer = new ZkOidcSigner();
 
-// Prepare the ZK proof before signing
-await signer.prepareIdToken(msgHash);
+signer.setProofData({
+  // uint256[6]: hanchor, h_ctx, root, h_sign_userop, lhs, h_aud_list
+  sharedInputs,
+  // K entries each, one per proof
+  jwtExpList,
+  partialRhsList,
+  // K x 8 Groth16 proofs
+  proofs,
+});
+
+// signUserOpHash re-checks the binding itself:
+//   sharedInputs[3] === userOpHash mod SNARK_SCALAR_FIELD
+// so a proof cannot be replayed against a different UserOperation.
+const signature = await signer.signUserOpHash(userOpHash);
+
+// Drop the proof once used — it is single-use material.
+signer.destroy();
 ```
+
+All values are decimal strings and are range-checked against the BN254 scalar
+field; a malformed proof throws `AaOperationError` with
+`SIGNER_PROOF_INVALID` rather than producing an unusable signature.
 
 ## Batch transactions
 
