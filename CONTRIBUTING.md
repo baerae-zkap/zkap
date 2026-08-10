@@ -43,7 +43,7 @@ lib/
 ├── config/           # ZkapProviderConfig
 ├── helper/           # TxKeyHelper
 ├── reader/           # AccountReader
-├── signers/          # PasskeySigner, ZkOAuthSigner, ZkOidcSigner, AddressKeySigner
+├── signers/          # PasskeySigner, ZkOidcSigner, AddressKeySigner
 ├── types/            # TypeScript types and ABI JSON
 └── utils/            # crypto, signature, base64url, salt, ...
 ```
@@ -89,7 +89,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 feat(signers): add AppleSigner for Sign in with Apple
 fix(builder): correct gas estimation for batch calls
-docs(readme): add ZkOAuthSigner quick start example
+docs(readme): add ZkOidcSigner quick start example
 ```
 
 ## Reporting issues
