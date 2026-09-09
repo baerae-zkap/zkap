@@ -42,10 +42,10 @@ lib/
 ├── client/           # BundlerClient, BundlerProvider
 ├── config/           # ZkapProviderConfig
 ├── helper/           # TxKeyHelper
-├── reader/           # AccountReader
+├── reader/           # AccountReader, passkeys (classification), transport (Multicall3), types
 ├── signers/          # PasskeySigner, ZkOidcSigner, AddressKeySigner
 ├── types/            # TypeScript types and ABI JSON
-└── utils/            # crypto, signature, base64url, salt, ...
+└── utils/            # crypto, signature, base64url, webauthnKey, salt, ...
 ```
 
 ## Adding a new signer

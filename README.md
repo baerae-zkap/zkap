@@ -171,7 +171,10 @@ const signer = new AddressKeySigner([privateKey]);
 ### PasskeySigner
 
 Signs with a WebAuthn credential. Provide a `verifyWithPasskey` callback that calls
-`navigator.credentials.get` and returns the assertion response.
+`navigator.credentials.get` and returns the assertion response. The txKey slot the
+signature goes into is not always 0 — read it with
+`(await reader.getPasskeys(address, { credentialId })).mine?.index`
+(see [Reading account state](#reading-account-state)).
 
 ```typescript
 import { PasskeySigner } from '@baerae/zkap-aa';
@@ -307,25 +310,85 @@ const builder = new ZkapBuilder({
 
 ## Reading account state
 
-`AccountReader` reads a deployed ZkapAccount over plain JSON-RPC — no bundler, no server.
+`AccountReader` reads a deployed ZkapAccount over plain JSON-RPC — no bundler, no server. Give it exactly one transport:
 
 ```typescript
 import { AccountReader } from '@baerae/zkap-aa';
 
+// 1. Let the reader build an ethers JsonRpcProvider.
+//    chainId is optional but worth it — it sets staticNetwork and skips the eth_chainId probe.
 const reader = new AccountReader({ rpcUrl: CHAIN.rpcUrl, chainId: CHAIN.chainId });
 
-await reader.isDeployed(WALLET_ADDRESS);   // false for a counterfactual address
-await reader.getBalance(WALLET_ADDRESS);   // native balance in wei, as a string
-await reader.getTxKeyList(WALLET_ADDRESS); // registered txKey slots
-await reader.getMasterKeyInfo(WALLET_ADDRESS);
+// 2. Reuse an ethers Provider you already have (BrowserProvider, a shared JsonRpcProvider, …).
+const reader = new AccountReader({ provider });
 
-// WebAuthn keys registered for one relying party (rpIdHash = SHA-256 of the rpId)
-await reader.findTxKeysByRpId(WALLET_ADDRESS, rpIdHash);
+// 3. Bring your own eth_call — a proxy, a relay, a rate-limited gateway.
+const reader = new AccountReader({
+  call: ({ to, data }) => proxy.ethCall({ to, data }), // must throw on any error — see below
+});
+
+await reader.isDeployed(WALLET_ADDRESS);   // false for a counterfactual address (forms 1 and 2 only)
+await reader.getBalance(WALLET_ADDRESS);   // native balance in wei, as a string (forms 1 and 2 only)
 ```
 
-Passing `chainId` to the constructor is optional but worth it — it sets ethers' `staticNetwork` and skips the `eth_chainId` probe.
+`isDeployed()` and `getBalance()` need `eth_getCode` / `eth_getBalance`, so they work only with the first two forms; in `call` mode read `deployed` from `readTxKeySlots()` or `getPasskeys()` instead.
 
-Note the asymmetry on an **undeployed** account: `getTxKeyList` returns `[]` rather than throwing, while `getMasterKeyInfo` throws `AaFetchError`. Call `isDeployed()` first if you need to tell "no keys" apart from "no wallet".
+A `call` implementation **must throw** on a transport failure, HTTP error or JSON-RPC `error` — never resolve to `"0x"`. The reader treats `"0x"` as "a successful call to an address without code", which is how it detects an undeployed wallet and a chain without Multicall3; a transport that swallows errors into `"0x"` would make a dead node look like a missing wallet. `ethers.Provider.call` and any proxy that throws on a JSON-RPC `error` satisfy this.
+
+### Passkeys registered as txKeys
+
+```typescript
+const result = await reader.getPasskeys(WALLET_ADDRESS, {
+  service: {
+    rpId: 'zkap.app',
+    // The same app registers under a different origin per platform — list every one it signs from.
+    origins: ['https://zkap.app', 'android:apk-key-hash:<base64url-sha256-of-signing-cert>'],
+  },
+  credentialId: localPasskeyId,  // base64url — the value you hand to PasskeySigner
+  knownRpIds: ['pay.ifez.app'],  // optional: label other services' keys with their rpId
+});
+
+if (!result.deployed) { /* no wallet yet — not "no keys" */ }
+
+result.mine?.index           // slot to pass to ZkapBuilder.setSignature([index], …)
+result.myService             // rpId AND origin match
+result.sameRpIdOtherOrigin   // same rpId, an origin you did not list (e.g. another platform of your app)
+result.otherServices         // another service's passkeys
+result.passkeys[0].publicKey // { x, y, cose, jwk } — hex coordinates, COSE (ES256) bytes, JWK
+result.unreadable            // WebAuthn slots whose key data failed to decode — non-empty ⇒ don't conclude "not registered"
+result.truncated             // more slots than the read window ⇒ don't conclude "no other keys"
+result.readVia               // "multicall" | "direct" — "direct" on a chain that has Multicall3 means the transport misbehaved
+```
+
+- "My service" is strict: a key counts only when its `allowedRpIdHash` equals `sha256(rpId)` **and** its `allowedOriginHash` equals `keccak256(origin)` for one of `origins`. `origins` takes a string or an array.
+- Any number of keys costs two `eth_call`s via Multicall3. On a chain without Multicall3 the reader confirms its absence with `eth_getCode` (provider modes) and falls back to one call per slot, in parallel; `readVia` tells you which path served the read.
+- To rebuild the txKey list with `TxKeyHelper.buildReplaceTxKeyByRpId`, pass `result.txKeys` straight in and resolve origins from the classified keys — `(hash) => result.passkeys.find((k) => k.originHash === hash)?.origin`. The helper needs the plaintext origin of **every** WebAuthn key; a foreign key whose origin you do not know (neither in `service.origins` nor `knownOrigins`) cannot be re-encoded.
+
+### Raw txKey slots
+
+```typescript
+import { rpIdHashOf } from '@baerae/zkap-aa';
+
+await reader.readTxKeySlots(WALLET_ADDRESS); // { deployed, keys, truncated, readVia }
+await reader.getTxKeyList(WALLET_ADDRESS);   // keys only — [] for an undeployed account
+await reader.getMasterKeyInfo(WALLET_ADDRESS);
+
+// WebAuthn keys registered for one relying party
+await reader.findTxKeysByRpId(WALLET_ADDRESS, rpIdHashOf('zkap.app'));
+```
+
+Both txKey reads throw `AaFetchError` — `TRANSPORT` when the node cannot be reached, `RESPONSE_SHAPE` when it answers with undecodable data. An empty array means the account has no keys, never that the RPC failed. Note the asymmetry on an **undeployed** account: `getTxKeyList` returns `[]`, while `getMasterKeyInfo` throws `AaFetchError`. Use `readTxKeySlots().deployed` (or `isDeployed()` where available) to tell "no keys" apart from "no wallet".
+
+### Public key formats
+
+```typescript
+import { toCosePublicKey, toJwkPublicKey, rpIdHashOf, originHashOf } from '@baerae/zkap-aa';
+
+toCosePublicKey({ x, y });        // COSE_Key (ES256) hex — what a WebAuthn registration returns as credentialPublicKey
+toJwkPublicKey({ x, y });         // { kty: 'EC', crv: 'P-256', x, y } with base64url coordinates
+rpIdHashOf('zkap.app');           // sha256(rpId)      — what the chain stores as allowedRpIdHash
+originHashOf('https://zkap.app'); // keccak256(origin) — what the chain stores as allowedOriginHash (keccak, not SHA-256)
+```
 
 ## Bundler Providers
 

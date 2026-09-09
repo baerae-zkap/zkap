@@ -2053,6 +2053,10 @@ export const EntryPointABI: any[] = [
   }
 ];
 
+export const Multicall3ABI: string[] = [
+  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)"
+];
+
 export const PoseidonMerkleTreeDirectoryABI: any[] = [
   {
     "inputs": [

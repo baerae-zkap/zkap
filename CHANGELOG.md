@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-09
+
+Adds `AccountReader.getPasskeys` and re-implements txKey reads over Multicall3.
+
+**Why:** `getTxKeyList` walked the slots one at a time — `txKeyList(i)`,
+`keyType()`, `getKeyData()` per slot, list end detected by a revert — so a
+one-key wallet cost four round trips, and a payment that needs the slot index
+twice paid eight. Worse, its `catch { break }` could not tell "out of bounds"
+from "the node did not answer": a dead RPC came back as `[]`, and apps
+concluded that this device's passkey was not registered when the node was
+simply unreachable (observed on mainnet by a payments consumer). Two consumers
+had independently re-implemented a Multicall3 reader and a COSE encoder to get
+around both. This release moves that work into the SDK and adds the
+classification hosts actually want — is *my service's* passkey registered, is
+it *this device's*, are *other services'* passkeys on the wallet too.
+
+> **Shipped as a patch, deliberately.** `getTxKeyList` and `findTxKeysByRpId`
+> now throw `AaFetchError` when the node cannot be read, where they used to
+> return `[]`. Semver would call that a minor on 0.x; releasing as 0.2.2 lets
+> `^0.2.0` dependants pick the fix up without a coordinated pin bump, and every
+> known consumer wants the throw — the silent `[]` is the bug. If you relied on
+> `[]`-on-failure, catch `AaFetchError` (`code === AaFetchErrorCode.TRANSPORT`).
+
+### Added
+
+- **`AccountReader.getPasskeys(address, options?)`** — WebAuthn txKeys, decoded
+  and classified. `options.service = { rpId, origins }` identifies your
+  service; a key is yours only when its rpIdHash is `sha256(rpId)` **and** its
+  originHash is `keccak256(origin)` for one of `origins` (an array, because the
+  same app registers under a different origin per platform).
+  `options.credentialId` marks this device's key (`mine`); `knownRpIds` /
+  `knownOrigins` label foreign keys. The result carries `myService`,
+  `sameRpIdOtherOrigin`, `otherServices`, `mine`, plus `deployed`,
+  `truncated` (more slots than the window), `unreadable` (WebAuthn slots whose
+  key data failed to decode) and `readVia` — each a reason not to read an
+  empty list as "not registered". Every key exposes its public key as
+  normalized `{ x, y }`, COSE (ES256) bytes and a JWK. Types:
+  `GetPasskeysOptions`, `PasskeyServiceIdentity`, `PasskeysResult`,
+  `PasskeyKey`, `PasskeyPublicKey`, `NormalizedPasskeyOptions`; the pure
+  classifier is exported as `buildPasskeysResult` / `normalizePasskeyOptions`.
+- **`AccountReader.readTxKeySlots(address)`** — the low-level read:
+  `{ deployed, keys, truncated, readVia }`. `deployed` comes from the same
+  round trip (a call to an address without code returns empty data), so
+  `call`-mode users do not need `eth_getCode`.
+- **Transport injection.** The constructor takes exactly one of
+  `{ rpcUrl, chainId? }` (unchanged), `{ provider: ethers.Provider }` or
+  `{ call: EthCall }` — a bare `eth_call` function, for proxies and relays. A
+  `call` must throw on any error; `"0x"` means "no code at this address".
+  Exported: `EthCall`, `ethCallFromProvider`, `MULTICALL3_ADDRESS`,
+  `Multicall3ABI`, `BatchCallerOptions`. Options: `multicallAddress`
+  (`string | false`), `maxTxKeys` (default 5), `isRevertError`.
+- **Public-key helpers**: `toCosePublicKey`, `toJwkPublicKey`, `rpIdHashOf`
+  (sha256), `originHashOf` (keccak256), `normalizeBytes32`; types
+  `P256Coordinates`, `EcP256Jwk`.
+- Types `TxKeySlots`, `ReadVia`, `AccountReaderConfig`, `AccountReaderOptions`.
+
+### Changed
+
+- `getTxKeyList` / `findTxKeysByRpId` read through Multicall3 — two `eth_call`s
+  for any number of keys — and fall back to parallel per-slot calls on chains
+  without it (absence is confirmed with `eth_getCode` in provider modes; a
+  transport that answers `0x` for a Multicall3 that exists is rejected as
+  `RESPONSE_SHAPE`). They validate the address (`AaOperationError`
+  `INPUT_INVALID_ADDRESS`) and throw `AaFetchError` on transport failure
+  (`TRANSPORT`) or undecodable data (`RESPONSE_SHAPE`).
+- `getMasterKeyInfo` runs over the same injected transport.
+- `isDeployed` / `getBalance` throw `AaOperationError`
+  (`CONFIG_REQUIRED_FIELD_MISSING`) in `call` mode — read `deployed` from
+  `readTxKeySlots()` instead.
+- `TxKeyInfo`, `KeyType`, `WebAuthnKeyData`, `MasterKeyInfo` now live in
+  `lib/reader/types.ts`; the old import path re-exports them.
+
+### Fixed
+
+- `AccountWebAuthnKeyData.allowedOriginHash` was documented as SHA-256 of the
+  origin. The contract stores `keccak256(origin)`; the JSDoc now says so and
+  `originHashOf` computes it.
+
+### Unchanged
+
+- `getTxKeyList` still returns `[]` for an undeployed account.
+- The `TxKeyInfo` shape and `keyId`/`index` semantics.
+- `getMasterKeyInfo` still throws `AaFetchError` for an undeployed account.
+
 ## [0.2.1] - 2026-08-10
 
 Removes `ZkOAuthSigner`, which called a proof server that does not exist.
