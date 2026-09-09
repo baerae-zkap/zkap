@@ -60,7 +60,21 @@ export type { PimlicoUserOperation, PimlicoGasEstimate } from "./types/UserOpera
 
 // Account reader
 export { AccountReader } from "./reader/AccountReader";
-export type { TxKeyInfo, MasterKeyInfo, WebAuthnKeyData as AccountWebAuthnKeyData, KeyType } from "./reader/AccountReader";
+export type { AccountReaderConfig, AccountReaderOptions } from "./reader/AccountReader";
+export type { TxKeySlots, ReadVia, TxKeyInfo, MasterKeyInfo, WebAuthnKeyData as AccountWebAuthnKeyData, KeyType } from "./reader/types";
+export { buildPasskeysResult, normalizeOptions as normalizePasskeyOptions } from "./reader/passkeys";
+export type {
+  GetPasskeysOptions,
+  NormalizedPasskeyOptions,
+  PasskeyServiceIdentity,
+  PasskeyKey,
+  PasskeyPublicKey,
+  PasskeysResult,
+} from "./reader/passkeys";
+export { MULTICALL3_ADDRESS, ethCallFromProvider } from "./reader/transport";
+export type { EthCall, Call3, Result3, BatchCallerOptions } from "./reader/transport";
+export { rpIdHashOf, originHashOf, toCosePublicKey, toJwkPublicKey, normalizeBytes32 } from "./utils/webauthnKey";
+export type { P256Coordinates, EcP256Jwk } from "./utils/webauthnKey";
 
 // TxKey helper
 export { TxKeyHelper } from "./helper/TxKeyHelper";

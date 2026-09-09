@@ -12,6 +12,7 @@ export {
   AccountKeyZkOAuthRS256VerifierABI,
   ERC20ABI,
   EntryPointABI,
+  Multicall3ABI,
   PoseidonMerkleTreeDirectoryABI,
   ZkapAccountABI,
   ZkapAccountFactoryABI,
